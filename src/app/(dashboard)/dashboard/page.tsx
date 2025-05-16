@@ -4,16 +4,15 @@
 import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, CalendarCheck, UserCheck, DollarSign, HardDrive, History } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory } from "@/lib/hr-data";
-import type { EmployeeDetail } from "@/lib/hr-data";
+import { UserCheck, CalendarCheck, History, DollarSign, HardDrive } from "lucide-react";
+import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; // Keep sampleEmployees for fallback
 
-// Corrected localStorage keys to match attendance page (v3)
+// localStorage keys
 const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3";
 const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v3";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1"; // Key from Employee Master
 
 interface StoredEmployeeAttendanceData {
-  // Only need the attendance array and relevant fields for calculation
   code: string;
   attendance: string[];
 }
@@ -31,64 +30,79 @@ export default function DashboardPage() {
     { title: "Payroll Status", value: "N/A (Prototype)", icon: DollarSign, description: "For current month", dataAiHint: "money payment" },
     { title: "Storage Used", value: "N/A (Prototype)", icon: HardDrive, description: "Uploaded data size (Prototype)", dataAiHint: "data storage" },
   ]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    // Calculate Total Active Employees
-    const activeEmployees = sampleEmployees.filter(emp => emp.status === "Active").length;
-    
-    // Calculate Total Leave Records
-    const totalLeaveRecords = sampleLeaveHistory.length;
-
-    // Calculate Overall Attendance from localStorage
+    setIsLoading(true);
+    let activeEmployeesCount = 0;
     let overallAttendanceValue = "N/A";
     let attendanceDescription = "From last uploaded file";
+    const totalLeaveRecords = sampleLeaveHistory.length; // Static for now
 
-    try {
-      const storedRawContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
-      const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+    if (typeof window !== 'undefined') {
+      // Calculate Total Active Employees from localStorage or fallback to sampleEmployees
+      try {
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        let employeesToCount: EmployeeDetail[] = sampleEmployees; // Fallback
+        if (storedEmployeesStr) {
+          const parsedEmployees = JSON.parse(storedEmployeesStr) as EmployeeDetail[];
+          if (Array.isArray(parsedEmployees) && parsedEmployees.length > 0) {
+            employeesToCount = parsedEmployees;
+          }
+        }
+        activeEmployeesCount = employeesToCount.filter(emp => emp.status === "Active").length;
+      } catch (error) {
+        console.error("Error processing employee master data for dashboard:", error);
+        // Fallback to sampleEmployees if error
+        activeEmployeesCount = sampleEmployees.filter(emp => emp.status === "Active").length;
+      }
 
-      if (storedRawContext && storedRawData) {
-        const context = JSON.parse(storedRawContext) as StoredUploadContext;
-        const rawData = JSON.parse(storedRawData) as StoredEmployeeAttendanceData[];
+      // Calculate Overall Attendance from localStorage
+      try {
+        const storedRawContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+        const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
 
-        if (rawData.length > 0 && context) {
-          let presentCount = 0;
-          let relevantEntriesCount = 0; // Count P, A, HD
+        if (storedRawContext && storedRawData) {
+          const context = JSON.parse(storedRawContext) as StoredUploadContext;
+          const rawData = JSON.parse(storedRawData) as StoredEmployeeAttendanceData[];
 
-          rawData.forEach(emp => {
-            // Only consider employees who have attendance data beyond just '-' (not joined yet)
-            const hasMeaningfulAttendance = emp.attendance.some(status => status !== '-');
-            if (hasMeaningfulAttendance) {
+          if (rawData.length > 0 && context) {
+            let presentCount = 0;
+            let relevantEntriesCount = 0;
+
+            rawData.forEach(emp => {
+              const hasMeaningfulAttendance = emp.attendance.some(status => status !== '-');
+              if (hasMeaningfulAttendance) {
                 emp.attendance.forEach(status => {
-                if (status === "P") {
+                  if (status === "P") {
                     presentCount++;
                     relevantEntriesCount++;
-                } else if (status === "A" || status === "HD") {
+                  } else if (status === "A" || status === "HD") {
                     relevantEntriesCount++;
-                }
-                // Other statuses like W, CL, SL, PL, PH are not directly counted for this percentage
+                  }
                 });
-            }
-          });
+              }
+            });
 
-          if (relevantEntriesCount > 0) {
-            const percentage = (presentCount / relevantEntriesCount) * 100;
-            overallAttendanceValue = `${percentage.toFixed(1)}% P`;
-          } else {
-            overallAttendanceValue = "No P/A/HD data";
+            if (relevantEntriesCount > 0) {
+              const percentage = (presentCount / relevantEntriesCount) * 100;
+              overallAttendanceValue = `${percentage.toFixed(1)}% P`;
+            } else {
+              overallAttendanceValue = "No P/A/HD data";
+            }
+            attendanceDescription = `Based on ${context.month} ${context.year} upload`;
           }
-          attendanceDescription = `Based on ${context.month} ${context.year} upload`;
         }
+      } catch (error) {
+        console.error("Error processing attendance data for dashboard:", error);
+        overallAttendanceValue = "Error";
+        attendanceDescription = "Error loading data";
       }
-    } catch (error) {
-      console.error("Error processing attendance data for dashboard:", error);
-      overallAttendanceValue = "Error";
-      attendanceDescription = "Error loading data";
     }
 
     setDashboardCards(prevCards => prevCards.map(card => {
       if (card.title === "Total Employees") {
-        return { ...card, value: activeEmployees.toString() };
+        return { ...card, value: activeEmployeesCount.toString() };
       }
       if (card.title === "Overall Attendance (Last Upload)") {
         return { ...card, value: overallAttendanceValue, description: attendanceDescription };
@@ -98,8 +112,20 @@ export default function DashboardPage() {
       }
       return card;
     }));
-
+    setIsLoading(false);
   }, []); // Runs on mount and when the component re-renders
+
+  // To handle potential hydration issues with dynamic data, consider a simple loader
+  if (isLoading) {
+    // You can replace this with a more sophisticated skeleton loader
+    // For simplicity, returning a basic loading text or null.
+    return (
+      <>
+        <PageHeader title="Dashboard" description="Overview of HR activities." />
+        <div className="text-center py-10">Loading dashboard data...</div>
+      </>
+    );
+  }
 
   return (
     <>
