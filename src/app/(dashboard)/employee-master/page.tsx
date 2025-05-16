@@ -223,7 +223,7 @@ export default function EmployeeMasterPage() {
                 )} />
                 <DialogFooter>
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit">Save Employee</Button>
+                  <Button type="submit" disabled={!isEditor} title={!isEditor ? "Login as editor to save employee" : ""}>Save Employee</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -238,7 +238,7 @@ export default function EmployeeMasterPage() {
             title={!isEditor ? "Login as editor to upload" : ""}
             icon={<Upload className="mr-2 h-4 w-4" />}
         />
-        <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" disabled={!isEditor} title={!isEditor ? "Login as editor to download template" : ""}>
+        <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
           <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
         </Button>
       </PageHeader>
@@ -302,3 +302,4 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+
