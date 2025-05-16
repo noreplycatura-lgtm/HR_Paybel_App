@@ -49,7 +49,7 @@ export function LoginForm() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsLoading(false);
 
-    if (values.username === "admin" && values.password === "password") {
+    if (values.username === "asingh0402" && values.password === "123456") {
       toast({
         title: "Login Successful",
         description: "Welcome back!",
