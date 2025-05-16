@@ -72,7 +72,7 @@ export default function EmployeeMasterPage() {
       }
     }
     setIsLoadingData(false);
-  }, []);
+  }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -86,6 +86,10 @@ export default function EmployeeMasterPage() {
   };
 
   const onSubmit = (values: EmployeeFormValues) => {
+    if (!isEditor) {
+        toast({ title: "Permission Denied", description: "Login as editor to add employees.", variant: "destructive"});
+        return;
+    }
     const newEmployee: EmployeeDetail = {
       id: `E${Date.now().toString().slice(-4)}`, // Simple unique ID
       ...values,
@@ -103,7 +107,6 @@ export default function EmployeeMasterPage() {
       toast({ title: "Permission Denied", description: "Login as editor to upload employees.", variant: "destructive" });
       return;
     }
-    // For now, this is a placeholder. Actual CSV parsing can be added later.
     toast({
       title: "File Received",
       description: `${file.name} received. (Prototype: Full CSV parsing not yet implemented for Employee Master).`,
@@ -147,10 +150,6 @@ export default function EmployeeMasterPage() {
       toast({ title: "Permission Denied", description: "Login as editor to delete employees.", variant: "destructive" });
       return;
     }
-     // Placeholder: In a real app, this would update state and backend.
-    // const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
-    // setEmployees(updatedEmployees);
-    // saveEmployeesToLocalStorage(updatedEmployees);
     toast({
       title: "Prototype Action",
       description: `Deleting employee ${employeeId} is not yet implemented. (Data is from localStorage/sample)`,
@@ -174,7 +173,7 @@ export default function EmployeeMasterPage() {
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" disabled={!isEditor} title={!isEditor ? "Login as editor to add new employee" : ""}>
+            <Button variant="outline" disabled={!isEditor} title={!isEditor ? "Login as editor to add new employee" : "Add a new employee to the master list"}>
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
             </Button>
           </DialogTrigger>
@@ -187,43 +186,45 @@ export default function EmployeeMasterPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                <FormField control={form.control} name="code" render={({ field }) => (
-                  <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="designation" render={({ field }) => (
-                  <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="doj" render={({ field }) => (
-                  <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                 <FormField control={form.control} name="status" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Active">Active</SelectItem>
-                          <SelectItem value="Left">Left</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField control={form.control} name="division" render={({ field }) => (
-                  <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                  <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
+                 <fieldset disabled={!isEditor} className="space-y-4">
+                    <FormField control={form.control} name="code" render={({ field }) => (
+                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="designation" render={({ field }) => (
+                    <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="doj" render={({ field }) => (
+                    <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="status" render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Left">Left</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField control={form.control} name="division" render={({ field }) => (
+                    <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
+                    <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                 </fieldset>
                 <DialogFooter>
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit" disabled={!isEditor} title={!isEditor ? "Login as editor to save employee" : ""}>Save Employee</Button>
+                  <Button type="submit" disabled={!isEditor} title={!isEditor ? "Login as editor to save employee" : "Save this new employee"}>Save Employee</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -235,7 +236,7 @@ export default function EmployeeMasterPage() {
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
             disabled={!isEditor}
-            title={!isEditor ? "Login as editor to upload" : ""}
+            title={!isEditor ? "Login as editor to upload" : "Upload employee data from a CSV file"}
             icon={<Upload className="mr-2 h-4 w-4" />}
         />
         <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
@@ -277,12 +278,12 @@ export default function EmployeeMasterPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>{employee.division || "N/A"}</TableCell>
-                  <TableCell className="text-right">{employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} disabled={!isEditor} title={!isEditor ? "Login as editor to edit" : ""}>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} disabled={!isEditor} title={!isEditor ? "Login as editor to edit" : "Edit this employee's details"}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)} className="text-destructive hover:text-destructive/80" disabled={!isEditor} title={!isEditor ? "Login as editor to delete" : ""}>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)} className="text-destructive hover:text-destructive/80" disabled={!isEditor} title={!isEditor ? "Login as editor to delete" : "Delete this employee"}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
