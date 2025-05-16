@@ -18,9 +18,9 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory } from "@/lib/hr-data"; 
+// sampleLeaveHistory is intentionally not imported as leave applications aren't directly managed here for balance calc
 import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations";
-import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
+import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[];
@@ -184,56 +184,31 @@ export default function AttendancePage() {
     const processedData = rawAttendanceData.map(emp => {
       const isMissingInMaster = !masterEmployeeCodes.has(emp.code);
       if (!emp.doj) {
-        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A'), isMissingInMaster };
+        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
+      
       const employeeStartDate = parseISO(emp.doj);
-      const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
+      const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
+      const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
 
-      if (isBefore(startOfSelectedMonth, startOfDay(employeeStartDate)) && !isEqual(startOfSelectedMonth, startOfDay(employeeStartDate))) {
+      // If employee joined after the selected month ended, mark all days as '-'
+      if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
 
-      const employeeForLeaveCalc: EmployeeDetail = {
-        id: emp.id,
-        code: emp.code,
-        name: emp.name,
-        designation: emp.designation,
-        doj: emp.doj,
-        status: emp.status || "Active", 
-        division: emp.division || "N/A", 
-        hq: emp.hq || "N/A",
-        grossMonthlySalary: emp.grossMonthlySalary || 0,
-      };
-      let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
-      const isPLEligibleForThisMonth = balances.plEligibleThisMonth; // Use the flag from the calculation
-
       const daysInCurrentMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
-      const rawMonthlyAttendance = emp.attendance.slice(0, daysInCurrentMonth);
+      const rawDailyStatuses = emp.attendance.slice(0, daysInCurrentMonth);
 
-      const newProcessedAttendance = rawMonthlyAttendance.map(originalStatus => {
-        let currentDayStatus = originalStatus;
-
-        if (originalStatus === "CL") {
-          if (balances.cl >= 1) {
-            balances.cl -= 1;
-          } else {
-            currentDayStatus = "A";
-          }
-        } else if (originalStatus === "SL") {
-          if (balances.sl >= 1) {
-            balances.sl -= 1;
-          } else {
-            currentDayStatus = "A";
-          }
-        } else if (originalStatus === "PL") {
-          if (isPLEligibleForThisMonth && balances.pl >= 1) {
-            balances.pl -= 1;
-          } else {
-            currentDayStatus = "A";
-          }
+      // Process statuses: if day is before DOJ, mark as '-', otherwise use status from rawAttendanceData
+      // rawAttendanceData's daily statuses are already processed by handleFileUpload to convert file's blank/'-' to 'A'
+      const newProcessedAttendance = rawDailyStatuses.map((status, dayIndex) => {
+        const currentDateInLoop = new Date(selectedYear, monthIndex, dayIndex + 1);
+        if (isBefore(currentDateInLoop, startOfDay(employeeStartDate))) {
+          return '-';
         }
-        return currentDayStatus;
+        return status; 
       });
+      
       return { ...emp, processedAttendance: newProcessedAttendance, isMissingInMaster };
     });
     setProcessedAttendanceData(processedData);
@@ -642,7 +617,7 @@ export default function AttendancePage() {
 
   return (
     <>
-      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance. Blank/'-' in upload treated as Absent. Leaves without balance marked Absent.">
+      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance. Blank/'-' in upload treated as Absent. Leave balances can go negative.">
         <Button
             variant="outline"
             onClick={handleDownloadReport}
@@ -833,7 +808,7 @@ export default function AttendancePage() {
               <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
               <CardDescription>
                 Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
-                <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
+                <br/> Leave statuses (CL, SL, PL) are taken as uploaded; balances are managed on the Leave Management page and can go negative.
                 <br/> '-' indicates the employee had not joined by the selected month/day. Blank or '-' cells in uploaded file are treated as 'A'.
                 <br/>Rows highlighted in light red indicate employee codes present in attendance but not found in the Employee Master.
               </CardDescription>
@@ -1048,5 +1023,7 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    
 
     
