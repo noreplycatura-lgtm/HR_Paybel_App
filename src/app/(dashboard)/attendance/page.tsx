@@ -133,7 +133,8 @@ export default function AttendancePage() {
         designation: emp.designation,
         doj: emp.doj,
         status: emp.status, 
-        division: emp.division
+        division: emp.division,
+        grossMonthlySalary: emp.grossMonthlySalary || 0, // Ensure grossMonthlySalary is present
       };
       let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
       
@@ -192,7 +193,7 @@ export default function AttendancePage() {
       }
 
       try {
-        const lines = text.split('\\n').map(line => line.trim()).filter(line => line);
+        const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line); // Handles both Windows and Unix newlines
         if (lines.length < 2) { 
           toast({ title: "Invalid File", description: "File is empty or has no data rows.", variant: "destructive" });
           return;
@@ -231,6 +232,7 @@ export default function AttendancePage() {
             name,
             designation,
             doj,
+            grossMonthlySalary: 0, // Default or fetch from employee master if available
             attendance: dailyStatuses,
           };
         }).filter(item => item !== null) as EmployeeAttendanceData[]; 
@@ -477,7 +479,7 @@ export default function AttendancePage() {
         <Button 
             variant="outline" 
             onClick={handleDownloadReport} 
-            disabled={processedAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0 || !isEditor}
+            disabled={isLoadingAuth || !isEditor || processedAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0}
             title={!isEditor ? "Login as editor to download" : ""}
         >
             <Download className="mr-2 h-4 w-4" />
@@ -486,7 +488,7 @@ export default function AttendancePage() {
          <Button 
             variant="destructive" 
             onClick={triggerDeleteConfirmation} 
-            disabled={!canDeleteCurrentData || !isEditor}
+            disabled={isLoadingAuth || !isEditor || !canDeleteCurrentData}
             title={!isEditor ? "Login as editor to clear data" : ""}
         >
             <Trash2 className="mr-2 h-4 w-4" />
@@ -735,7 +737,7 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col sm:flex-row gap-4">
-                <Select value={uploadMonth} onValueChange={setUploadMonth} disabled={!isEditor}>
+                <Select value={uploadMonth} onValueChange={setUploadMonth} disabled={isLoadingAuth || !isEditor}>
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Upload Month" />
                   </SelectTrigger>
@@ -743,7 +745,7 @@ export default function AttendancePage() {
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={uploadYear > 0 ? uploadYear.toString() : ""} onValueChange={(value) => setUploadYear(parseInt(value))} disabled={!isEditor}>
+                <Select value={uploadYear > 0 ? uploadYear.toString() : ""} onValueChange={(value) => setUploadYear(parseInt(value))} disabled={isLoadingAuth || !isEditor}>
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Upload Year" />
                   </SelectTrigger>
@@ -757,7 +759,7 @@ export default function AttendancePage() {
                   onFileUpload={handleFileUpload} 
                   buttonText="Upload Attendance CSV" 
                   acceptedFileTypes=".csv"
-                  disabled={!uploadMonth || !uploadYear || uploadYear === 0 || !isEditor}
+                  disabled={isLoadingAuth || !uploadMonth || !uploadYear || uploadYear === 0 || !isEditor}
                   title={!isEditor ? "Login as editor to upload" : ""}
                 />
                 <Button 
