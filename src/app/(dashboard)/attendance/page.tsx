@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2 } from "lucide-react";
-import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data"; 
+import type { EmployeeDetail } from "@/lib/hr-data"; 
 import { sampleLeaveHistory } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
@@ -62,7 +62,7 @@ export default function AttendancePage() {
     if (uploadYear === 0) setUploadYear(year);
 
     setIsLoading(false);
-  }, [selectedMonth, selectedYear, uploadMonth, uploadYear]);
+  }, []); // Removed dependencies to ensure this runs only once on mount to set initial values
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth || selectedYear === 0) {
@@ -74,7 +74,10 @@ export default function AttendancePage() {
     if (monthIndex === -1) return;
 
     const processedData = rawAttendanceData.map(emp => {
-      const employeeStartDate = emp.doj ? parseISO(emp.doj) : new Date();
+      if (!emp.doj) { // Handle cases where DOJ might be missing in uploaded data
+        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A') }; // Mark all as Absent
+      }
+      const employeeStartDate = parseISO(emp.doj);
       const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
       
       if (isBefore(startOfSelectedMonth, startOfDay(employeeStartDate)) && !isEqual(startOfSelectedMonth, startOfDay(employeeStartDate))) {
@@ -158,7 +161,7 @@ export default function AttendancePage() {
           const designation = values[2]?.trim() || "N/A";
           const doj = values[3]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const dailyStatuses = values.slice(4, 4 + daysInUploadMonth).map(status => status.trim() || 'A'); 
+          const dailyStatuses = values.slice(4, 4 + daysInUploadMonth).map(status => status.trim().toUpperCase() || 'A'); 
 
           return {
             id: code, 
@@ -175,14 +178,15 @@ export default function AttendancePage() {
             return;
         }
         
-        setRawAttendanceData([]); // Clear previous raw data
-        setProcessedAttendanceData([]); // Clear previous processed data
+        setRawAttendanceData([]); 
+        setProcessedAttendanceData([]); 
 
         setRawAttendanceData(newAttendanceData);
         setUploadedFileName(file.name);
         const newUploadContext = { month: uploadMonth, year: uploadYear };
         setUploadContext(newUploadContext);
         
+        // Automatically switch to the view tab and set its filters to the uploaded month/year
         setSelectedMonth(uploadMonth);
         setSelectedYear(uploadYear);
         setIsLoading(false); 
@@ -191,9 +195,12 @@ export default function AttendancePage() {
           title: "Attendance Data Loaded",
           description: `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`,
         });
-        // Switch to view tab might need a more direct way if Tabs component doesn't expose it
-        const viewTabTrigger = document.querySelector('[data-state="inactive"][role="tab"][value="view"]');
-        if (viewTabTrigger) (viewTabTrigger as HTMLElement).click();
+        
+        // Programmatically click the "View & Filter Attendance" tab trigger
+        const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
+        if (viewTabTrigger) {
+          viewTabTrigger.click();
+        }
 
 
       } catch (error) {
@@ -298,31 +305,16 @@ export default function AttendancePage() {
     const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
     
-    const templateEmployees = sampleEmployees.slice(0,2).map(emp => ({
-      code: emp.code, name: emp.name, designation: emp.designation, doj: emp.doj
-    }));
-    
-    templateEmployees.forEach((emp, index) => {
-      const rowData = [emp.code, emp.name, emp.designation, emp.doj];
-      const dailyStatuses = Array(daysForTemplate).fill("P");
-      if (index === 0 && daysForTemplate >= 7) { 
-        dailyStatuses[5] = "W"; 
-        dailyStatuses[6] = "W";
-        if (daysForTemplate >= 11) dailyStatuses[10] = "CL"; 
-      } else if (index === 1 && daysForTemplate >= 15) { 
-         dailyStatuses[13] = "A"; 
-         dailyStatuses[14] = "HD"; 
-      }
-      rowData.push(...dailyStatuses);
-      csvRows.push(rowData);
-    });
-    
-    if (templateEmployees.length === 0) { 
-        const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
-        if (daysForTemplate >= 7) { sampleRow1[4+5] = "W"; sampleRow1[5+6] = "W"; } // Adjusted indices based on example
-        if (daysForTemplate >= 11) sampleRow1[4+10] = "CL"; 
-        csvRows.push(sampleRow1);
-    }
+    // Example rows for the template
+    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 7) { sampleRow1[4+5] = "W"; sampleRow1[4+6] = "W"; } 
+    if (daysForTemplate >= 11) sampleRow1[4+10] = "CL"; 
+    csvRows.push(sampleRow1);
+
+    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 15) { sampleRow2[4+13] = "A"; sampleRow2[4+14] = "HD"; }
+    csvRows.push(sampleRow2);
+
 
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -432,7 +424,7 @@ export default function AttendancePage() {
           <TabsTrigger value="upload">Upload Attendance Data</TabsTrigger>
         </TabsList>
         <TabsContent value="view">
-          <Card className="my-6 shadow-md">
+          <Card className="my-6 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Filters</CardTitle>
               <CardDescription>Filter attendance records by month and year. (More filters like employee/division are illustrative).</CardDescription>
@@ -477,7 +469,7 @@ export default function AttendancePage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-md">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
               <CardDescription>
@@ -501,8 +493,8 @@ export default function AttendancePage() {
                 if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
-                      Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
-                      The file might be empty, in an incorrect format, or failed to parse. Check console for errors or upload again.
+                      Data loaded from '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
+                      The file might be empty, have an incorrect format, or failed to parse. Check console for errors or upload again.
                     </div>
                   );
                 }
@@ -622,7 +614,7 @@ export default function AttendancePage() {
           </Card>
         </TabsContent>
         <TabsContent value="upload">
-          <Card className="my-6 shadow-md">
+          <Card className="my-6 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>

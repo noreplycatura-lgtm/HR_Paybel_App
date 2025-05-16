@@ -30,7 +30,7 @@ export default function DashboardPage() {
         ))}
       </div>
       <div className="grid gap-6 mt-8 md:grid-cols-2">
-        <Card className="shadow-md">
+        <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle>Recent Activities</CardTitle>
             <CardDescription>Latest updates and notifications.</CardDescription>
@@ -44,7 +44,7 @@ export default function DashboardPage() {
             </ul>
           </CardContent>
         </Card>
-        <Card className="shadow-md">
+        <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle>Quick Links</CardTitle>
             <CardDescription>Access common tasks quickly.</CardDescription>

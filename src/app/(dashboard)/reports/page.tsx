@@ -6,7 +6,7 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader title="Reports" description="Access various HR reports." />
-      <Card className="shadow-md">
+      <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardContent className="pt-6 flex flex-col items-center justify-center min-h-[300px]">
           <Construction className="w-16 h-16 text-primary mb-4" />
           <h2 className="text-xl font-semibold mb-2">Under Construction</h2>

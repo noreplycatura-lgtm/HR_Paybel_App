@@ -68,7 +68,9 @@ export default function LeavePage() {
     csvRows.push([`Leave History for ${currentEmployee.name} (${currentEmployee.code})`]);
     csvRows.push(["Month", "Start Date", "End Date", "Leave Type", "Days Taken"]);
     if (filteredLeaveHistory.length > 0) {
-      filteredLeaveHistory.forEach(entry => {
+      // Sort descending for CSV export if needed, or keep as is (oldest first)
+      const sortedHistoryForCSV = [...filteredLeaveHistory].sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
+      sortedHistoryForCSV.forEach(entry => {
         csvRows.push([
           format(parseISO(entry.startDate), 'MMMM yyyy'),
           entry.startDate,
@@ -128,7 +130,7 @@ export default function LeavePage() {
         </Button>
       </PageHeader>
 
-      <Card className="mb-6 shadow-md">
+      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
             <CardTitle>Select Employee</CardTitle>
         </CardHeader>
@@ -154,7 +156,7 @@ export default function LeavePage() {
           </div>
           <div className="grid gap-6 md:grid-cols-3 mb-6">
             {calculatedLeaveBalances.map(leave => (
-              <Card key={leave.type} className="shadow-md">
+              <Card key={leave.type} className="shadow-md hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     {leave.type} Balance
@@ -177,7 +179,7 @@ export default function LeavePage() {
             ))}
           </div>
 
-          <Card className="shadow-md">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Leave History for {currentEmployee.name}</CardTitle>
               <CardDescription>Recent leave applications for the selected employee (chronological order).</CardDescription>
@@ -214,7 +216,7 @@ export default function LeavePage() {
           </Card>
         </>
       ) : (
-        <Card className="shadow-md">
+        <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardContent className="pt-6 text-center text-muted-foreground">
                 <User className="mx-auto h-12 w-12 mb-4" />
                 <p>Please select an employee to view their leave details.</p>

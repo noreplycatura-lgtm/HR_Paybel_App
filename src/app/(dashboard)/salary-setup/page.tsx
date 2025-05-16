@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -69,7 +70,7 @@ export default function SalarySetupPage() {
   const handleFileUpload = (file: File) => {
     toast({
       title: "File Uploaded",
-      description: `${file.name} for salary setup is being processed.`,
+      description: `${file.name} for salary setup is being processed. (Prototype: File content not parsed)`,
     });
   };
 
@@ -133,7 +134,7 @@ export default function SalarySetupPage() {
           <TabsTrigger value="manual">Manual Salary Entry</TabsTrigger>
         </TabsList>
         <TabsContent value="excel">
-          <Card className="shadow-md">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Upload Salary Data</CardTitle>
               <CardDescription>Upload an Excel file with employee salary details.
@@ -141,15 +142,15 @@ export default function SalarySetupPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Salary Excel" />
-              <Button variant="link" className="p-0 h-auto">
+              <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Salary Excel" acceptedFileTypes=".xlsx,.xls,.csv"/>
+              <Button variant="link" className="p-0 h-auto" onClick={() => toast({title: "Prototype Info", description: "Sample Excel template download not yet implemented."})}>
                 <Download className="mr-2 h-4 w-4" /> Download Sample Excel Template
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="manual">
-          <Card className="shadow-md">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>{editingSalary ? "Edit Salary Structure" : "Enter Salary Details Manually"}</CardTitle>
               <CardDescription>Fill in the form to add or update an employee's salary.</CardDescription>
@@ -202,7 +203,7 @@ export default function SalarySetupPage() {
         </TabsContent>
       </Tabs>
 
-      <Card className="mt-8 shadow-md">
+      <Card className="mt-8 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Saved Salary Structures</CardTitle>
         </CardHeader>

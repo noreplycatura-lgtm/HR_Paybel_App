@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -81,7 +82,7 @@ export default function SalarySlipPage() {
     <>
       <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees." />
 
-      <Card className="mb-6 shadow-md print:hidden">
+      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
         <CardHeader>
           <CardTitle>Select Criteria</CardTitle>
         </CardHeader>
@@ -210,7 +211,7 @@ export default function SalarySlipPage() {
         </Card>
       )}
        {!showSlip && (
-        <Card className="shadow-md items-center flex justify-center py-12">
+        <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
             <p>Please select month, year, and employee to generate the salary slip.</p>
           </CardContent>
