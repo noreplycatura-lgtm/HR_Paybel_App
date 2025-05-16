@@ -1,3 +1,4 @@
+
 "use client"; 
 
 import * as React from "react";
@@ -44,7 +45,7 @@ function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="print:hidden"> {/* Add print:hidden here */}
       <SidebarHeader className="flex items-center justify-between p-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold"> {/* Updated href */}
             {state === 'expanded' && (
                <Image 
                 src="https://placehold.co/120x40.png?text=Novita"

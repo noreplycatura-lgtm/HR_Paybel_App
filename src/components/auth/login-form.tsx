@@ -55,7 +55,7 @@ export function LoginForm() {
         title: "Login Successful",
         description: "Welcome back!",
       });
-      router.push("/"); // Redirect to dashboard
+      router.push("/dashboard"); // Redirect to dashboard
     } else {
       toast({
         variant: "destructive",
@@ -70,7 +70,7 @@ export function LoginForm() {
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
         <Image 
-          src="https://placehold.co/150x50.png?text=Novita+Healthcare" // Placeholder logo
+          src="https://placehold.co/150x50.png?text=Novita+Healthcare" 
           alt={`${COMPANY_NAME} Logo`}
           width={150}
           height={50}

@@ -1,3 +1,4 @@
+
 import type { LucideIcon } from 'lucide-react';
 import { LayoutDashboard, CalendarCheck, Briefcase, Wrench, FileText, BarChart3 } from 'lucide-react';
 
@@ -14,7 +15,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   {
     title: 'Dashboard',
-    href: '/',
+    href: '/dashboard', // Updated href
     icon: LayoutDashboard,
   },
   {

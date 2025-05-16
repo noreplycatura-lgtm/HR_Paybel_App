@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -30,7 +31,7 @@ export function TopNavbar() {
        )}
       
       <div className="flex items-center">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2"> {/* Updated href */}
            <Image 
             src="https://placehold.co/40x40.png?text=N" 
             alt={`${COMPANY_NAME} Mini Logo`}
