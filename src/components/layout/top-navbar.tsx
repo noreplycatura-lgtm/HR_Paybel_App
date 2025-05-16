@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
-import { useSidebar } } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar";
 
 
 export function TopNavbar() {
