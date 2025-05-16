@@ -8,15 +8,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Download, Edit } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, Download, Edit, PlusCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
-import type { LeaveApplication } from "@/lib/hr-types";
+import type { LeaveApplication, LeaveType } from "@/lib/hr-types";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // For storing applied leaves
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -42,6 +46,13 @@ export default function LeavePage() {
   const [displayData, setDisplayData] = React.useState<LeaveDisplayData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
+
+  // State for Edit Leave Dialog
+  const [isEditLeaveDialogOpen, setIsEditLeaveDialogOpen] = React.useState(false);
+  const [editingEmployeeForLeave, setEditingEmployeeForLeave] = React.useState<EmployeeDetail | null>(null);
+  const [newLeaveType, setNewLeaveType] = React.useState<LeaveType>('CL');
+  const [newLeaveDays, setNewLeaveDays] = React.useState<number>(1);
+
 
   React.useEffect(() => {
     const now = new Date();
@@ -103,7 +114,7 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set()); // Clear selections when data changes
+    setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
   }, [employees, leaveApplications, selectedMonth, selectedYear, isLoading]);
 
@@ -128,12 +139,50 @@ export default function LeavePage() {
     });
   };
   
-  const handleEditLeave = (employeeId: string) => {
-    toast({
-        title: "Prototype Action",
-        description: `Editing leave details for employee ID ${employeeId} is not yet implemented.`,
-    });
+  const handleOpenEditLeaveDialog = (employee: EmployeeDetail) => {
+    setEditingEmployeeForLeave(employee);
+    setNewLeaveType('CL');
+    setNewLeaveDays(1);
+    setIsEditLeaveDialogOpen(true);
   };
+
+  const handleAddLeaveApplication = () => {
+    if (!editingEmployeeForLeave || !selectedMonth || !selectedYear || newLeaveDays <= 0) {
+      toast({ title: "Error", description: "Invalid employee, period, or leave days.", variant: "destructive" });
+      return;
+    }
+    const monthIndex = months.indexOf(selectedMonth);
+    const leaveStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
+    // Ensure end date doesn't exceed month end - this is a simplification
+    const tentativeEndDate = dateFnsAddDays(leaveStartDate, newLeaveDays - 1);
+    const monthEndDate = dateFnsAddDays(startOfMonth(dateFnsAddDays(leaveStartDate, 35)), -1); // Approx end of month
+    const actualEndDate = isBefore(tentativeEndDate, monthEndDate) ? tentativeEndDate : monthEndDate;
+    const actualLeaveDays = differenceInCalendarDays(actualEndDate, leaveStartDate) + 1;
+
+
+    const newApp: LeaveApplication = {
+      id: `LAPP-${Date.now()}`,
+      employeeId: editingEmployeeForLeave.id,
+      leaveType: newLeaveType,
+      startDate: format(leaveStartDate, 'yyyy-MM-dd'),
+      endDate: format(actualEndDate, 'yyyy-MM-dd'),
+      days: actualLeaveDays, // Use actual days within the month
+    };
+
+    const updatedApplications = [...leaveApplications, newApp];
+    setLeaveApplications(updatedApplications);
+    localStorage.setItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(updatedApplications));
+    toast({ title: "Leave Added", description: `${newLeaveType} for ${actualLeaveDays} day(s) added for ${editingEmployeeForLeave.name}.` });
+    setNewLeaveDays(1); // Reset form
+  };
+
+  const handleRemoveLeaveApplication = (appId: string) => {
+    const updatedApplications = leaveApplications.filter(app => app.id !== appId);
+    setLeaveApplications(updatedApplications);
+    localStorage.setItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(updatedApplications));
+    toast({ title: "Leave Removed", description: `Leave application has been removed.` });
+  };
+
 
   const handleDownloadReport = () => {
      if (selectedEmployeeIds.size === 0) {
@@ -165,7 +214,7 @@ export default function LeavePage() {
       `Balance CL (End of ${selectedMonth} ${selectedYear})`,
       `Balance SL (End of ${selectedMonth} ${selectedYear})`,
       `Balance PL (End of ${selectedMonth} ${selectedYear})`,
-      "PL Eligible This Month"
+      "Eligible Accrual This Month"
     ];
     csvRows.push(headers);
 
@@ -225,6 +274,15 @@ export default function LeavePage() {
   const isAllSelected = displayData.length > 0 && selectedEmployeeIds.size === displayData.length;
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < displayData.length;
 
+  const applicationsForDialog = editingEmployeeForLeave && selectedMonth && selectedYear ? 
+    leaveApplications.filter(app => {
+        if (app.employeeId !== editingEmployeeForLeave.id) return false;
+        try {
+            const appStartDate = parseISO(app.startDate);
+            return getYear(appStartDate) === selectedYear && getMonth(appStartDate) === months.indexOf(selectedMonth);
+        } catch { return false; }
+    }) : [];
+
 
   if (isLoading && employees.length === 0) { 
     return (
@@ -238,13 +296,84 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances. CL/SL reset Apr-Mar (0.6/month after 5 months service); PL (1.2/month after 5 months service) carries forward."
+        description="View employee leave balances. CL/SL (0.6/month after 5 months service) reset Apr-Mar; PL (1.2/month after 5 months service) carries forward."
       >
          <Button onClick={handleDownloadReport} variant="outline" disabled={selectedEmployeeIds.size === 0}>
             <Download className="mr-2 h-4 w-4" />
             Download Report for Selected (CSV)
         </Button>
       </PageHeader>
+
+      <Dialog open={isEditLeaveDialogOpen} onOpenChange={(isOpen) => {
+          setIsEditLeaveDialogOpen(isOpen);
+          if (!isOpen) setEditingEmployeeForLeave(null);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Leaves for {editingEmployeeForLeave?.name}</DialogTitle>
+            <DialogDescription>
+              Selected Period: {selectedMonth} {selectedYear}. Manage leave applications for this month.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>Add New Leave for {selectedMonth} {selectedYear}</Label>
+              <div className="flex items-center gap-2">
+                <Select value={newLeaveType} onValueChange={(val) => setNewLeaveType(val as LeaveType)}>
+                    <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="CL">CL</SelectItem>
+                        <SelectItem value="SL">SL</SelectItem>
+                        <SelectItem value="PL">PL</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Input 
+                    type="number" 
+                    value={newLeaveDays} 
+                    onChange={(e) => setNewLeaveDays(Math.max(0.5, parseFloat(e.target.value)))} 
+                    min="0.5" 
+                    step="0.5"
+                    className="w-[80px]"
+                />
+                 <Label className="text-sm">days</Label>
+                <Button onClick={handleAddLeaveApplication} size="sm"><PlusCircle className="mr-1 h-4 w-4" /> Add</Button>
+              </div>
+            </div>
+            <Card>
+              <CardHeader className="p-3">
+                <CardTitle className="text-base">Applied Leaves in {selectedMonth} {selectedYear}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3">
+                {applicationsForDialog.length > 0 ? (
+                  <ScrollArea className="h-[150px]">
+                    <ul className="space-y-2">
+                      {applicationsForDialog.map(app => (
+                        <li key={app.id} className="flex justify-between items-center text-sm p-2 border rounded-md">
+                          <div>
+                            <span className="font-medium">{app.leaveType}</span> - {app.days} day(s)
+                            <span className="text-xs text-muted-foreground ml-2">({format(parseISO(app.startDate), 'dd/MM')} - {format(parseISO(app.endDate), 'dd/MM')})</span>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveLeaveApplication(app.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No leaves applied in this month.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <Card className="mb-6 shadow-md">
         <CardHeader>
@@ -275,7 +404,6 @@ export default function LeavePage() {
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
-            (Note: Leave application functionality is not yet part of this prototype, so 'Used' leaves will be 0 unless applications are manually added to localStorage).
             <br/>Only 'Active' employees are shown. The 'Eligible Accrual' column indicates if an employee has completed 5 months of service and is eligible for leave accrual.
           </CardDescription>
         </CardHeader>
@@ -285,7 +413,7 @@ export default function LeavePage() {
               <TableRow>
                 <TableHead className="w-[50px]">
                   <Checkbox
-                    checked={isAllSelected || (isIndeterminate ? 'indeterminate' : false)}
+                    checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
                     onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
                     aria-label="Select all rows"
                   />
@@ -324,7 +452,7 @@ export default function LeavePage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleEditLeave(emp.id)} title={`Edit leave details for ${emp.name}`}>
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditLeaveDialog(emp)} title={`Edit leave applications for ${emp.name}`}>
                         <Edit className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -382,6 +510,5 @@ export default function LeavePage() {
     </>
   );
 }
-
 
     
