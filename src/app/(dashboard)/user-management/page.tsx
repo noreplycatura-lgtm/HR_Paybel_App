@@ -45,7 +45,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, LogOut, Edit2, Trash2, Lock, Unlock, KeyRound, Loader2 } from "lucide-react";
+import { UserPlus, LogOut, Trash2, Lock, Unlock, KeyRound, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 
@@ -62,7 +62,8 @@ interface SimulatedUser {
   isLocked: boolean;
 }
 
-const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
+const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1"; // v1 stores array of SimulatedUser objects
+const MAIN_ADMIN_USERNAME = "asingh0402";
 
 export default function UserManagementPage() {
   const { toast } = useToast();
@@ -79,10 +80,13 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
         if (storedUsers) {
           setSimulatedUsers(JSON.parse(storedUsers));
+        } else {
+          setSimulatedUsers([]); // Initialize with empty if nothing in storage
         }
       } catch (error) {
         console.error("Error loading simulated users from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load user list from local storage.", variant: "destructive" });
+        toast({ title: "Data Load Error", description: "Could not load user list. Stored data might be corrupted.", variant: "destructive" });
+        setSimulatedUsers([]);
       }
     }
     setIsLoading(false);
@@ -108,6 +112,23 @@ export default function UserManagementPage() {
   });
 
   const handleCreateUserSubmit = (values: NewUserFormValues) => {
+    if (values.username === MAIN_ADMIN_USERNAME) {
+      toast({
+        title: "Cannot Create User",
+        description: `Username '${MAIN_ADMIN_USERNAME}' is reserved for the Main Admin.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (simulatedUsers.find(user => user.username === values.username)) {
+      toast({
+        title: "Duplicate Username",
+        description: `A user with the username '${values.username}' already exists.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newUser: SimulatedUser = {
       id: Date.now().toString(),
       username: values.username,
@@ -118,9 +139,8 @@ export default function UserManagementPage() {
     saveSimulatedUsersToLocalStorage(updatedUsers);
 
     toast({
-      title: "Simulated User Added",
-      description: `User '${values.username}' has been added to the simulated list. Note: The main login form is still configured with specific credentials for prototype purposes.`,
-      duration: 7000,
+      title: "Simulated Co-Admin User Added",
+      description: `User '${values.username}' has been added. Note: This is a simulated account.`,
     });
     setIsCreateUserDialogOpen(false);
     form.reset();
@@ -131,6 +151,7 @@ export default function UserManagementPage() {
       title: "Logout Initiated",
       description: "Redirecting to login page.",
     });
+    // Here you might also clear any actual auth tokens if this were a real system
     router.push("/login");
   };
 
@@ -147,7 +168,7 @@ export default function UserManagementPage() {
     });
   };
 
-  const handleDeleteUser = (user: SimulatedUser) => {
+  const handleDeleteUserClick = (user: SimulatedUser) => {
     setUserToDelete(user);
   };
 
@@ -167,7 +188,7 @@ export default function UserManagementPage() {
   const handleResetPassword = (username: string) => {
     toast({
       title: "Prototype Action",
-      description: `Password reset for user '${username}' is a simulated action and not fully implemented.`,
+      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow.`,
     });
   };
   
@@ -183,29 +204,28 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description="Create and manage simulated user accounts. Logout from the system."
+        description={`Manage simulated co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
       />
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Account Controls</CardTitle>
           <CardDescription>
-            Use the options below to manage users or log out.
+            Create new simulated co-admin users or log out.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="flex flex-wrap gap-4 pt-6">
           <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <UserPlus className="mr-2 h-4 w-4" />
-                Create New Simulated User
+                Create New Co-Admin User
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Create New Simulated User</DialogTitle>
+                <DialogTitle>Create New Simulated Co-Admin</DialogTitle>
                 <DialogDescription>
-                  Fill in the details for the new user. This adds them to a simulated list.
-                  The main login uses pre-set credentials for this prototype.
+                  Fill in the details for the new co-admin user.
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
@@ -217,7 +237,7 @@ export default function UserManagementPage() {
                       <FormItem>
                         <FormLabel>Username</FormLabel>
                         <FormControl>
-                          <Input placeholder="New username" {...field} />
+                          <Input placeholder="New co-admin username" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -228,7 +248,7 @@ export default function UserManagementPage() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Password</FormLabel>
+                        <FormLabel>Password (for simulation)</FormLabel>
                         <FormControl>
                           <Input type="password" placeholder="New password" {...field} />
                         </FormControl>
@@ -251,16 +271,16 @@ export default function UserManagementPage() {
 
           <Button onClick={handleLogout} variant="destructive">
             <LogOut className="mr-2 h-4 w-4" />
-            Logout
+            Logout (Prototype)
           </Button>
         </CardContent>
       </Card>
 
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle>Simulated User Accounts</CardTitle>
+          <CardTitle>Simulated Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of users "created" in this prototype. Password is not stored/used.
+            List of simulated co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -282,13 +302,32 @@ export default function UserManagementPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center space-x-1">
-                    <Button variant="ghost" size="icon" onClick={() => handleResetPassword(user.username)} title="Simulate Reset Password">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleResetPassword(user.username)} 
+                        title={`Simulate Reset Password for ${user.username}`}
+                        disabled={user.username === MAIN_ADMIN_USERNAME}
+                    >
                       <KeyRound className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleToggleLock(user.id)} title={user.isLocked ? "Unlock User" : "Lock User"}>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleToggleLock(user.id)} 
+                        title={user.isLocked ? `Unlock ${user.username}` : `Lock ${user.username}`}
+                        disabled={user.username === MAIN_ADMIN_USERNAME}
+                    >
                       {user.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user)} title="Delete User" className="text-destructive hover:text-destructive/80">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDeleteUserClick(user)} 
+                        title={`Delete ${user.username}`} 
+                        className="text-destructive hover:text-destructive/80"
+                        disabled={user.username === MAIN_ADMIN_USERNAME}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -297,7 +336,7 @@ export default function UserManagementPage() {
               {simulatedUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No simulated users created yet.
+                    No simulated co-admin users created yet.
                   </TableCell>
                 </TableRow>
               )}
@@ -325,3 +364,6 @@ export default function UserManagementPage() {
     </>
   );
 }
+
+
+    
