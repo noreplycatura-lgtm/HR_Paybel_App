@@ -23,7 +23,7 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_"; // For reading attendance
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -37,12 +37,10 @@ interface LeaveDisplayData extends EmployeeDetail {
   balancePLAtMonthEnd: number;
 }
 
-// Simplified interface for parsing attendance data within LeavePage
 interface MonthlyEmployeeAttendance {
   code: string;
-  attendance: string[]; // Raw daily statuses "P", "A", "CL" etc.
+  attendance: string[]; 
 }
-
 
 const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
   if (!month || year === 0) return { rawDataKey: null };
@@ -84,43 +82,53 @@ export default function LeavePage() {
   React.useEffect(() => {
     setIsLoading(true);
     if (typeof window !== 'undefined') {
+      let loadedEmployees: EmployeeDetail[] = [];
+      let loadedLeaveApplications: LeaveApplication[] = [];
+      let loadedOpeningBalances: OpeningLeaveBalance[] = [];
+
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
-          setEmployees(JSON.parse(storedEmployees));
+          loadedEmployees = JSON.parse(storedEmployees);
         } else {
-          setEmployees([]); 
-          toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive" });
+          toast({ title: "No Employee Data", description: "Employee master data not found in local storage. Please set up employees first.", variant: "destructive", duration: 7000 });
         }
+      } catch (error) {
+        console.error("Error loading employee master data from localStorage:", error);
+        toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted.", variant: "destructive", duration: 7000 });
+      }
+      setEmployees(loadedEmployees);
 
+      try {
         const storedLeaveApplications = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApplications) {
-          setLeaveApplications(JSON.parse(storedLeaveApplications));
-        } else {
-          setLeaveApplications([]); 
+          loadedLeaveApplications = JSON.parse(storedLeaveApplications);
         }
+      } catch (error) {
+        console.error("Error loading leave applications from localStorage:", error);
+        toast({ title: "Data Load Error", description: "Could not load leave applications. Stored data might be corrupted.", variant: "destructive", duration: 7000 });
+      }
+      setLeaveApplications(loadedLeaveApplications);
 
+      try {
         const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOpeningBalances) {
-            setOpeningBalances(JSON.parse(storedOpeningBalances));
-        } else {
-            setOpeningBalances([]);
+            loadedOpeningBalances = JSON.parse(storedOpeningBalances);
         }
-
-      } catch (error) {
-        console.error("Error loading data from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load data from local storage.", variant: "destructive" });
-        setEmployees([]);
-        setLeaveApplications([]);
-        setOpeningBalances([]);
+      } catch (error)
+      {
+        console.error("Error loading opening balances from localStorage:", error);
+        toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted.", variant: "destructive", duration: 7000 });
       }
+      setOpeningBalances(loadedOpeningBalances);
     }
+    // setIsLoading(false) will be handled by the next useEffect that depends on these states
   }, [toast]);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
       setDisplayData([]);
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading is false if prerequisites not met
       return;
     }
     
@@ -135,11 +143,12 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
       .map(emp => {
+        // Pass empty array for applications, as used leaves are derived from attendance
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
           emp, 
           selectedYear, 
           monthIndex, 
-          [], // Pass empty array for applications; used leaves from attendance handled next
+          [], 
           openingBalances
         );
 
@@ -168,6 +177,7 @@ export default function LeavePage() {
                 }
               } catch (e) {
                 console.error(`Error parsing attendance data for ${emp.code} in ${selectedMonth} ${selectedYear} on Leave Page:`, e);
+                // Don't toast for each employee, could be overwhelming
               }
             }
           }
@@ -190,7 +200,7 @@ export default function LeavePage() {
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, openingBalances, selectedMonth, selectedYear, toast]);
+  }, [employees, openingBalances, selectedMonth, selectedYear, toast]); // leaveApplications removed as it's not directly used for 'used' counts here
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -215,6 +225,7 @@ export default function LeavePage() {
   
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
+    // Financial year starts in April. If selected month is Jan-Mar, FY started previous calendar year.
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
@@ -227,6 +238,8 @@ export default function LeavePage() {
       setEditableOB_SL(existingOB.openingSL);
       setEditableOB_PL(existingOB.openingPL);
     } else {
+      // If no OB for this FY, try to find the latest previous OB for PL to carry forward if rules imply
+      // However, for direct editing, it's simpler to default to 0 if specific FY entry not found
       setEditableOB_CL(0);
       setEditableOB_SL(0);
       setEditableOB_PL(0);
@@ -260,9 +273,16 @@ export default function LeavePage() {
     }
 
     setOpeningBalances(updatedOpeningBalances);
-    if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+        } catch (storageError) {
+            console.error("Error saving opening balances to localStorage:", storageError);
+            toast({ title: "Storage Error", description: "Could not save opening balances locally.", variant: "destructive" });
+        }
+    }
     
-    toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting ${editingOBYear} have been saved.`});
+    toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved.`});
     setIsEditOpeningBalanceDialogOpen(false);
     setEditingEmployeeForOB(null);
   };
@@ -376,23 +396,31 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>();
+            const employeeCodesInFile = new Set<string>(); // To check for duplicates within the CSV itself
             let skippedDuplicatesInFile = 0;
+            let malformedRows = 0;
 
             dataRows.forEach((row, index) => {
                 const values = row.split(',');
                 if (values.length < expectedHeaders.length) {
                      console.warn(`Skipping row ${index + 1} in opening balance CSV: insufficient columns.`);
+                     malformedRows++;
                      return;
                 }
                 const employeeCode = values[headersFromFile.indexOf("employeecode")]?.trim();
-                const openingCL = parseFloat(values[headersFromFile.indexOf("openingcl")]?.trim());
-                const openingSL = parseFloat(values[headersFromFile.indexOf("openingsl")]?.trim());
-                const openingPL = parseFloat(values[headersFromFile.indexOf("openingpl")]?.trim());
-                const financialYearStart = parseInt(values[headersFromFile.indexOf("financialyearstart")]?.trim());
+                const openingCLStr = values[headersFromFile.indexOf("openingcl")]?.trim();
+                const openingSLStr = values[headersFromFile.indexOf("openingsl")]?.trim();
+                const openingPLStr = values[headersFromFile.indexOf("openingpl")]?.trim();
+                const financialYearStartStr = values[headersFromFile.indexOf("financialyearstart")]?.trim();
 
-                if (!employeeCode || isNaN(openingCL) || isNaN(openingSL) || isNaN(openingPL) || isNaN(financialYearStart)) {
-                    console.warn(`Skipping row ${index + 1} in opening balance CSV: invalid data for ${employeeCode}.`);
+                const openingCL = parseFloat(openingCLStr);
+                const openingSL = parseFloat(openingSLStr);
+                const openingPL = parseFloat(openingPLStr);
+                const financialYearStart = parseInt(financialYearStartStr);
+
+                if (!employeeCode || isNaN(openingCL) || isNaN(openingSL) || isNaN(openingPL) || isNaN(financialYearStart) || financialYearStart < 1900 || financialYearStart > 2200) {
+                    console.warn(`Skipping row ${index + 1} in opening balance CSV: invalid data for ${employeeCode}. Values: CL=${openingCLStr}, SL=${openingSLStr}, PL=${openingPLStr}, FY=${financialYearStartStr}`);
+                    malformedRows++;
                     return;
                 }
                 const uniqueKeyInFile = `${employeeCode}-${financialYearStart}`;
@@ -405,35 +433,43 @@ export default function LeavePage() {
                 newOpeningBalances.push({ employeeCode, openingCL, openingSL, openingPL, financialYearStart });
             });
 
-            if (newOpeningBalances.length === 0 && skippedDuplicatesInFile > 0) {
-                toast({ title: "No New Balances Processed", description: `All ${skippedDuplicatesInFile} rows in the file were duplicates of each other for the same employee/year.`, variant: "destructive", duration: 7000 });
-                return;
-            }
-            if (newOpeningBalances.length === 0) {
-                toast({ title: "No Valid Data Processed", description: "No valid new opening balance data found in the file. Check columns and formats.", variant: "destructive", duration: 7000 });
-                return;
-            }
-
-            setOpeningBalances(prevBalances => {
-                const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
-                newOpeningBalances.forEach(nb => {
-                    existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); // Add or overwrite
+            let message = "";
+            if (newOpeningBalances.length > 0) {
+                message += `${newOpeningBalances.length} records processed from ${file.name}. `;
+                setOpeningBalances(prevBalances => {
+                    const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
+                    newOpeningBalances.forEach(nb => {
+                        existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); // Add or overwrite
+                    });
+                    const updatedBalances = Array.from(existingRecordsMap.values());
+                    
+                    if (typeof window !== 'undefined') {
+                        try {
+                            localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
+                        } catch (storageError) {
+                            console.error("Error saving opening balances to localStorage:", storageError);
+                            toast({ title: "Storage Error", description: "Could not save opening balances locally.", variant: "destructive" });
+                        }
+                    }
+                    return updatedBalances;
                 });
-                const updatedBalances = Array.from(existingRecordsMap.values());
-                
-                if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
-                return updatedBalances;
-            });
-            
-            let successMessage = `${newOpeningBalances.length} records processed from ${file.name}.`;
-            if (skippedDuplicatesInFile > 0) {
-                successMessage += ` ${skippedDuplicatesInFile} duplicate rows (same employee/year) within the file were skipped.`;
+            } else {
+                 message += `No new valid opening balance records found in ${file.name}. `;
             }
-            toast({ title: "Opening Balances Processed", description: successMessage, duration: 7000 });
+            
+            if (skippedDuplicatesInFile > 0) message += `${skippedDuplicatesInFile} duplicate row(s) (same employee/year) within the file were skipped. `;
+            if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to invalid/missing data. `;
+            
+            toast({ 
+                title: newOpeningBalances.length > 0 ? "Opening Balances Processed" : "Upload Issue", 
+                description: message.trim(), 
+                duration: 9000,
+                variant: newOpeningBalances.length > 0 ? "default" : "destructive",
+            });
 
         } catch (error) {
             console.error("Error parsing opening balance CSV:", error);
-            toast({ title: "Parsing Error", description: "Could not parse opening balance CSV. Check format.", variant: "destructive" });
+            toast({ title: "Parsing Error", description: "Could not parse opening balance CSV. Check format.", variant: "destructive", duration: 7000 });
         }
     };
     reader.onerror = () => {
@@ -467,7 +503,7 @@ export default function LeavePage() {
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < activeEmployeesInDisplay.length;
 
 
-  if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear) { 
+  if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear && currentYearState === 0) { 
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -500,7 +536,13 @@ export default function LeavePage() {
 
       <Dialog open={isEditOpeningBalanceDialogOpen} onOpenChange={(isOpen) => {
           setIsEditOpeningBalanceDialogOpen(isOpen);
-          if (!isOpen) setEditingEmployeeForOB(null);
+          if (!isOpen) {
+            setEditingEmployeeForOB(null);
+            setEditableOB_CL(0);
+            setEditableOB_SL(0);
+            setEditableOB_PL(0);
+            setEditingOBYear(0);
+          }
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -512,7 +554,7 @@ export default function LeavePage() {
           <div className="py-4 space-y-4">
             <div className="space-y-1">
                 <Label htmlFor="ob-fy-year">Financial Year Start (e.g., 2024 for Apr 2024 - Mar 2025)</Label>
-                <Input id="ob-fy-year" type="number" value={editingOBYear} onChange={(e) => setEditingOBYear(parseInt(e.target.value))} placeholder="Enter year" />
+                <Input id="ob-fy-year" type="number" value={editingOBYear > 0 ? editingOBYear : ""} onChange={(e) => setEditingOBYear(parseInt(e.target.value))} placeholder="Enter year" />
             </div>
             <div className="space-y-1">
                 <Label htmlFor="ob-cl">Opening CL</Label>
@@ -531,7 +573,7 @@ export default function LeavePage() {
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>
-            <Button type="button" onClick={handleSaveOpeningBalances}>Save Balances</Button>
+            <Button type="button" onClick={handleSaveOpeningBalances} disabled={editingOBYear === 0}>Save Balances</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -596,11 +638,11 @@ export default function LeavePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && displayData.length === 0 ? ( 
+              {isLoading && displayData.length === 0 && employees.length > 0 ? ( 
                 <TableRow>
                   <TableCell colSpan={14} className="text-center py-8">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                    {employees.length > 0 ? "Calculating leave balances..." : "Loading employee data..."}
+                    Calculating leave balances...
                   </TableCell>
                 </TableRow>
               ) : activeEmployeesInDisplay.length > 0 ? activeEmployeesInDisplay.map((emp) => (
@@ -672,3 +714,4 @@ export default function LeavePage() {
     </>
   );
 }
+

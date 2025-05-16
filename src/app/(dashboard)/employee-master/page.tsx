@@ -68,22 +68,30 @@ export default function EmployeeMasterPage() {
   React.useEffect(() => {
     setIsLoadingData(true);
     if (typeof window !== 'undefined') {
+      let loadedEmployees = sampleEmployees; // Default to sample
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
-          setEmployees(JSON.parse(storedEmployees));
+          loadedEmployees = JSON.parse(storedEmployees);
         } else {
-          setEmployees(sampleEmployees); 
+          // No data in localStorage, so use samples and save them for next time
           saveEmployeesToLocalStorage(sampleEmployees);
+          loadedEmployees = sampleEmployees;
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees); 
-        toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
+        toast({ 
+            title: "Data Load Error", 
+            description: "Could not load employee master data from local storage. It might be corrupted. Using default sample data.", 
+            variant: "destructive",
+            duration: 7000,
+        });
+        // Fallback to sample data if parsing fails but don't delete localStorage item
       }
+      setEmployees(loadedEmployees);
     }
     setIsLoadingData(false);
-  }, []); 
+  }, [toast]); // Keep toast in dependency array for its usage in catch
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -131,7 +139,16 @@ export default function EmployeeMasterPage() {
 
   const handleAddNewEmployee = () => {
     setEditingEmployeeId(null); 
-    form.reset(); 
+    form.reset({
+      code: "",
+      name: "",
+      designation: "",
+      doj: "",
+      status: "Active",
+      division: "",
+      hq: "",
+      grossMonthlySalary: 0,
+    }); 
     setIsEmployeeFormOpen(true);
   };
 
@@ -150,7 +167,7 @@ export default function EmployeeMasterPage() {
 
   const handleDeleteEmployee = (employeeId: string) => {
     const employeeToDelete = employees.find(emp => emp.id === employeeId);
-    if (confirm(`Are you sure you want to delete ${employeeToDelete?.name || `Employee ID ${employeeId}`}?`)) {
+    if (confirm(`Are you sure you want to delete ${employeeToDelete?.name || `Employee ID ${employeeId}`}? This action cannot be undone.`)) {
         const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
         setEmployees(updatedEmployees);
         saveEmployeesToLocalStorage(updatedEmployees);
@@ -178,17 +195,20 @@ export default function EmployeeMasterPage() {
         }
 
         const dataRows = lines.slice(1); 
+        // Expected columns based on template: Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary
         const expectedColumns = 8; 
         const uploadedEmployees: EmployeeDetail[] = [];
         const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
         let skippedForDuplicateInCsv = 0;
         let skippedForExistingInDb = 0;
+        let malformedRows = 0;
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
           if (values.length < expectedColumns) {
-            console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${expectedColumns}, got ${values.length}`);
+            console.warn(`Skipping row ${rowIndex + 1} in Employee Master CSV: insufficient columns. Expected ${expectedColumns}, got ${values.length}`);
+            malformedRows++;
             return;
           }
           
@@ -203,21 +223,23 @@ export default function EmployeeMasterPage() {
           
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
 
-          if (!code || !name || !status || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary).`);
+          if (!code || !name || !status || !division || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
+            console.warn(`Skipping row ${rowIndex + 1} in Employee Master CSV (Code: ${code}): missing or invalid critical data.`);
+            malformedRows++;
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            console.warn(`Skipping row ${rowIndex + 1} due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
+            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
+            malformedRows++;
             return;
           }
           if (codesInCsv.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to duplicate code within CSV.`);
+            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to duplicate code within this CSV file.`);
             skippedForDuplicateInCsv++;
             return;
           }
           if (currentEmployeesMap.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) as code already exists in master list.`);
+            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) as this employee code already exists in the master list.`);
             skippedForExistingInDb++;
             return;
           }
@@ -228,39 +250,38 @@ export default function EmployeeMasterPage() {
              try {
                 const d = new Date(doj); 
                 if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd');
-             } catch {}
+             } catch { /* ignore date parse error, keep original */ }
           }
 
           uploadedEmployees.push({
             id: code, status, division, code, name, designation, hq, doj: formattedDoj, grossMonthlySalary,
           });
         });
-
-        if (uploadedEmployees.length === 0 && (skippedForDuplicateInCsv > 0 || skippedForExistingInDb > 0)) {
-             toast({ title: "No New Employees Added", description: `All rows skipped. ${skippedForDuplicateInCsv} duplicate(s) in CSV, ${skippedForExistingInDb} already in master.`, variant: "destructive", duration: 7000});
-             return;
-        }
-        if (uploadedEmployees.length === 0) {
-          toast({ title: "No Valid Data Processed", description: "No valid new employee data found in the file. Check columns and formats.", variant: "destructive"});
-          return;
-        }
         
-        const combinedEmployees = [...employees, ...uploadedEmployees];
-        setEmployees(combinedEmployees); 
-        saveEmployeesToLocalStorage(combinedEmployees);
+        let message = "";
+        if (uploadedEmployees.length > 0) {
+            const combinedEmployees = [...employees, ...uploadedEmployees];
+            setEmployees(combinedEmployees); 
+            saveEmployeesToLocalStorage(combinedEmployees);
+            message += `${uploadedEmployees.length} new employee(s) added from ${file.name}. `;
+        } else {
+            message += `No new employees were added from ${file.name}. `;
+        }
 
-        let successMessage = `${uploadedEmployees.length} new employee(s) added from ${file.name}.`;
-        if (skippedForDuplicateInCsv > 0) successMessage += ` ${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes in CSV.`;
-        if (skippedForExistingInDb > 0) successMessage += ` ${skippedForExistingInDb} row(s) skipped as codes already exist.`;
+        if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
+        if (skippedForExistingInDb > 0) message += `${skippedForExistingInDb} row(s) skipped as codes already exist in master. `;
+        if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to missing or invalid data. `;
+        
         toast({
-          title: "Employees Processed",
-          description: successMessage,
-          duration: 7000,
+          title: "Employee Upload Processed",
+          description: message.trim(),
+          duration: 9000,
+          variant: uploadedEmployees.length > 0 ? "default" : "destructive",
         });
 
       } catch (error) {
         console.error("Error parsing CSV for employees:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive" });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive", duration: 7000 });
       }
     };
     reader.onerror = () => {
@@ -290,22 +311,26 @@ export default function EmployeeMasterPage() {
   };
 
   const filteredEmployees = React.useMemo(() => {
+    if (isLoadingData) return [];
     return employees.filter(employee => {
         const searchTerm = filterTerm.toLowerCase();
         return (
           employee.code.toLowerCase().includes(searchTerm) ||
           employee.name.toLowerCase().includes(searchTerm) ||
           (employee.division && employee.division.toLowerCase().includes(searchTerm)) ||
-          (employee.designation && employee.designation.toLowerCase().includes(searchTerm))
+          (employee.designation && employee.designation.toLowerCase().includes(searchTerm)) ||
+          (employee.hq && employee.hq.toLowerCase().includes(searchTerm)) ||
+          (employee.status && employee.status.toLowerCase().includes(searchTerm))
         );
       });
-  }, [employees, filterTerm]);
+  }, [employees, filterTerm, isLoadingData]);
 
   const employeeCounts = React.useMemo(() => {
+    if (isLoadingData) return { activeCount: 0, leftCount: 0 };
     const activeCount = employees.filter(emp => emp.status === "Active").length;
     const leftCount = employees.filter(emp => emp.status === "Left").length;
     return { activeCount, leftCount };
-  }, [employees]);
+  }, [employees, isLoadingData]);
 
   if (isLoadingData) {
     return (
@@ -418,7 +443,7 @@ export default function EmployeeMasterPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Filter by Code, Name, Division..."
+                placeholder="Filter by Code, Name, Div, HQ..."
                 className="pl-8"
                 value={filterTerm}
                 onChange={(e) => setFilterTerm(e.target.value)}
@@ -493,10 +518,10 @@ export default function EmployeeMasterPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredEmployees.length === 0 && (
+              {filteredEmployees.length === 0 && !isLoadingData && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground">
-                    {filterTerm ? "No employees match your filter." : "No employee data available. Use 'Add New Employee' or 'Upload Employees'."}
+                    {filterTerm ? "No employees match your filter." : (employees.length === 0 ? "No employee data available. Use 'Add New Employee' or 'Upload Employees'." : "No employees found.")}
                   </TableCell>
                 </TableRow>
               )}
@@ -507,3 +532,4 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+

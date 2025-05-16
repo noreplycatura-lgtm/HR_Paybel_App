@@ -62,7 +62,7 @@ interface SimulatedUser {
   isLocked: boolean;
 }
 
-const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1"; // v1 stores array of SimulatedUser objects
+const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 
 export default function UserManagementPage() {
@@ -81,25 +81,29 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
-          // Filter out "Novita"
-          const filteredUsers = parsedUsers.filter(user => user.username !== "Novita");
+          // Filter out "Novita" if it exists from previous logic, or any other specific cleanup if needed
+          const filteredUsers = parsedUsers.filter(user => user.username !== "Novita"); // Example: if 'Novita' was a temporary admin
           usersToSet = filteredUsers;
           
-          // If Novita was filtered out, save the modified list back to localStorage
           if (filteredUsers.length < parsedUsers.length) {
+            // If any user was filtered out, save the cleaned list back.
             localStorage.setItem(SIMULATED_USERS_STORAGE_KEY, JSON.stringify(filteredUsers));
-            // Consider if a toast message is desired here, e.g.:
-            // toast({ title: "User 'Novita' Cleared", description: "The co-admin account 'Novita' has been removed as per request." });
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load user list. Stored data might be corrupted.", variant: "destructive" });
+        toast({ 
+            title: "Data Load Error", 
+            description: "Could not load user list. Stored data might be corrupted.", 
+            variant: "destructive",
+            duration: 7000,
+        });
+        // Do not delete the key, just fall back to empty if parsing fails.
       }
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, []); // Changed dependency array to [] for mount-only effect
+  }, [toast]);
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -149,7 +153,7 @@ export default function UserManagementPage() {
 
     toast({
       title: "Simulated Co-Admin User Added",
-      description: `User '${values.username}' has been added. Note: This is a simulated account.`,
+      description: `User '${values.username}' has been added to the list. This user can now 'log in' via the main login page if not locked.`,
     });
     setIsCreateUserDialogOpen(false);
     form.reset();
@@ -160,7 +164,6 @@ export default function UserManagementPage() {
       title: "Logout Initiated",
       description: "Redirecting to login page.",
     });
-    // Here you might also clear any actual auth tokens if this were a real system
     router.push("/login");
   };
 
@@ -197,7 +200,7 @@ export default function UserManagementPage() {
   const handleResetPassword = (username: string) => {
     toast({
       title: "Prototype Action",
-      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow.`,
+      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow. Passwords for simulated users are not stored.`,
     });
   };
   
@@ -234,7 +237,7 @@ export default function UserManagementPage() {
               <DialogHeader>
                 <DialogTitle>Create New Simulated Co-Admin</DialogTitle>
                 <DialogDescription>
-                  Fill in the details for the new co-admin user.
+                  Fill in the details for the new co-admin user. This user will be able to 'log in' if not locked.
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
@@ -280,7 +283,7 @@ export default function UserManagementPage() {
 
           <Button onClick={handleLogout} variant="destructive">
             <LogOut className="mr-2 h-4 w-4" />
-            Logout (Prototype)
+            Logout
           </Button>
         </CardContent>
       </Card>
@@ -289,7 +292,7 @@ export default function UserManagementPage() {
         <CardHeader>
           <CardTitle>Simulated Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of simulated co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
+            List of simulated co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here and cannot be modified.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -316,7 +319,7 @@ export default function UserManagementPage() {
                         size="icon" 
                         onClick={() => handleResetPassword(user.username)} 
                         title={`Simulate Reset Password for ${user.username}`}
-                        disabled={user.username === MAIN_ADMIN_USERNAME}
+                        disabled={user.username === MAIN_ADMIN_USERNAME} // Should not be necessary as main admin not listed
                     >
                       <KeyRound className="h-4 w-4" />
                     </Button>
@@ -342,7 +345,7 @@ export default function UserManagementPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {simulatedUsers.length === 0 && (
+              {simulatedUsers.length === 0 && !isLoading && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
                     No simulated co-admin users created yet.
@@ -354,7 +357,7 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
 
-      <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+      <AlertDialog open={!!userToDelete} onOpenChange={(isOpen) => { if(!isOpen) setUserToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -373,3 +376,4 @@ export default function UserManagementPage() {
     </>
   );
 }
+
