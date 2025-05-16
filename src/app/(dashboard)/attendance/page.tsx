@@ -18,13 +18,12 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-// sampleLeaveHistory is intentionally not imported as leave applications aren't directly managed here for balance calc
 import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
-  attendance: string[];
-  processedAttendance?: string[];
+  attendance: string[]; // Raw daily statuses as uploaded/parsed
+  processedAttendance?: string[]; // Statuses after applying DOJ logic
   isMissingInMaster?: boolean;
 }
 
@@ -61,11 +60,9 @@ export default function AttendancePage() {
   const [dialogClearMonth, setDialogClearMonth] = React.useState<string>('');
   const [dialogClearYear, setDialogClearYear] = React.useState<number>(0);
 
-
   const [isEditAttendanceDialogOpen, setIsEditAttendanceDialogOpen] = React.useState(false);
   const [editingAttendanceEmployee, setEditingAttendanceEmployee] = React.useState<EmployeeAttendanceData | null>(null);
   const [editableDailyStatuses, setEditableDailyStatuses] = React.useState<string[]>([]);
-
 
   const getDynamicLocalStorageKeys = (month: string, year: number) => {
     if (!month || year === 0) return { rawDataKey: null, fileNameKey: null };
@@ -191,7 +188,6 @@ export default function AttendancePage() {
       const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
       const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
 
-      // If employee joined after the selected month ended, mark all days as '-'
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
@@ -199,13 +195,13 @@ export default function AttendancePage() {
       const daysInCurrentMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
       const rawDailyStatuses = emp.attendance.slice(0, daysInCurrentMonth);
 
-      // Process statuses: if day is before DOJ, mark as '-', otherwise use status from rawAttendanceData
-      // rawAttendanceData's daily statuses are already processed by handleFileUpload to convert file's blank/'-' to 'A'
       const newProcessedAttendance = rawDailyStatuses.map((status, dayIndex) => {
         const currentDateInLoop = new Date(selectedYear, monthIndex, dayIndex + 1);
         if (isBefore(currentDateInLoop, startOfDay(employeeStartDate))) {
           return '-';
         }
+        // Return the status as is from rawAttendanceData (already processed for blanks/hyphens from file to 'A')
+        // No leave balance check here; balances are managed and can go negative on Leave Management page.
         return status; 
       });
       
@@ -262,7 +258,6 @@ export default function AttendancePage() {
         return;
       }
 
-
       try {
         const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
         if (lines.length < 2) {
@@ -295,7 +290,7 @@ export default function AttendancePage() {
           const values = row.split(',');
           if (values.length < expectedBaseColumns + daysInUploadMonth) {
             console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${expectedBaseColumns + daysInUploadMonth}, got ${values.length}`);
-            return null;
+            return;
           }
           const status = values[0]?.trim() || "Active";
           const division = values[1]?.trim() || "N/A";
@@ -310,14 +305,14 @@ export default function AttendancePage() {
           if (encounteredCodes.has(code)) {
             skippedDuplicateCount++;
             console.warn(`Skipping duplicate employee code '${code}' in uploaded file at row ${rowIndex + 1}.`);
-            return null;
+            return;
           }
           encounteredCodes.add(code);
 
           const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusValue => {
             const trimmedUpperStatus = statusValue.trim().toUpperCase();
             if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
-              return 'A';
+              return 'A'; // Blank or '-' from file is treated as 'A'
             }
             return trimmedUpperStatus;
           });
@@ -617,7 +612,7 @@ export default function AttendancePage() {
 
   return (
     <>
-      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance. Blank/'-' in upload treated as Absent. Leave balances can go negative.">
+      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance. Blank/'-' in upload treated as Absent. Leave statuses (CL/SL/PL) are recorded as is; balances are managed on the Leave Management page and can go negative.">
         <Button
             variant="outline"
             onClick={handleDownloadReport}
@@ -1023,7 +1018,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-    
-
-    

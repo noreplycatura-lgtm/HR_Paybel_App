@@ -137,12 +137,14 @@ export default function LeavePage() {
       .filter(emp => emp.status === "Active") 
       .map(emp => {
         // Calculate total accrued leaves up to the end of the selected month,
-        // considering opening balances and monthly accruals, as if no leaves from 'leaveApplications' were taken in the current month.
+        // considering opening balances and monthly accruals. For this initial calculation,
+        // we pass an empty array for leaveApplications because the actual "Used" leaves
+        // for the current month will be sourced directly from attendance data.
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
           emp, 
           selectedYear, 
           monthIndex, 
-          [], // Pass empty array for leaveApplications for this specific calculation
+          [], // Pass empty array here; actual "used" from attendance is handled next
           openingBalances
         );
 
@@ -167,9 +169,6 @@ export default function LeavePage() {
                     if (status === 'CL') usedCLFromAttendance += 1;
                     else if (status === 'SL') usedSLFromAttendance += 1;
                     else if (status === 'PL') usedPLFromAttendance += 1;
-                    // Note: HD (Half-Day) from attendance sheet is not automatically deducted from leave balances here.
-                    // If HD should consume 0.5 of a leave type, that logic would need to be added
-                    // both here and potentially in how 'HD' is recorded or processed.
                   });
                 }
               } catch (e) {
@@ -179,6 +178,7 @@ export default function LeavePage() {
           }
         }
 
+        // Final balance = Accrued by end of month (including this month's accrual) - Used from this month's attendance
         const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
         const finalBalanceSL = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
@@ -188,16 +188,16 @@ export default function LeavePage() {
           usedCLInMonth: usedCLFromAttendance,
           usedSLInMonth: usedSLFromAttendance,
           usedPLInMonth: usedPLFromAttendance,
-          balanceCLAtMonthEnd: finalBalanceCL,
-          balanceSLAtMonthEnd: finalBalanceSL,
-          balancePLAtMonthEnd: finalBalancePL,
+          balanceCLAtMonthEnd: finalBalanceCL, // This can go negative
+          balanceSLAtMonthEnd: finalBalanceSL, // This can go negative
+          balancePLAtMonthEnd: finalBalancePL, // This can go negative
           isPLEligibleThisMonth: accruedDetails.isPLEligibleThisMonth,
         };
     });
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, leaveApplications, openingBalances, selectedMonth, selectedYear]);
+  }, [employees, openingBalances, selectedMonth, selectedYear, toast]); // Removed leaveApplications from dependency as it's not directly used for this display
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -235,9 +235,6 @@ export default function LeavePage() {
       setEditableOB_SL(existingOB.openingSL);
       setEditableOB_PL(existingOB.openingPL);
     } else {
-      // If no OB for this specific FY, but there might be for a previous one.
-      // However, the dialog should allow setting for the *current* FY.
-      // Default to 0 if no specific OB for *this* FY.
       setEditableOB_CL(0);
       setEditableOB_SL(0);
       setEditableOB_PL(0);
@@ -642,12 +639,11 @@ export default function LeavePage() {
                             const parts = emp.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                // Attempt common non-ISO formats like DD-MM-YYYY or MM-DD-YYYY
-                                if (parseInt(parts[2]) > 1000) { // YYYY is likely at the end
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // try YYYY-MM-DD
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // try YYYY-DD-MM
-                                } else if (parseInt(parts[0]) > 1000) { // YYYY is likely at the start
-                                     reparsedDate = parseISO(emp.doj); // try as is, might be YYYY-MM-DD
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                                } else if (parseInt(parts[0]) > 1000) { 
+                                     reparsedDate = parseISO(emp.doj);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
@@ -684,6 +680,3 @@ export default function LeavePage() {
     </>
   );
 }
-
-
-    
