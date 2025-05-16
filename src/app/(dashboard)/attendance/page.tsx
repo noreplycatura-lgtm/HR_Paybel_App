@@ -15,7 +15,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2 } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data"; 
-import { sampleLeaveHistory } from "@/lib/hr-data";
+import { sampleLeaveHistory } from "@/lib/hr-data"; // Using sampleLeaveHistory for leave calculations
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -26,9 +26,9 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data";
-const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename";
-const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context";
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v2"; // Updated key for new structure
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename_v2";
+const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v2";
 
 export default function AttendancePage() {
   const { toast } = useToast();
@@ -58,11 +58,11 @@ export default function AttendancePage() {
     const storedFileName = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
     const storedContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
 
-    const now = new Date(); // Define now here to be accessible in both branches
+    const now = new Date(); 
     const defaultYear = now.getFullYear();
     const defaultMonthName = months[now.getMonth()];
-    setCurrentYear(defaultYear); // Always set current year for dropdown population
-    setCurrentMonthName(defaultMonthName); // Always set current month for dropdown population
+    setCurrentYear(defaultYear); 
+    setCurrentMonthName(defaultMonthName); 
 
     if (storedRawData && storedFileName && storedContext) {
       try {
@@ -75,7 +75,7 @@ export default function AttendancePage() {
 
         setSelectedMonth(parsedContext.month);
         setSelectedYear(parsedContext.year);
-        setUploadMonth(parsedContext.month);
+        setUploadMonth(parsedContext.month); 
         setUploadYear(parsedContext.year);
       } catch (error) {
         console.error("Error parsing attendance data from localStorage:", error);
@@ -117,7 +117,18 @@ export default function AttendancePage() {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-') };
       }
 
-      let balances = getLeaveBalancesAtStartOfMonth(emp, selectedYear, monthIndex, sampleLeaveHistory);
+      // Use a minimal EmployeeDetail for leave calculations, ensure DOJ is correct
+      const employeeForLeaveCalc: EmployeeDetail = {
+        id: emp.id,
+        code: emp.code,
+        name: emp.name,
+        designation: emp.designation,
+        doj: emp.doj,
+        // status and division are not strictly needed for leave calc but good to have
+        status: emp.status, 
+        division: emp.division
+      };
+      let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
       
       const monthsOfServiceThisMonthStart = calculateMonthsOfService(emp.doj, new Date(selectedYear, monthIndex, 1));
       const isPLEligibleForThisMonth = monthsOfServiceThisMonthStart >= PL_ELIGIBILITY_MONTHS;
@@ -182,22 +193,27 @@ export default function AttendancePage() {
 
         const dataRows = lines.slice(1);
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
+        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
         
         const newAttendanceData: EmployeeAttendanceData[] = dataRows.map((row, rowIndex) => {
           const values = row.split(',');
-          if (values.length < 4 + daysInUploadMonth) {
-            console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${4 + daysInUploadMonth}, got ${values.length}`);
+          if (values.length < expectedBaseColumns + daysInUploadMonth) {
+            console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${expectedBaseColumns + daysInUploadMonth}, got ${values.length}`);
             return null; 
           }
-          const code = values[0]?.trim() || `TEMP_ID_${rowIndex}`;
-          const name = values[1]?.trim() || "N/A";
-          const designation = values[2]?.trim() || "N/A";
-          const doj = values[3]?.trim() || new Date().toISOString().split('T')[0]; 
+          const status = values[0]?.trim() || "Active";
+          const division = values[1]?.trim() || "N/A";
+          const code = values[2]?.trim() || `TEMP_ID_${rowIndex}`;
+          const name = values[3]?.trim() || "N/A";
+          const designation = values[4]?.trim() || "N/A";
+          const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const dailyStatuses = values.slice(4, 4 + daysInUploadMonth).map(status => status.trim().toUpperCase() || 'A'); 
+          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(status => status.trim().toUpperCase() || 'A'); 
 
           return {
             id: code, 
+            status,
+            division,
             code,
             name,
             designation,
@@ -207,7 +223,7 @@ export default function AttendancePage() {
         }).filter(item => item !== null) as EmployeeAttendanceData[]; 
 
         if (newAttendanceData.length === 0) {
-            toast({ title: "No Data Processed", description: "No valid employee attendance data found in the file.", variant: "destructive"});
+            toast({ title: "No Data Processed", description: "No valid employee attendance data found in the file. Check column count and format.", variant: "destructive"});
             return;
         }
         
@@ -242,9 +258,10 @@ export default function AttendancePage() {
           viewTabTrigger.click();
         }
 
-      } catch (error) {
+      } catch (error)
+       {
         console.error("Error parsing CSV:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format.", variant: "destructive" });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive" });
         setRawAttendanceData([]);
         setProcessedAttendanceData([]);
         setUploadedFileName(null);
@@ -273,7 +290,7 @@ export default function AttendancePage() {
     const csvRows: string[][] = [];
 
     const headers = [
-      "Code", "Name", "Designation", "DOJ",
+      "Status", "Division", "Code", "Name", "Designation", "DOJ",
       ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
       "Working Days (P)", "Absent-1 (A)", "Absent-2 (A+HD)", "Weekoff (W)",
       "Total CL (Used)", "Total PL (Used)", "Total SL (Used)", "Paid Holiday (PH)",
@@ -300,6 +317,8 @@ export default function AttendancePage() {
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
       const row = [
+        emp.status || "N/A",
+        emp.division || "N/A",
         emp.code,
         emp.name,
         emp.designation,
@@ -341,16 +360,16 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
+    const headers = ["Status", "Division", "Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
     
-    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
-    if (daysForTemplate >= 7) { sampleRow1[4+5] = "W"; sampleRow1[4+6] = "W"; } 
-    if (daysForTemplate >= 11) sampleRow1[4+10] = "CL"; 
+    const sampleRow1 = ["Active", "Technology", "E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 7) { sampleRow1[6+5] = "W"; sampleRow1[6+6] = "W"; } 
+    if (daysForTemplate >= 11) sampleRow1[6+10] = "CL"; 
     csvRows.push(sampleRow1);
 
-    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(daysForTemplate).fill("P")];
-    if (daysForTemplate >= 15) { sampleRow2[4+13] = "A"; sampleRow2[4+14] = "HD"; }
+    const sampleRow2 = ["Active", "Sales", "E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 15) { sampleRow2[6+13] = "A"; sampleRow2[6+14] = "HD"; }
     csvRows.push(sampleRow2);
 
 
@@ -576,6 +595,8 @@ export default function AttendancePage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="min-w-[100px]">Status</TableHead>
+                          <TableHead className="min-w-[120px]">Division</TableHead>
                           <TableHead className="min-w-[80px]">Code</TableHead>
                           <TableHead className="min-w-[150px]">Name</TableHead>
                           <TableHead className="min-w-[150px]">Designation</TableHead>
@@ -598,7 +619,7 @@ export default function AttendancePage() {
                       <TableBody>
                         {processedAttendanceData.map((emp) => {
                           if (!emp.processedAttendance) { 
-                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
+                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 16}>Processing data for {emp.name}...</TableCell></TableRow>;
                           }
                           const finalAttendanceToUse = emp.processedAttendance; 
 
@@ -618,6 +639,8 @@ export default function AttendancePage() {
                           
                           return (
                           <TableRow key={emp.id}>
+                            <TableCell>{emp.status || "N/A"}</TableCell>
+                            <TableCell>{emp.division || "N/A"}</TableCell>
                             <TableCell>{emp.code}</TableCell>
                             <TableCell>{emp.name}</TableCell>
                             <TableCell>{emp.designation}</TableCell>
@@ -644,7 +667,7 @@ export default function AttendancePage() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={4} className="font-semibold text-right">Total Employees Displayed:</TableCell>
+                          <TableCell colSpan={6} className="font-semibold text-right">Total Employees Displayed:</TableCell>
                           <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
                         </TableRow>
                       </TableFooter>
@@ -666,7 +689,7 @@ export default function AttendancePage() {
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>
                 Select the month and year, then upload a CSV file with employee attendance.
-                <br/>Expected columns: Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
+                <br/>Expected columns: Status, Division, Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

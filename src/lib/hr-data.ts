@@ -7,6 +7,8 @@ export interface EmployeeDetail {
   name: string;
   designation: string;
   doj: string; // YYYY-MM-DD
+  status?: string; // New: Active/Left
+  division?: string; // New: e.g., Tech, HR
 }
 
 export interface LeaveHistoryEntry {
@@ -20,11 +22,11 @@ export interface LeaveHistoryEntry {
 }
 
 export const sampleEmployees: EmployeeDetail[] = [
-  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15" },
-  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20" },
-  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01" },
-  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05" },
-  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01" },
+  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15", status: "Active", division: "Technology" },
+  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20", status: "Active", division: "Management" },
+  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01", status: "Active", division: "Design" },
+  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05", status: "Active", division: "Analytics" },
+  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01", status: "Left", division: "Technology" },
 ];
 
 export const sampleLeaveHistory: LeaveHistoryEntry[] = [
