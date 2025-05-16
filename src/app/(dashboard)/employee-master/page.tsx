@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Upload, Edit, Trash2, Download, Loader2 } from "lucide-react";
+import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
 import { format, parseISO, isValid } from "date-fns";
@@ -28,10 +28,8 @@ const employeeFormSchema = z.object({
   designation: z.string().min(1, "Designation is required"),
   doj: z.string().refine((val) => {
     if (!val) return false;
-    // Attempt to parse, ensuring it's a valid date string accepted by `new Date()` and then `parseISO`
-    // HTML date input typically provides 'YYYY-MM-DD'
     try {
-        const date = parseISO(val); // parseISO is strict about ISO 8601 format
+        const date = parseISO(val);
         return isValid(date);
     } catch {
         return false;
@@ -51,6 +49,7 @@ export default function EmployeeMasterPage() {
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = React.useState(false);
   const [isLoadingData, setIsLoadingData] = React.useState(true);
   const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null);
+  const [filterTerm, setFilterTerm] = React.useState("");
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -107,9 +106,19 @@ export default function EmployeeMasterPage() {
       saveEmployeesToLocalStorage(updatedEmployees);
       toast({ title: "Employee Updated", description: `${values.name}'s details have been updated.` });
     } else {
-      // Add new employee
+      // Add new employee - Check for duplicate code
+      const existingEmployee = employees.find(emp => emp.code === values.code);
+      if (existingEmployee) {
+        toast({
+          title: "Duplicate Employee Code",
+          description: `An employee with code '${values.code}' already exists. Please use a unique code.`,
+          variant: "destructive",
+        });
+        form.setError("code", { type: "manual", message: "This employee code already exists." });
+        return; 
+      }
       const newEmployee: EmployeeDetail = {
-        id: values.code, // Using code as ID for simplicity in prototype
+        id: values.code, 
         ...values,
       };
       const updatedEmployees = [...employees, newEmployee];
@@ -119,12 +128,12 @@ export default function EmployeeMasterPage() {
     }
     setIsEmployeeFormOpen(false);
     setEditingEmployeeId(null);
-    form.reset(); // Reset form to default values
+    form.reset(); 
   };
 
   const handleAddNewEmployee = () => {
-    setEditingEmployeeId(null); // Ensure we are in "add" mode
-    form.reset(); // Reset form to default values for a new entry
+    setEditingEmployeeId(null); 
+    form.reset(); 
     setIsEmployeeFormOpen(true);
   };
 
@@ -132,7 +141,12 @@ export default function EmployeeMasterPage() {
     const employeeToEdit = employees.find(emp => emp.id === employeeId);
     if (employeeToEdit) {
       setEditingEmployeeId(employeeId);
-      form.reset(employeeToEdit); // Pre-fill form with employee data
+      // Ensure DOJ is in YYYY-MM-DD for the form
+      const formValues = {
+        ...employeeToEdit,
+        doj: employeeToEdit.doj && isValid(parseISO(employeeToEdit.doj)) ? format(parseISO(employeeToEdit.doj), 'yyyy-MM-dd') : ''
+      };
+      form.reset(formValues);
       setIsEmployeeFormOpen(true);
     }
   };
@@ -168,12 +182,17 @@ export default function EmployeeMasterPage() {
 
         const dataRows = lines.slice(1); 
         const expectedColumns = 8; 
+        const uploadedEmployees: EmployeeDetail[] = [];
+        const existingCodes = new Set(employees.map(emp => emp.code));
+        const codesInCsv = new Set<string>();
+        let skippedForDuplicateInCsv = 0;
+        let skippedForExistingInDb = 0;
 
-        const newEmployees: EmployeeDetail[] = dataRows.map((row, rowIndex) => {
+        dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
           if (values.length < expectedColumns) {
             console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${expectedColumns}, got ${values.length}`);
-            return null;
+            return;
           }
           
           const status = values[0] as "Active" | "Left";
@@ -188,54 +207,58 @@ export default function EmployeeMasterPage() {
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
 
           if (!code || !name || !status || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary). DOJ: ${doj}`);
-            return null;
+            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary).`);
+            return;
           }
           if (status !== "Active" && status !== "Left") {
             console.warn(`Skipping row ${rowIndex + 1} due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
-            return null;
+            return;
           }
+          if (codesInCsv.has(code)) {
+            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to duplicate code within CSV.`);
+            skippedForDuplicateInCsv++;
+            return;
+          }
+          if (existingCodes.has(code)) {
+            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) as code already exists in master list.`);
+            skippedForExistingInDb++;
+            return;
+          }
+          codesInCsv.add(code);
+
           let formattedDoj = doj;
           if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
-             console.warn(`Row ${rowIndex + 1}: DOJ "${doj}" is not in YYYY-MM-DD format. Attempting to parse or standardize.`);
-             // For this prototype, we'll try to make sure it's acceptable to parseISO or date input
-             // A more robust solution would involve date-fns parse with format strings if formats vary
              try {
-                const d = new Date(doj); // Try to parse it flexibly
-                if (isValid(d)) {
-                    formattedDoj = format(d, 'yyyy-MM-dd');
-                } else {
-                    console.warn(`Could not reliably parse DOJ "${doj}" for row ${rowIndex + 1}. Keeping original.`);
-                }
-             } catch {
-                console.warn(`Error parsing DOJ "${doj}" for row ${rowIndex + 1}. Keeping original.`);
-             }
+                const d = new Date(doj); 
+                if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd');
+             } catch {}
           }
 
+          uploadedEmployees.push({
+            id: code, status, division, code, name, designation, hq, doj: formattedDoj, grossMonthlySalary,
+          });
+        });
 
-          return {
-            id: code, 
-            status,
-            division,
-            code,
-            name,
-            designation,
-            hq,
-            doj: formattedDoj,
-            grossMonthlySalary,
-          };
-        }).filter(item => item !== null) as EmployeeDetail[];
-
-        if (newEmployees.length === 0) {
-          toast({ title: "No Data Processed", description: "No valid employee data found in the file. Check column count, format, and required fields.", variant: "destructive"});
+        if (uploadedEmployees.length === 0 && (skippedForDuplicateInCsv > 0 || skippedForExistingInDb > 0)) {
+             toast({ title: "No New Employees Added", description: `All rows skipped. ${skippedForDuplicateInCsv} duplicate(s) in CSV, ${skippedForExistingInDb} already in master.`, variant: "destructive", duration: 7000});
+             return;
+        }
+        if (uploadedEmployees.length === 0) {
+          toast({ title: "No Valid Data Processed", description: "No valid new employee data found in the file. Check columns and formats.", variant: "destructive"});
           return;
         }
+        
+        const combinedEmployees = [...employees, ...uploadedEmployees];
+        setEmployees(combinedEmployees); 
+        saveEmployeesToLocalStorage(combinedEmployees);
 
-        setEmployees(newEmployees); 
-        saveEmployeesToLocalStorage(newEmployees);
+        let successMessage = `${uploadedEmployees.length} new employee(s) added from ${file.name}.`;
+        if (skippedForDuplicateInCsv > 0) successMessage += ` ${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes in CSV.`;
+        if (skippedForExistingInDb > 0) successMessage += ` ${skippedForExistingInDb} row(s) skipped as codes already exist.`;
         toast({
-          title: "Employees Uploaded",
-          description: `${newEmployees.length} employee records processed from ${file.name}. Existing data has been replaced.`,
+          title: "Employees Processed",
+          description: successMessage,
+          duration: 7000,
         });
 
       } catch (error) {
@@ -269,6 +292,14 @@ export default function EmployeeMasterPage() {
     toast({ title: "Template Downloaded", description: "employee_master_template.csv downloaded." });
   };
 
+  const filteredEmployees = employees.filter(employee => {
+    const searchTerm = filterTerm.toLowerCase();
+    return (
+      employee.code.toLowerCase().includes(searchTerm) ||
+      employee.name.toLowerCase().includes(searchTerm)
+    );
+  });
+
   if (isLoadingData) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -285,9 +316,9 @@ export default function EmployeeMasterPage() {
       >
         <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
             setIsEmployeeFormOpen(isOpen);
-            if (!isOpen) { // If dialog is closing
-                setEditingEmployeeId(null); // Reset editing state
-                form.reset(); // Clear form
+            if (!isOpen) { 
+                setEditingEmployeeId(null); 
+                form.reset(); 
             }
         }}>
           <DialogTrigger asChild>
@@ -306,7 +337,7 @@ export default function EmployeeMasterPage() {
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
                  <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="code" render={({ field }) => (
-                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem> /* Disable code edit for existing */
+                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -358,7 +389,7 @@ export default function EmployeeMasterPage() {
             onFileUpload={handleUploadEmployees}
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
-            title="Upload employee data from a CSV file"
+            title="Upload employee data from a CSV file. Replaces existing data."
             icon={<Upload className="mr-2 h-4 w-4" />}
         />
         <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
@@ -368,10 +399,24 @@ export default function EmployeeMasterPage() {
 
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle>Employee List</CardTitle>
-          <CardDescription>
-            Displaying all employees. Key fields include Status, Division, HQ, and Gross Salary.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Employee List</CardTitle>
+              <CardDescription>
+                Displaying {filteredEmployees.length} of {employees.length} total employees.
+              </CardDescription>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Filter by Code or Name..."
+                className="pl-8"
+                value={filterTerm}
+                onChange={(e) => setFilterTerm(e.target.value)}
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -389,7 +434,7 @@ export default function EmployeeMasterPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <TableRow key={employee.id}>
                   <TableCell>
                     <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
@@ -407,11 +452,23 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) { 
-                            return employee.doj; 
+                            // Attempt to re-parse if it might be in a different common format (e.g. DD/MM/YYYY or MM/DD/YYYY)
+                            // This is a basic attempt; a more robust library might be needed for complex date parsing.
+                            const parts = employee.doj.split(/[-/]/);
+                            let reparsedDate = null;
+                            if (parts.length === 3) {
+                                // Try YYYY-MM-DD (already handled by parseISO if strict)
+                                // Try DD-MM-YYYY -> YYYY-MM-DD
+                                if (parseInt(parts[2]) > 1000) reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                                // Try MM-DD-YYYY -> YYYY-MM-DD
+                                else if (parseInt(parts[0]) <=12 && parseInt(parts[1]) <=31) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                            }
+                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
+                            return employee.doj; // Return original if parsing still fails
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return employee.doj; 
+                          return employee.doj; // Return original on error
                         }
                       }
                       return 'N/A';
@@ -428,10 +485,10 @@ export default function EmployeeMasterPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {employees.length === 0 && (
+              {filteredEmployees.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground">
-                    No employee data available. Use 'Add New Employee' or 'Upload Employees'.
+                    {filterTerm ? "No employees match your filter." : "No employee data available. Use 'Add New Employee' or 'Upload Employees'."}
                   </TableCell>
                 </TableRow>
               )}
@@ -442,4 +499,6 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+    
+
     
