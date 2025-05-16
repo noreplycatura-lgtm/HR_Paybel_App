@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { differenceInMonths, parseISO } from 'date-fns';
+import { differenceInMonths, parseISO, format } from 'date-fns';
 
 interface LeaveBalance {
   type: 'CL' | 'SL' | 'PL';
@@ -28,7 +28,7 @@ interface EmployeeDetail {
 
 interface LeaveHistoryEntry {
   id: string;
-  employeeId: string; // Added to link history to employee
+  employeeId: string; 
   employeeName: string;
   leaveType: 'CL' | 'SL' | 'PL';
   startDate: string;
@@ -38,9 +38,9 @@ interface LeaveHistoryEntry {
 
 const sampleEmployeesWithDoj: EmployeeDetail[] = [
   { id: "E001", name: "John Doe", doj: "2023-01-15" },
-  { id: "E002", name: "Jane Smith", doj: "2024-03-20" }, // Joined Mar 2024
+  { id: "E002", name: "Jane Smith", doj: "2024-03-20" }, 
   { id: "E003", name: "Mike Johnson", doj: "2022-10-01" },
-  { id: "E004", name: "Alice Brown", doj: "2024-06-05" }, // Joined Jun 2024
+  { id: "E004", name: "Alice Brown", doj: "2024-06-05" }, 
 ];
 
 const sampleLeaveHistory: LeaveHistoryEntry[] = [
@@ -55,7 +55,7 @@ const sampleLeaveHistory: LeaveHistoryEntry[] = [
 const calculateMonthsOfService = (dojString: string, referenceDate: Date = new Date()): number => {
   const doj = parseISO(dojString);
   const months = differenceInMonths(referenceDate, doj);
-  return Math.max(0, months); // Number of full months completed
+  return Math.max(0, months); 
 };
 
 export default function LeavePage() {
@@ -71,7 +71,7 @@ export default function LeavePage() {
       setCurrentEmployee(employee);
 
       if (employee) {
-        const currentDate = new Date(); // Use current date for accrual calculation
+        const currentDate = new Date(); 
         const completedMonths = calculateMonthsOfService(employee.doj, currentDate);
 
         const accruedCL = completedMonths * 0.6;
@@ -80,8 +80,6 @@ export default function LeavePage() {
         let accruedPL = 0;
         const plEligible = completedMonths >= 6;
         if (plEligible) {
-          // PL accrues for the 6th completed month onwards.
-          // If 6 months completed, (6 - 5) = 1 month of PL accrual.
           accruedPL = (completedMonths - 5) * 1.2;
         }
 
@@ -114,10 +112,41 @@ export default function LeavePage() {
   }, [selectedEmployeeId]);
 
   const handleDownloadLeaveBalance = () => {
+    if (!currentEmployee || calculatedLeaveBalances.length === 0) {
+      toast({
+        title: "No Data",
+        description: "Please select an employee with leave data to download.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = ["Leave Type", "Accrued", "Used", "Balance"];
+    const rows = calculatedLeaveBalances.map(lb => 
+      [
+        lb.type,
+        lb.accrued.toFixed(1),
+        lb.used.toFixed(1),
+        lb.balance.toFixed(1) + (lb.type === 'PL' && !lb.eligible ? " (N/A)" : "")
+      ].join(',')
+    );
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const formattedDate = format(new Date(), 'yyyy-MM-dd');
+    link.setAttribute("download", `leave_balance_${currentEmployee.name.replace(/\s+/g, '_')}_${formattedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     toast({
-      title: "Feature Not Implemented",
-      description: "Excel download for leave balance is not yet available.",
-      variant: "default",
+      title: "Download Started",
+      description: `Leave balance for ${currentEmployee.name} is being downloaded.`,
     });
   };
 
@@ -129,7 +158,7 @@ export default function LeavePage() {
       >
         <Button variant="outline" onClick={handleDownloadLeaveBalance} disabled={!selectedEmployeeId}>
           <Download className="mr-2 h-4 w-4" />
-          Download Leave Balance (Excel)
+          Download Leave Balance (CSV)
         </Button>
       </PageHeader>
 
