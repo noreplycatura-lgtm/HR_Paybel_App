@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast"; // Added useToast import
 
 interface LeaveBalance {
   type: 'CL' | 'SL' | 'PL';
@@ -23,7 +24,6 @@ interface LeaveHistoryEntry {
   startDate: string;
   endDate: string;
   days: number;
-  // status: 'Approved' | 'Pending' | 'Rejected'; // Removed status
 }
 
 const sampleLeaveBalances: LeaveBalance[] = [
@@ -39,13 +39,23 @@ const sampleLeaveHistory: LeaveHistoryEntry[] = [
 ];
 
 export default function LeavePage() {
+  const { toast } = useToast(); // Initialized useToast
+
+  const handleDownloadLeaveBalance = () => {
+    toast({
+      title: "Feature Not Implemented",
+      description: "Excel download for leave balance is not yet available.",
+      variant: "default",
+    });
+  };
+
   return (
     <>
       <PageHeader 
         title="Leave Management" 
         description="View employee leave balances and history. Leaves are automatically recorded if sufficient balance is available."
       >
-        <Button variant="outline">
+        <Button variant="outline" onClick={handleDownloadLeaveBalance}> {/* Added onClick handler */}
           <Download className="mr-2 h-4 w-4" />
           Download Leave Balance (Excel)
         </Button>
@@ -85,7 +95,6 @@ export default function LeavePage() {
                 <TableHead>Start Date</TableHead>
                 <TableHead>End Date</TableHead>
                 <TableHead className="text-center">Days</TableHead>
-                {/* <TableHead className="text-center">Status</TableHead> Removed Status Column */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -98,14 +107,6 @@ export default function LeavePage() {
                   <TableCell>{entry.startDate}</TableCell>
                   <TableCell>{entry.endDate}</TableCell>
                   <TableCell className="text-center">{entry.days}</TableCell>
-                  {/* <TableCell className="text-center">
-                    <Badge 
-                      variant={'default'} // All leaves are effectively 'approved' or 'taken'
-                      className={'bg-green-500 hover:bg-green-600'}
-                    >
-                      Taken 
-                    </Badge>
-                  </TableCell> Removed Status Cell */}
                 </TableRow>
               ))}
               {sampleLeaveHistory.length === 0 && (

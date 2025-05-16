@@ -30,12 +30,18 @@ export default function AttendancePage() {
   const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
 
   const handleFileUpload = (file: File) => {
-    // Simulate file processing
     toast({
       title: "File Uploaded",
       description: `${file.name} is being processed.`,
     });
-    // Here you would parse the Excel and update attendanceData
+  };
+
+  const handleDownloadReport = () => {
+    toast({
+      title: "Feature Not Implemented",
+      description: "Excel report download is not yet available.",
+      variant: "default",
+    });
   };
   
   const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
@@ -46,7 +52,7 @@ export default function AttendancePage() {
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
         <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance (Excel)" />
-        <Button variant="outline">
+        <Button variant="outline" onClick={handleDownloadReport}> {/* Added onClick handler */}
             <Download className="mr-2 h-4 w-4" />
             Download Report
         </Button>
