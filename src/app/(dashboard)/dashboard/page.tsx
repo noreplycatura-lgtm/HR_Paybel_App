@@ -1,22 +1,106 @@
 
+"use client";
+
+import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, CalendarCheck, UserCheck, DollarSign, HardDrive } from "lucide-react";
+import { BarChart3, CalendarCheck, UserCheck, DollarSign, HardDrive, History } from "lucide-react";
+import { sampleEmployees, sampleLeaveHistory } from "@/lib/hr-data";
+import type { EmployeeDetail } from "@/lib/hr-data";
+
+// Mirrored from attendance page for consistency
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v2";
+const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v2";
+
+interface StoredEmployeeAttendanceData {
+  // Only need the attendance array and relevant fields for calculation
+  code: string;
+  attendance: string[];
+}
+
+interface StoredUploadContext {
+  month: string;
+  year: number;
+}
 
 export default function DashboardPage() {
-  const summaryCards = [
-    { title: "Total Employees", value: "125", icon: UserCheck, description: "Active employees", dataAiHint: "team office" },
-    { title: "Attendance Today", value: "95% P", icon: CalendarCheck, description: "Overall presence", dataAiHint: "calendar schedule" },
-    { title: "Pending Approvals", value: "8", icon: BarChart3, description: "Leaves & requests", dataAiHint: "documents list" },
-    { title: "Payroll Status", value: "Processed", icon: DollarSign, description: "For current month", dataAiHint: "money payment" },
-    { title: "Storage Used", value: "N/A", icon: HardDrive, description: "Uploaded data size (Prototype)", dataAiHint: "data storage" },
-  ];
+  const [dashboardCards, setDashboardCards] = React.useState([
+    { title: "Total Employees", value: "N/A", icon: UserCheck, description: "Active employees", dataAiHint: "team office" },
+    { title: "Overall Attendance (Last Upload)", value: "N/A", icon: CalendarCheck, description: "From last uploaded file", dataAiHint: "calendar schedule" },
+    { title: "Total Leave Records", value: "N/A", icon: History, description: "All recorded leave entries", dataAiHint: "documents list" },
+    { title: "Payroll Status", value: "N/A (Prototype)", icon: DollarSign, description: "For current month", dataAiHint: "money payment" },
+    { title: "Storage Used", value: "N/A (Prototype)", icon: HardDrive, description: "Uploaded data size (Prototype)", dataAiHint: "data storage" },
+  ]);
+
+  React.useEffect(() => {
+    // Calculate Total Active Employees
+    const activeEmployees = sampleEmployees.filter(emp => emp.status === "Active").length;
+    
+    // Calculate Total Leave Records
+    const totalLeaveRecords = sampleLeaveHistory.length;
+
+    // Calculate Overall Attendance from localStorage
+    let overallAttendanceValue = "N/A";
+    let attendanceDescription = "From last uploaded file";
+
+    try {
+      const storedRawContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+      const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+
+      if (storedRawContext && storedRawData) {
+        const context = JSON.parse(storedRawContext) as StoredUploadContext;
+        const rawData = JSON.parse(storedRawData) as StoredEmployeeAttendanceData[];
+
+        if (rawData.length > 0 && context) {
+          let presentCount = 0;
+          let relevantEntriesCount = 0;
+
+          rawData.forEach(emp => {
+            emp.attendance.forEach(status => {
+              if (status === "P") {
+                presentCount++;
+                relevantEntriesCount++;
+              } else if (status === "A" || status === "HD") {
+                relevantEntriesCount++;
+              }
+            });
+          });
+
+          if (relevantEntriesCount > 0) {
+            const percentage = (presentCount / relevantEntriesCount) * 100;
+            overallAttendanceValue = `${percentage.toFixed(1)}% P`;
+          } else {
+            overallAttendanceValue = "No P/A/HD data";
+          }
+          attendanceDescription = `Based on ${context.month} ${context.year} upload`;
+        }
+      }
+    } catch (error) {
+      console.error("Error processing attendance data for dashboard:", error);
+      overallAttendanceValue = "Error";
+      attendanceDescription = "Error loading data";
+    }
+
+    setDashboardCards(prevCards => prevCards.map(card => {
+      if (card.title === "Total Employees") {
+        return { ...card, value: activeEmployees.toString() };
+      }
+      if (card.title === "Overall Attendance (Last Upload)") {
+        return { ...card, value: overallAttendanceValue, description: attendanceDescription };
+      }
+      if (card.title === "Total Leave Records") {
+        return { ...card, value: totalLeaveRecords.toString() };
+      }
+      return card;
+    }));
+
+  }, []);
 
   return (
     <>
       <PageHeader title="Dashboard" description="Overview of HR activities." />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {summaryCards.map((card, index) => (
+        {dashboardCards.map((card, index) => (
           <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
@@ -38,7 +122,7 @@ export default function DashboardPage() {
           <CardContent>
             <ul className="space-y-3">
               <li className="text-sm">New leave application from John Doe.</li>
-              <li className="text-sm">Attendance for 25th July uploaded.</li>
+              <li className="text-sm">Attendance for July 2024 uploaded.</li>
               <li className="text-sm">Employee onboarding: Jane Smith.</li>
               <li className="text-sm">Monthly report generated.</li>
             </ul>
@@ -60,3 +144,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
