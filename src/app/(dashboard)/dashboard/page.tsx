@@ -1,7 +1,7 @@
 
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, CalendarCheck, UserCheck, DollarSign } from "lucide-react";
+import { BarChart3, CalendarCheck, UserCheck, DollarSign, HardDrive } from "lucide-react";
 
 export default function DashboardPage() {
   const summaryCards = [
@@ -9,12 +9,13 @@ export default function DashboardPage() {
     { title: "Attendance Today", value: "95% P", icon: CalendarCheck, description: "Overall presence", dataAiHint: "calendar schedule" },
     { title: "Pending Approvals", value: "8", icon: BarChart3, description: "Leaves & requests", dataAiHint: "documents list" },
     { title: "Payroll Status", value: "Processed", icon: DollarSign, description: "For current month", dataAiHint: "money payment" },
+    { title: "Storage Used", value: "N/A", icon: HardDrive, description: "Uploaded data size (Prototype)", dataAiHint: "data storage" },
   ];
 
   return (
     <>
       <PageHeader title="Dashboard" description="Overview of HR activities." />
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {summaryCards.map((card, index) => (
           <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -12,14 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Filter } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; // Still need sampleEmployees for structure if we were to parse
+import { Download, Filter, Trash2 } from "lucide-react";
+import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; 
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
-  attendance: string[]; // Raw attendance from upload/generation
-  processedAttendance?: string[]; // Attendance after applying balance rules
+  attendance: string[]; 
+  processedAttendance?: string[]; 
 }
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -50,21 +50,18 @@ export default function AttendancePage() {
     setCurrentYear(year);
     setCurrentMonthName(monthName);
 
-    // Set defaults for view tab
     setSelectedYear(year);
     setSelectedMonth(monthName);
     
-    // Set defaults for upload tab
     setUploadYear(year);
     setUploadMonth(monthName);
 
-    // No initial data load here
     setIsLoading(false);
-  }, []); // Removed dependencies that might trigger re-setting initial data
+  }, []);
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth) {
-      setProcessedAttendanceData([]); // Ensure processed data is also empty if raw is empty
+      setProcessedAttendanceData([]); 
       return;
     }
 
@@ -134,14 +131,12 @@ export default function AttendancePage() {
     const newUploadContext = {month: uploadMonth, year: uploadYear};
     setUploadContext(newUploadContext);
     
-    // Clear existing raw and processed data to signify new file context
     setRawAttendanceData([]); 
     setProcessedAttendanceData([]);
      
-    // Switch view to the uploaded month/year
     setSelectedMonth(newUploadContext.month);
     setSelectedYear(newUploadContext.year);
-    setIsLoading(false); // Ensure loading is false to trigger re-render with new context
+    setIsLoading(false); 
   };
 
   const handleDownloadReport = () => {
@@ -229,7 +224,6 @@ export default function AttendancePage() {
     const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
-    // Sample employee data for template can be sourced from sampleEmployees or kept generic
     const templateEmployees = sampleEmployees.slice(0,2).map(emp => ({
       code: emp.code, name: emp.name, designation: emp.designation, doj: emp.doj
     }));
@@ -237,11 +231,11 @@ export default function AttendancePage() {
     templateEmployees.forEach((emp, index) => {
       const rowData = [emp.code, emp.name, emp.designation, emp.doj];
       const dailyStatuses = Array(daysForTemplate).fill("P");
-      if (index === 0 && daysForTemplate >= 7) { // Example: John Doe
+      if (index === 0 && daysForTemplate >= 7) { 
         dailyStatuses[5] = "W"; 
         dailyStatuses[6] = "W";
         if (daysForTemplate >= 11) dailyStatuses[10] = "CL"; 
-      } else if (index === 1 && daysForTemplate >= 15) { // Example: Jane Smith
+      } else if (index === 1 && daysForTemplate >= 15) { 
          dailyStatuses[13] = "A"; 
          dailyStatuses[14] = "HD";
       }
@@ -249,7 +243,7 @@ export default function AttendancePage() {
       csvRows.push(rowData);
     });
     
-    if (templateEmployees.length === 0) { // Fallback if sampleEmployees is empty
+    if (templateEmployees.length === 0) { 
         const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
         if (daysForTemplate >= 7) { sampleRow1[4+3] = "W"; sampleRow1[5+3] = "W"; }
         if (daysForTemplate >= 11) sampleRow1[10+3] = "CL"; 
@@ -273,18 +267,45 @@ export default function AttendancePage() {
       description: `attendance_template_${monthYearForFilename}.csv has been downloaded.`,
     });
   };
+
+  const handleDeleteCurrentMonthData = () => {
+    if (uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
+        if (window.confirm(`Are you sure you want to clear the uploaded attendance data for ${selectedMonth} ${selectedYear}? This action cannot be undone.`)) {
+            setRawAttendanceData([]);
+            setProcessedAttendanceData([]);
+            setUploadedFileName(null);
+            setUploadContext(null);
+            toast({
+                title: "Data Cleared",
+                description: `Uploaded attendance data for ${selectedMonth} ${selectedYear} has been cleared.`,
+            });
+        }
+    } else {
+        toast({
+            title: "No Data to Clear",
+            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} in the current view to clear.`,
+            variant: "destructive"
+        });
+    }
+  };
   
   const daysInSelectedViewMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
   const daysInSelectedUploadMonth = uploadYear && uploadMonth ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
 
+  const canDeleteCurrentData = !!(uploadedFileName && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear && rawAttendanceData.length > 0);
+
   return (
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
-        <Button variant="outline" onClick={handleDownloadReport} disabled={processedAttendanceData.length === 0 && !uploadedFileName}>
+        <Button variant="outline" onClick={handleDownloadReport} disabled={processedAttendanceData.length === 0 || !selectedMonth || !selectedYear}>
             <Download className="mr-2 h-4 w-4" />
             Download Report (CSV)
+        </Button>
+         <Button variant="destructive" onClick={handleDeleteCurrentMonthData} disabled={!canDeleteCurrentData}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Clear Data for {selectedMonth} {selectedYear}
         </Button>
       </PageHeader>
 
@@ -324,7 +345,6 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              {/* Illustrative filters, not fully implemented for data filtering beyond month/year */}
               <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" disabled />
               <Select disabled>
                 <SelectTrigger className="w-full sm:w-[180px]">
@@ -351,14 +371,14 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (isLoading) {
+                if (isLoading && (!selectedMonth || selectedYear === 0)) {
                     return <div className="text-center py-8 text-muted-foreground">Initializing...</div>;
                 }
-                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext) {
+                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
-                      (Full Excel parsing and display from file is not yet implemented in this prototype. Attendance data will appear here once processed.)
+                      (Full Excel parsing and display from file is not yet implemented in this prototype. Attendance data will appear here once actual data is loaded and processed.)
                     </div>
                   );
                 }
@@ -370,7 +390,6 @@ export default function AttendancePage() {
                   );
                 }
                 if (processedAttendanceData.length === 0 && daysInSelectedViewMonth > 0) {
-                     // If not loading, and no file was uploaded to explain empty data, prompt to upload.
                     if (!uploadedFileName) {
                         return (
                             <div className="text-center py-8 text-muted-foreground">
@@ -379,8 +398,6 @@ export default function AttendancePage() {
                             </div>
                         );
                     }
-                    // If a file was "uploaded" but resulted in no processed data (e.g. if it was empty or couldn't be parsed)
-                    // This case is currently covered by the uploadedFileName && rawAttendanceData.length === 0 check above
                     return (
                         <div className="text-center py-8 text-muted-foreground">
                             Processing data for {selectedMonth} {selectedYear}... If this persists, the uploaded file might be empty or in an incorrect format.
@@ -468,7 +485,6 @@ export default function AttendancePage() {
                     </Table>
                   );
                 }
-                // Default catch-all if other conditions don't meet, or if daysInSelectedViewMonth is 0
                 return (
                   <div className="text-center py-8 text-muted-foreground">
                      No attendance data available to display for the current selection. <br/>
@@ -534,4 +550,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
