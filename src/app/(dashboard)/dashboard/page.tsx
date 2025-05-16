@@ -8,9 +8,9 @@ import { BarChart3, CalendarCheck, UserCheck, DollarSign, HardDrive, History } f
 import { sampleEmployees, sampleLeaveHistory } from "@/lib/hr-data";
 import type { EmployeeDetail } from "@/lib/hr-data";
 
-// Mirrored from attendance page for consistency
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v2";
-const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v2";
+// Corrected localStorage keys to match attendance page (v3)
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3";
+const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v3";
 
 interface StoredEmployeeAttendanceData {
   // Only need the attendance array and relevant fields for calculation
@@ -53,17 +53,22 @@ export default function DashboardPage() {
 
         if (rawData.length > 0 && context) {
           let presentCount = 0;
-          let relevantEntriesCount = 0;
+          let relevantEntriesCount = 0; // Count P, A, HD
 
           rawData.forEach(emp => {
-            emp.attendance.forEach(status => {
-              if (status === "P") {
-                presentCount++;
-                relevantEntriesCount++;
-              } else if (status === "A" || status === "HD") {
-                relevantEntriesCount++;
-              }
-            });
+            // Only consider employees who have attendance data beyond just '-' (not joined yet)
+            const hasMeaningfulAttendance = emp.attendance.some(status => status !== '-');
+            if (hasMeaningfulAttendance) {
+                emp.attendance.forEach(status => {
+                if (status === "P") {
+                    presentCount++;
+                    relevantEntriesCount++;
+                } else if (status === "A" || status === "HD") {
+                    relevantEntriesCount++;
+                }
+                // Other statuses like W, CL, SL, PL, PH are not directly counted for this percentage
+                });
+            }
           });
 
           if (relevantEntriesCount > 0) {
@@ -94,7 +99,7 @@ export default function DashboardPage() {
       return card;
     }));
 
-  }, []);
+  }, []); // Runs on mount and when the component re-renders
 
   return (
     <>
@@ -144,4 +149,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
