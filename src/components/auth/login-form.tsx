@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -69,7 +70,7 @@ export function LoginForm() {
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
         <Image 
-          src="https://placehold.co/150x50.png?text=Novita" // Placeholder logo
+          src="https://placehold.co/150x50.png?text=Novita+Healthcare" // Placeholder logo
           alt={`${COMPANY_NAME} Logo`}
           width={150}
           height={50}
