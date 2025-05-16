@@ -37,7 +37,8 @@ export default function LeavePage() {
         const balances = calculateAllLeaveBalancesForEmployee(employee, sampleLeaveHistory, today);
 
         setCalculatedLeaveBalances([balances.CL, balances.SL, balances.PL]);
-        setFilteredLeaveHistory(sampleLeaveHistory.filter(h => h.employeeId === selectedEmployeeId).sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()));
+        // Sort history chronologically (oldest first) for the CSV export
+        setFilteredLeaveHistory(sampleLeaveHistory.filter(h => h.employeeId === selectedEmployeeId).sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime()));
       } else {
         setCalculatedLeaveBalances([]);
         setFilteredLeaveHistory([]);
@@ -55,29 +56,54 @@ export default function LeavePage() {
     if (!currentEmployee || calculatedLeaveBalances.length === 0) {
       toast({
         title: "No Data",
-        description: "Please select an employee with leave data to download.",
+        description: "Please select an employee to download their leave details.",
         variant: "destructive",
       });
       return;
     }
 
-    const headers = ["Leave Type", "Accrued", "Used", "Balance"];
-    const rows = calculatedLeaveBalances.map(lb => 
-      [
+    const csvRows: string[][] = [];
+
+    // Leave History Section
+    csvRows.push([`Leave History for ${currentEmployee.name} (${currentEmployee.code})`]);
+    csvRows.push(["Month", "Start Date", "End Date", "Leave Type", "Days Taken"]);
+    if (filteredLeaveHistory.length > 0) {
+      filteredLeaveHistory.forEach(entry => {
+        csvRows.push([
+          format(parseISO(entry.startDate), 'MMMM yyyy'),
+          entry.startDate,
+          entry.endDate,
+          entry.leaveType,
+          entry.days.toString()
+        ]);
+      });
+    } else {
+      csvRows.push(["No leave history found for this period."]);
+    }
+
+    // Separator
+    csvRows.push([""]); // Empty row for spacing
+
+    // Current Balances Section
+    csvRows.push(["Current Leave Balances Summary as of " + format(new Date(), 'yyyy-MM-dd')]);
+    csvRows.push(["Leave Type", "Total Accrued", "Total Used", "Current Balance", "PL Eligible"]);
+    calculatedLeaveBalances.forEach(lb => {
+      csvRows.push([
         lb.type,
         lb.accrued.toFixed(1),
         lb.used.toFixed(1),
-        lb.balance.toFixed(1) + (lb.type === 'PL' && !lb.eligible ? " (N/A)" : "")
-      ].join(',')
-    );
+        lb.balance.toFixed(1),
+        lb.type === 'PL' ? (lb.eligible ? 'Yes' : 'No') : 'N/A'
+      ]);
+    });
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const formattedDate = format(new Date(), 'yyyy-MM-dd');
-    link.setAttribute("download", `leave_balance_${currentEmployee.name.replace(/\s+/g, '_')}_${formattedDate}.csv`);
+    link.setAttribute("download", `leave_report_${currentEmployee.name.replace(/\s+/g, '_')}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -86,7 +112,7 @@ export default function LeavePage() {
 
     toast({
       title: "Download Started",
-      description: `Leave balance for ${currentEmployee.name} is being downloaded.`,
+      description: `Detailed leave report for ${currentEmployee.name} is being downloaded.`,
     });
   };
 
@@ -98,7 +124,7 @@ export default function LeavePage() {
       >
         <Button variant="outline" onClick={handleDownloadLeaveBalance} disabled={!selectedEmployeeId}>
           <Download className="mr-2 h-4 w-4" />
-          Download Leave Balance (CSV)
+          Download Leave Report (CSV)
         </Button>
       </PageHeader>
 
@@ -123,7 +149,7 @@ export default function LeavePage() {
       {selectedEmployeeId && currentEmployee ? (
         <>
           <div className="mb-4 text-lg font-semibold">
-            Leave Balances for: {currentEmployee.name} (DOJ: {currentEmployee.doj ? new Date(currentEmployee.doj).toLocaleDateString() : 'N/A'})
+            Leave Balances for: {currentEmployee.name} (DOJ: {currentEmployee.doj ? format(parseISO(currentEmployee.doj), 'dd MMM yyyy') : 'N/A'})
             ({monthsCompleted} months completed)
           </div>
           <div className="grid gap-6 md:grid-cols-3 mb-6">
@@ -154,7 +180,7 @@ export default function LeavePage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle>Leave History for {currentEmployee.name}</CardTitle>
-              <CardDescription>Recent leave applications for the selected employee.</CardDescription>
+              <CardDescription>Recent leave applications for the selected employee (chronological order).</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -167,13 +193,13 @@ export default function LeavePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLeaveHistory.map((entry) => (
+                  {filteredLeaveHistory.slice().sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((entry) => ( // Sort descending for UI display
                     <TableRow key={entry.id}>
                       <TableCell>
                         <Badge variant="secondary">{entry.leaveType}</Badge>
                       </TableCell>
-                      <TableCell>{entry.startDate}</TableCell>
-                      <TableCell>{entry.endDate}</TableCell>
+                      <TableCell>{format(parseISO(entry.startDate), 'dd MMM yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(entry.endDate), 'dd MMM yyyy')}</TableCell>
                       <TableCell className="text-center">{entry.days}</TableCell>
                     </TableRow>
                   ))}
@@ -198,3 +224,4 @@ export default function LeavePage() {
     </>
   );
 }
+
