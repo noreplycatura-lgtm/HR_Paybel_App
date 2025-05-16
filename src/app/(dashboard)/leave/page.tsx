@@ -21,7 +21,7 @@ import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Retained for potential future use or if parts of calc rely on it
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 
 
@@ -40,7 +40,7 @@ interface LeaveDisplayData extends EmployeeDetail {
 export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); // Still needed for calculation if used
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
@@ -51,10 +51,13 @@ export default function LeavePage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
 
-  const [isEditLeaveDialogOpen, setIsEditLeaveDialogOpen] = React.useState(false);
-  const [editingEmployeeForLeave, setEditingEmployeeForLeave] = React.useState<EmployeeDetail | null>(null);
-  const [newLeaveType, setNewLeaveType] = React.useState<LeaveType>('CL');
-  const [newLeaveDays, setNewLeaveDays] = React.useState<number>(1);
+  // State for editing opening balances
+  const [isEditOpeningBalanceDialogOpen, setIsEditOpeningBalanceDialogOpen] = React.useState(false);
+  const [editingEmployeeForOB, setEditingEmployeeForOB] = React.useState<EmployeeDetail | null>(null);
+  const [editingOBYear, setEditingOBYear] = React.useState<number>(0); // Financial Year Start
+  const [editableOB_CL, setEditableOB_CL] = React.useState<number>(0);
+  const [editableOB_SL, setEditableOB_SL] = React.useState<number>(0);
+  const [editableOB_PL, setEditableOB_PL] = React.useState<number>(0);
 
 
   React.useEffect(() => {
@@ -98,13 +101,12 @@ export default function LeavePage() {
         setOpeningBalances([]);
       }
     }
-    // Keep isLoading true initially, let the data calculation useEffect handle it
   }, [toast]);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
       setDisplayData([]);
-      setIsLoading(false); // Set loading to false if prerequisites aren't met
+      setIsLoading(false);
       return;
     }
     
@@ -128,7 +130,7 @@ export default function LeavePage() {
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, leaveApplications, openingBalances, selectedMonth, selectedYear]); // Removed isLoading from dependencies
+  }, [employees, leaveApplications, openingBalances, selectedMonth, selectedYear]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -151,52 +153,58 @@ export default function LeavePage() {
     });
   };
   
-  const handleOpenEditLeaveDialog = (employee: EmployeeDetail) => {
-    setEditingEmployeeForLeave(employee);
-    setNewLeaveType('CL');
-    setNewLeaveDays(1);
-    setIsEditLeaveDialogOpen(true);
+  const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
+    setEditingEmployeeForOB(employee);
+    const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
+    setEditingOBYear(currentFinancialYearStart);
+
+    const existingOB = openingBalances.find(
+      (ob) => ob.employeeCode === employee.code && ob.financialYearStart === currentFinancialYearStart
+    );
+
+    if (existingOB) {
+      setEditableOB_CL(existingOB.openingCL);
+      setEditableOB_SL(existingOB.openingSL);
+      setEditableOB_PL(existingOB.openingPL);
+    } else {
+      setEditableOB_CL(0);
+      setEditableOB_SL(0);
+      setEditableOB_PL(0);
+    }
+    setIsEditOpeningBalanceDialogOpen(true);
   };
 
-  const handleAddLeaveApplication = () => {
-    if (!editingEmployeeForLeave || !selectedMonth || !selectedYear || newLeaveDays <= 0) {
-      toast({ title: "Error", description: "Invalid employee, period, or leave days.", variant: "destructive" });
+  const handleSaveOpeningBalances = () => {
+    if (!editingEmployeeForOB || editingOBYear === 0) {
+      toast({ title: "Error", description: "No employee or financial year selected for editing opening balances.", variant: "destructive"});
       return;
     }
-    const monthIndex = months.indexOf(selectedMonth);
-    const leaveStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
-    
-    const monthEndDate = endOfMonth(leaveStartDate);
-    let tentativeEndDate = dateFnsAddDays(leaveStartDate, newLeaveDays - 1);
-    if (isBefore(monthEndDate, tentativeEndDate)) {
-        tentativeEndDate = monthEndDate;
-    }
-    // For prototype, if leave days make it span multiple days, keep days as entered, but visually note in dialog
-    // For simplicity, we take the entered days as is, assuming they are within the month. More complex date logic can be added.
-    const actualLeaveDays = newLeaveDays;
 
+    const updatedOpeningBalances = [...openingBalances];
+    const existingOBIndex = updatedOpeningBalances.findIndex(
+      (ob) => ob.employeeCode === editingEmployeeForOB.code && ob.financialYearStart === editingOBYear
+    );
 
-    const newApp: LeaveApplication = {
-      id: `LAPP-${Date.now()}`,
-      employeeId: editingEmployeeForLeave.id,
-      leaveType: newLeaveType,
-      startDate: format(leaveStartDate, 'yyyy-MM-dd'), // For simplicity, all leaves start on 1st of selected month
-      endDate: format(dateFnsAddDays(leaveStartDate, Math.max(0, actualLeaveDays - 1)), 'yyyy-MM-dd'), 
-      days: actualLeaveDays, 
+    const newBalanceRecord: OpeningLeaveBalance = {
+      employeeCode: editingEmployeeForOB.code,
+      openingCL: editableOB_CL,
+      openingSL: editableOB_SL,
+      openingPL: editableOB_PL,
+      financialYearStart: editingOBYear,
     };
 
-    const updatedApplications = [...leaveApplications, newApp];
-    setLeaveApplications(updatedApplications);
-    if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(updatedApplications));
-    toast({ title: "Leave Added", description: `${newLeaveType} for ${actualLeaveDays} day(s) added for ${editingEmployeeForLeave.name} in ${selectedMonth} ${selectedYear}.` });
-    setNewLeaveDays(1); // Reset for next entry
-  };
+    if (existingOBIndex > -1) {
+      updatedOpeningBalances[existingOBIndex] = newBalanceRecord;
+    } else {
+      updatedOpeningBalances.push(newBalanceRecord);
+    }
 
-  const handleRemoveLeaveApplication = (appId: string) => {
-    const updatedApplications = leaveApplications.filter(app => app.id !== appId);
-    setLeaveApplications(updatedApplications);
-    if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(updatedApplications));
-    toast({ title: "Leave Removed", description: `Leave application has been removed.` });
+    setOpeningBalances(updatedOpeningBalances);
+    if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+    
+    toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting ${editingOBYear} have been saved.`});
+    setIsEditOpeningBalanceDialogOpen(false);
+    setEditingEmployeeForOB(null);
   };
 
 
@@ -300,48 +308,70 @@ export default function LeavePage() {
                 toast({ title: "Invalid File", description: "File empty or no data. Header + data row expected.", variant: "destructive" });
                 return;
             }
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const headersFromFile = lines[0].split(',').map(h => h.trim().toLowerCase());
             const expectedHeaders = ["employeecode", "openingcl", "openingsl", "openingpl", "financialyearstart"];
-            const missingHeaders = expectedHeaders.filter(eh => !headers.includes(eh));
+            const missingHeaders = expectedHeaders.filter(eh => !headersFromFile.includes(eh));
             if (missingHeaders.length > 0) {
-                toast({ title: "File Header Error", description: `Missing headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 7000 });
+                toast({ title: "File Header Error", description: `Missing headers: ${missingHeaders.join(', ')}. Expected: ${expectedHeaders.join(', ')}`, variant: "destructive", duration: 7000 });
                 return;
             }
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
+            const employeeCodesInFile = new Set<string>();
+            let skippedDuplicatesInFile = 0;
+
             dataRows.forEach((row, index) => {
                 const values = row.split(',');
                 if (values.length < expectedHeaders.length) {
                      console.warn(`Skipping row ${index + 1} in opening balance CSV: insufficient columns.`);
                      return;
                 }
-                const employeeCode = values[headers.indexOf("employeecode")]?.trim();
-                const openingCL = parseFloat(values[headers.indexOf("openingcl")]?.trim());
-                const openingSL = parseFloat(values[headers.indexOf("openingsl")]?.trim());
-                const openingPL = parseFloat(values[headers.indexOf("openingpl")]?.trim());
-                const financialYearStart = parseInt(values[headers.indexOf("financialyearstart")]?.trim());
+                const employeeCode = values[headersFromFile.indexOf("employeecode")]?.trim();
+                const openingCL = parseFloat(values[headersFromFile.indexOf("openingcl")]?.trim());
+                const openingSL = parseFloat(values[headersFromFile.indexOf("openingsl")]?.trim());
+                const openingPL = parseFloat(values[headersFromFile.indexOf("openingpl")]?.trim());
+                const financialYearStart = parseInt(values[headersFromFile.indexOf("financialyearstart")]?.trim());
 
                 if (!employeeCode || isNaN(openingCL) || isNaN(openingSL) || isNaN(openingPL) || isNaN(financialYearStart)) {
                     console.warn(`Skipping row ${index + 1} in opening balance CSV: invalid data for ${employeeCode}.`);
                     return;
                 }
+                const uniqueKeyInFile = `${employeeCode}-${financialYearStart}`;
+                if (employeeCodesInFile.has(uniqueKeyInFile)) {
+                    skippedDuplicatesInFile++;
+                    console.warn(`Skipping row ${index + 1} (Code: ${employeeCode}, FY: ${financialYearStart}) due to duplicate entry within this CSV file.`);
+                    return;
+                }
+                employeeCodesInFile.add(uniqueKeyInFile);
                 newOpeningBalances.push({ employeeCode, openingCL, openingSL, openingPL, financialYearStart });
             });
 
-            if (newOpeningBalances.length > 0) {
-                setOpeningBalances(prevBalances => {
-                    const existingCodes = new Set(prevBalances.map(b => `${b.employeeCode}-${b.financialYearStart}`));
-                    const uniqueNewBalances = newOpeningBalances.filter(nb => !existingCodes.has(`${nb.employeeCode}-${nb.financialYearStart}`));
-                    const updatedBalances = [...prevBalances.filter(pb => !newOpeningBalances.some(nb => nb.employeeCode === pb.employeeCode && nb.financialYearStart === pb.financialYearStart)), ...uniqueNewBalances];
-                    
-                    if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
-                    return updatedBalances;
-                });
-                toast({ title: "Opening Balances Processed", description: `${newOpeningBalances.length} records processed from ${file.name}. Existing records for same employee/year were updated/added.` });
-            } else {
-                 toast({ title: "No New Balances Added", description: "No valid new opening balance data found or all data was duplicate.", variant: "destructive" });
+            if (newOpeningBalances.length === 0 && skippedDuplicatesInFile > 0) {
+                toast({ title: "No New Balances Processed", description: `All ${skippedDuplicatesInFile} rows in the file were duplicates of each other for the same employee/year.`, variant: "destructive", duration: 7000 });
+                return;
             }
+            if (newOpeningBalances.length === 0) {
+                toast({ title: "No Valid Data Processed", description: "No valid new opening balance data found in the file. Check columns and formats.", variant: "destructive", duration: 7000 });
+                return;
+            }
+
+            setOpeningBalances(prevBalances => {
+                const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
+                newOpeningBalances.forEach(nb => {
+                    existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); // Add or overwrite
+                });
+                const updatedBalances = Array.from(existingRecordsMap.values());
+                
+                if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
+                return updatedBalances;
+            });
+            
+            let successMessage = `${newOpeningBalances.length} records processed from ${file.name}.`;
+            if (skippedDuplicatesInFile > 0) {
+                successMessage += ` ${skippedDuplicatesInFile} duplicate rows (same employee/year) within the file were skipped.`;
+            }
+            toast({ title: "Opening Balances Processed", description: successMessage, duration: 7000 });
 
         } catch (error) {
             console.error("Error parsing opening balance CSV:", error);
@@ -379,16 +409,6 @@ export default function LeavePage() {
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < activeEmployeesInDisplay.length;
 
 
-  const applicationsForDialog = editingEmployeeForLeave && selectedMonth && selectedYear ? 
-    leaveApplications.filter(app => {
-        if (app.employeeId !== editingEmployeeForLeave.id) return false;
-        try {
-            const appStartDate = parseISO(app.startDate);
-            return getYear(appStartDate) === selectedYear && getMonth(appStartDate) === months.indexOf(selectedMonth);
-        } catch { return false; }
-    }) : [];
-
-
   if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear) { 
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -401,7 +421,7 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances. CL/SL (0.6/month after 5 months service) reset Apr-Mar; PL (1.2/month after 5 months service) carries forward."
+        description="View employee leave balances. CL/SL (0.6/month after 5 months service) reset Apr-Mar; PL (1.2/month after 5 months service) carries forward. Opening balances can be uploaded or edited per employee."
       >
         <FileUploadButton
             onFileUpload={handleOpeningBalanceUpload}
@@ -420,73 +440,40 @@ export default function LeavePage() {
         </Button>
       </PageHeader>
 
-      <Dialog open={isEditLeaveDialogOpen} onOpenChange={(isOpen) => {
-          setIsEditLeaveDialogOpen(isOpen);
-          if (!isOpen) setEditingEmployeeForLeave(null);
+      <Dialog open={isEditOpeningBalanceDialogOpen} onOpenChange={(isOpen) => {
+          setIsEditOpeningBalanceDialogOpen(isOpen);
+          if (!isOpen) setEditingEmployeeForOB(null);
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Leaves for {editingEmployeeForLeave?.name}</DialogTitle>
+            <DialogTitle>Edit Opening Balances for {editingEmployeeForOB?.name}</DialogTitle>
             <DialogDescription>
-              Selected Period: {selectedMonth} {selectedYear}. Manage leave applications for this month.
+              Set opening leave balances for the financial year starting April {editingOBYear}.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>Add New Leave for {selectedMonth} {selectedYear}</Label>
-              <div className="flex items-center gap-2">
-                <Select value={newLeaveType} onValueChange={(val) => setNewLeaveType(val as LeaveType)}>
-                    <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="CL">CL</SelectItem>
-                        <SelectItem value="SL">SL</SelectItem>
-                        <SelectItem value="PL">PL</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Input 
-                    type="number" 
-                    value={newLeaveDays} 
-                    onChange={(e) => setNewLeaveDays(Math.max(0.5, parseFloat(e.target.value)))} 
-                    min="0.5" 
-                    step="0.5"
-                    className="w-[80px]"
-                />
-                 <Label className="text-sm">days</Label>
-                <Button onClick={handleAddLeaveApplication} size="sm"><PlusCircle className="mr-1 h-4 w-4" /> Add</Button>
-              </div>
-               <p className="text-xs text-muted-foreground">Note: For prototype, leaves are added from 1st of selected month.</p>
+            <div className="space-y-1">
+                <Label htmlFor="ob-fy-year">Financial Year Start (e.g., 2024 for Apr 2024 - Mar 2025)</Label>
+                <Input id="ob-fy-year" type="number" value={editingOBYear} onChange={(e) => setEditingOBYear(parseInt(e.target.value))} placeholder="Enter year" />
             </div>
-            <Card>
-              <CardHeader className="p-3">
-                <CardTitle className="text-base">Applied Leaves in {selectedMonth} {selectedYear}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-3">
-                {applicationsForDialog.length > 0 ? (
-                  <ScrollArea className="h-[150px]">
-                    <ul className="space-y-2">
-                      {applicationsForDialog.map(app => (
-                        <li key={app.id} className="flex justify-between items-center text-sm p-2 border rounded-md">
-                          <div>
-                            <span className="font-medium">{app.leaveType}</span> - {app.days} day(s)
-                            <span className="text-xs text-muted-foreground ml-2">({format(parseISO(app.startDate), 'dd/MM')} - {format(parseISO(app.endDate), 'dd/MM')})</span>
-                          </div>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveLeaveApplication(app.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </ScrollArea>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No leaves applied in this month.</p>
-                )}
-              </CardContent>
-            </Card>
+            <div className="space-y-1">
+                <Label htmlFor="ob-cl">Opening CL</Label>
+                <Input id="ob-cl" type="number" value={editableOB_CL} onChange={(e) => setEditableOB_CL(parseFloat(e.target.value))} step="0.1" />
+            </div>
+            <div className="space-y-1">
+                <Label htmlFor="ob-sl">Opening SL</Label>
+                <Input id="ob-sl" type="number" value={editableOB_SL} onChange={(e) => setEditableOB_SL(parseFloat(e.target.value))} step="0.1" />
+            </div>
+             <div className="space-y-1">
+                <Label htmlFor="ob-pl">Opening PL</Label>
+                <Input id="ob-pl" type="number" value={editableOB_PL} onChange={(e) => setEditableOB_PL(parseFloat(e.target.value))} step="0.1" />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Close</Button>
+              <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>
+            <Button type="button" onClick={handleSaveOpeningBalances}>Save Balances</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -535,7 +522,7 @@ export default function LeavePage() {
                     aria-label="Select all rows"
                   />
                 </TableHead>
-                <TableHead className="min-w-[60px]">Edit</TableHead>
+                <TableHead className="min-w-[60px]">Edit OB</TableHead>
                 <TableHead className="min-w-[120px]">Division</TableHead>
                 <TableHead className="min-w-[80px]">Code</TableHead>
                 <TableHead className="min-w-[150px]">Name</TableHead>
@@ -569,7 +556,7 @@ export default function LeavePage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditLeaveDialog(emp)} title={`Edit leave applications for ${emp.name}`}>
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditOpeningBalanceDialog(emp)} title={`Edit opening balances for ${emp.name}`}>
                         <Edit className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -584,23 +571,22 @@ export default function LeavePage() {
                         try {
                           const parsedDate = parseISO(emp.doj);
                           if (!isValid(parsedDate)) { 
-                            const parts = emp.doj.split(/[-/]/); // More robust split
+                            const parts = emp.doj.split(/[-/]/);
                             let reparsedDate = null;
-                            // Attempt common non-ISO formats like DD-MM-YYYY or MM-DD-YYYY (assuming YYYY is always last or first)
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) { // YYYY is likely last
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // DD-MM-YYYY
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // MM-DD-YYYY
-                                } else if (parseInt(parts[0]) > 1000) { // YYYY is likely first
-                                     reparsedDate = parseISO(emp.doj); // Try as is for YYYY-MM-DD or YYYY-DD-MM
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
+                                } else if (parseInt(parts[0]) > 1000) { 
+                                     reparsedDate = parseISO(emp.doj); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj; // Fallback to original string if complex parsing fails
+                            return emp.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj; // Fallback for any other error
+                          return emp.doj; 
                         }
                       }
                       return 'N/A';
@@ -630,3 +616,5 @@ export default function LeavePage() {
     </>
   );
 }
+
+    
