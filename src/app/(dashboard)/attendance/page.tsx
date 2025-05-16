@@ -13,7 +13,7 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data";
+import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; // Still need sampleEmployees for structure if we were to parse
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -29,13 +29,11 @@ export default function AttendancePage() {
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   
-  // For View & Filter Tab
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
 
-  // For Upload Tab
   const [uploadMonth, setUploadMonth] = React.useState<string>('');
   const [uploadYear, setUploadYear] = React.useState<number>(0);
 
@@ -60,27 +58,13 @@ export default function AttendancePage() {
     setUploadYear(year);
     setUploadMonth(monthName);
 
-
-    if (uploadedFileName && uploadContext) {
-      // If a file was "uploaded", we stick to that context for display
-      // until a new selection is made in the view tab
-      setSelectedMonth(uploadContext.month);
-      setSelectedYear(uploadContext.year);
-      setIsLoading(false);
-      return;
-    }
-
-    const initialAttendanceData = sampleEmployees.map(emp => ({
-      ...emp,
-      attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)])
-    }));
-    setRawAttendanceData(initialAttendanceData);
+    // No initial data load here
     setIsLoading(false);
-  }, [uploadedFileName, uploadContext]);
+  }, []); // Removed dependencies that might trigger re-setting initial data
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth) {
-      setProcessedAttendanceData([]);
+      setProcessedAttendanceData([]); // Ensure processed data is also empty if raw is empty
       return;
     }
 
@@ -147,19 +131,24 @@ export default function AttendancePage() {
       description: `${file.name} has been received. Simulating data processing. (Actual Excel parsing and data update from the file are not implemented in this prototype).`,
     });
     setUploadedFileName(file.name);
-    setUploadContext({month: uploadMonth, year: uploadYear});
-    // Clear existing raw data to simulate it's being replaced by upload
+    const newUploadContext = {month: uploadMonth, year: uploadYear};
+    setUploadContext(newUploadContext);
+    
+    // Clear existing raw and processed data to signify new file context
     setRawAttendanceData([]); 
+    setProcessedAttendanceData([]);
+     
     // Switch view to the uploaded month/year
-    setSelectedMonth(uploadMonth);
-    setSelectedYear(uploadYear);
+    setSelectedMonth(newUploadContext.month);
+    setSelectedYear(newUploadContext.year);
+    setIsLoading(false); // Ensure loading is false to trigger re-render with new context
   };
 
   const handleDownloadReport = () => {
     if (processedAttendanceData.length === 0 || !selectedMonth || !selectedYear) {
       toast({
         title: "No Data",
-        description: "No attendance data available to download for the selected period.",
+        description: "No attendance data available to download for the selected period. Please upload a file first.",
         variant: "destructive",
       });
       return;
@@ -240,26 +229,37 @@ export default function AttendancePage() {
     const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
-    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
-    if (daysForTemplate >= 7) {
-      sampleRow1[5+3] = "W"; 
-      sampleRow1[6+3] = "W";
-    }
-    if (daysForTemplate >= 11) sampleRow1[10+3] = "CL"; 
-    csvRows.push(sampleRow1);
-
-    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(daysForTemplate).fill("P")];
-    if (daysForTemplate >= 15) {
-      sampleRow2[13+3] = "A"; 
-      sampleRow2[14+3] = "HD";
-    }
-    csvRows.push(sampleRow2);
+    // Sample employee data for template can be sourced from sampleEmployees or kept generic
+    const templateEmployees = sampleEmployees.slice(0,2).map(emp => ({
+      code: emp.code, name: emp.name, designation: emp.designation, doj: emp.doj
+    }));
     
+    templateEmployees.forEach((emp, index) => {
+      const rowData = [emp.code, emp.name, emp.designation, emp.doj];
+      const dailyStatuses = Array(daysForTemplate).fill("P");
+      if (index === 0 && daysForTemplate >= 7) { // Example: John Doe
+        dailyStatuses[5] = "W"; 
+        dailyStatuses[6] = "W";
+        if (daysForTemplate >= 11) dailyStatuses[10] = "CL"; 
+      } else if (index === 1 && daysForTemplate >= 15) { // Example: Jane Smith
+         dailyStatuses[13] = "A"; 
+         dailyStatuses[14] = "HD";
+      }
+      rowData.push(...dailyStatuses);
+      csvRows.push(rowData);
+    });
+    
+    if (templateEmployees.length === 0) { // Fallback if sampleEmployees is empty
+        const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
+        if (daysForTemplate >= 7) { sampleRow1[4+3] = "W"; sampleRow1[5+3] = "W"; }
+        if (daysForTemplate >= 11) sampleRow1[10+3] = "CL"; 
+        csvRows.push(sampleRow1);
+    }
+
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
     const monthYearForFilename = (uploadMonth && uploadYear) ? `${uploadMonth}_${uploadYear}` : "sample";
     link.setAttribute("download", `attendance_template_${monthYearForFilename}.csv`);
     link.style.visibility = 'hidden';
@@ -282,7 +282,7 @@ export default function AttendancePage() {
   return (
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
-        <Button variant="outline" onClick={handleDownloadReport} disabled={rawAttendanceData.length === 0 && !!uploadedFileName}>
+        <Button variant="outline" onClick={handleDownloadReport} disabled={processedAttendanceData.length === 0 && !uploadedFileName}>
             <Download className="mr-2 h-4 w-4" />
             Download Report (CSV)
         </Button>
@@ -297,7 +297,7 @@ export default function AttendancePage() {
           <Card className="my-6 shadow-md">
             <CardHeader>
               <CardTitle>Filters</CardTitle>
-              <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
+              <CardDescription>Filter attendance records by month and year. (More filters like employee/division are illustrative).</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
               {isLoading && !selectedMonth ? (
@@ -324,18 +324,17 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
-              <Select>
+              {/* Illustrative filters, not fully implemented for data filtering beyond month/year */}
+              <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" disabled />
+              <Select disabled>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Select Division" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tech">Technology</SelectItem>
-                  <SelectItem value="hr">Human Resources</SelectItem>
-                  <SelectItem value="sales">Sales</SelectItem>
                 </SelectContent>
               </Select>
-              <Button>
+              <Button disabled>
                 <Filter className="mr-2 h-4 w-4" /> Apply Filters
               </Button>
             </CardContent>
@@ -352,24 +351,43 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (uploadedFileName && rawAttendanceData.length === 0 && !isLoading && uploadContext) {
+                if (isLoading) {
+                    return <div className="text-center py-8 text-muted-foreground">Initializing...</div>;
+                }
+                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
-                      (Full Excel parsing and display from file is not yet implemented in this prototype. Random data generation is paused.)
+                      (Full Excel parsing and display from file is not yet implemented in this prototype. Attendance data will appear here once processed.)
                     </div>
                   );
                 }
-                if (isLoading || !selectedMonth || !selectedYear) {
+                if (!selectedMonth || !selectedYear) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
-                      Loading initial data or select month/year to view records...
+                      Please select month and year to view records.
                     </div>
                   );
                 }
-                if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInSelectedViewMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
-                    return <div className="text-center py-8 text-muted-foreground">Processing attendance data...</div>;
+                if (processedAttendanceData.length === 0 && daysInSelectedViewMonth > 0) {
+                     // If not loading, and no file was uploaded to explain empty data, prompt to upload.
+                    if (!uploadedFileName) {
+                        return (
+                            <div className="text-center py-8 text-muted-foreground">
+                                No attendance data to display for {selectedMonth} {selectedYear}. <br/>
+                                Please upload an attendance file in the 'Upload Attendance Data' tab.
+                            </div>
+                        );
+                    }
+                    // If a file was "uploaded" but resulted in no processed data (e.g. if it was empty or couldn't be parsed)
+                    // This case is currently covered by the uploadedFileName && rawAttendanceData.length === 0 check above
+                    return (
+                        <div className="text-center py-8 text-muted-foreground">
+                            Processing data for {selectedMonth} {selectedYear}... If this persists, the uploaded file might be empty or in an incorrect format.
+                        </div>
+                    );
                 }
+
                 if (processedAttendanceData.length > 0 && daysInSelectedViewMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
                   return (
                     <Table>
@@ -443,16 +461,18 @@ export default function AttendancePage() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
+                          <TableCell colSpan={4} className="font-semibold text-right">Total Employees Displayed:</TableCell>
                           <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
                   );
                 }
+                // Default catch-all if other conditions don't meet, or if daysInSelectedViewMonth is 0
                 return (
                   <div className="text-center py-8 text-muted-foreground">
-                    No attendance data available for the selected month and year.
+                     No attendance data available to display for the current selection. <br/>
+                     Please upload a file via the 'Upload Attendance Data' tab.
                   </div>
                 );
               })()}
@@ -478,7 +498,7 @@ export default function AttendancePage() {
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={uploadYear.toString()} onValueChange={(value) => setUploadYear(parseInt(value))}>
+                <Select value={uploadYear > 0 ? uploadYear.toString() : ""} onValueChange={(value) => setUploadYear(parseInt(value))}>
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Upload Year" />
                   </SelectTrigger>
@@ -487,24 +507,24 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <FileUploadButton 
                   onFileUpload={handleFileUpload} 
                   buttonText="Upload Attendance Excel/CSV" 
-                  disabled={!uploadMonth || !uploadYear}
+                  disabled={!uploadMonth || !uploadYear || uploadYear === 0}
                 />
                 <Button 
                   variant="link" 
                   onClick={handleDownloadSampleTemplate} 
-                  className="p-0 h-auto"
-                  disabled={!uploadMonth || !uploadYear}
+                  className="p-0 h-auto text-left"
+                  disabled={!uploadMonth || !uploadYear || uploadYear === 0}
                 >
-                  <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV for {uploadMonth ? `${uploadMonth} ${uploadYear}` : 'selected period'})
+                  <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
               </div>
                {uploadedFileName && uploadContext && (
                 <p className="text-sm text-muted-foreground">
-                  Last upload attempt: {uploadedFileName} for {uploadContext.month} {uploadContext.year}. (Data processing is simulated in prototype)
+                  Last upload attempt: {uploadedFileName} for {uploadContext.month} {uploadContext.year}. (Data display from file is not implemented in this prototype)
                 </p>
               )}
             </CardContent>
@@ -514,3 +534,4 @@ export default function AttendancePage() {
     </>
   );
 }
+
