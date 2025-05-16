@@ -29,6 +29,7 @@ const employeeFormSchema = z.object({
   doj: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Valid date is required"}),
   status: z.enum(["Active", "Left"], { required_error: "Status is required" }),
   division: z.string().min(1, "Division is required"),
+  hq: z.string().min(1, "HQ is required"),
   grossMonthlySalary: z.coerce.number().positive({ message: "Gross salary must be a positive number" }),
 });
 
@@ -49,6 +50,7 @@ export default function EmployeeMasterPage() {
       doj: "",
       status: "Active",
       division: "",
+      hq: "",
       grossMonthlySalary: 0,
     },
   });
@@ -61,17 +63,17 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees); 
-          saveEmployeesToLocalStorage(sampleEmployees); 
+          setEmployees(sampleEmployees);
+          saveEmployeesToLocalStorage(sampleEmployees);
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees); 
+        setEmployees(sampleEmployees);
         toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, [toast]); 
+  }, []); // Corrected dependency array
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -86,7 +88,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     const newEmployee: EmployeeDetail = {
-      id: `E${Date.now().toString().slice(-4)}`, 
+      id: `E${Date.now().toString().slice(-4)}`,
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -100,15 +102,15 @@ export default function EmployeeMasterPage() {
   const handleUploadEmployees = (file: File) => {
     toast({
       title: "File Received",
-      description: `${file.name} received. (Prototype: Full CSV parsing for Employee Master not yet implemented).`,
+      description: `${file.name} received. (Prototype: Full CSV parsing for Employee Master not yet implemented). Expected columns: Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary.`,
     });
   };
 
   const handleDownloadSampleTemplate = () => {
-    const headers = ["Code", "Name", "Designation", "DOJ", "Status", "Division", "GrossMonthlySalary"];
+    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "GrossMonthlySalary"];
     const sampleData = [
-      ["E006", "Sarah Lee", "Marketing Specialist", "2024-01-10", "Active", "Marketing", "62000"],
-      ["E007", "Tom Brown", "IT Support", "2023-11-05", "Left", "IT", "55000"],
+      ["Active", "Marketing", "E006", "Sarah Lee", "Marketing Specialist", "Chicago", "2024-01-10", "62000"],
+      ["Left", "IT", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "55000"],
     ];
     const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
 
@@ -156,7 +158,7 @@ export default function EmployeeMasterPage() {
     <>
       <PageHeader
         title="Employee Master"
-        description="View, add, or bulk upload employee master data. Includes status, division, and gross salary."
+        description="View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, Gross Salary."
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -173,7 +175,7 @@ export default function EmployeeMasterPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                 <fieldset className="space-y-4">
+                 <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="code" render={({ field }) => (
                     <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -205,8 +207,11 @@ export default function EmployeeMasterPage() {
                     <FormField control={form.control} name="division" render={({ field }) => (
                     <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
+                     <FormField control={form.control} name="hq" render={({ field }) => (
+                    <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
                     <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                    <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem className="md:col-span-2"><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                  </fieldset>
                 <DialogFooter>
@@ -234,19 +239,20 @@ export default function EmployeeMasterPage() {
         <CardHeader>
           <CardTitle>Employee List</CardTitle>
           <CardDescription>
-            Displaying all employees. Status, Division and Gross Salary are key fields.
+            Displaying all employees. Key fields include Status, Division, HQ, and Gross Salary.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="min-w-[100px]">Status</TableHead>
+                <TableHead className="min-w-[120px]">Division</TableHead>
                 <TableHead className="min-w-[80px]">Code</TableHead>
                 <TableHead className="min-w-[150px]">Name</TableHead>
                 <TableHead className="min-w-[150px]">Designation</TableHead>
+                <TableHead className="min-w-[120px]">HQ</TableHead>
                 <TableHead className="min-w-[100px]">DOJ</TableHead>
-                <TableHead className="min-w-[100px]">Status</TableHead>
-                <TableHead className="min-w-[120px]">Division</TableHead>
                 <TableHead className="min-w-[150px] text-right">Gross Salary (₹)</TableHead>
                 <TableHead className="text-center min-w-[100px]">Actions</TableHead>
               </TableRow>
@@ -254,16 +260,17 @@ export default function EmployeeMasterPage() {
             <TableBody>
               {employees.map((employee) => (
                 <TableRow key={employee.id}>
-                  <TableCell>{employee.code}</TableCell>
-                  <TableCell>{employee.name}</TableCell>
-                  <TableCell>{employee.designation}</TableCell>
-                  <TableCell>{employee.doj ? format(new Date(employee.doj), "dd MMM yyyy") : 'N/A'}</TableCell>
                   <TableCell>
                     <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
                       {employee.status || "N/A"}
                     </Badge>
                   </TableCell>
                   <TableCell>{employee.division || "N/A"}</TableCell>
+                  <TableCell>{employee.code}</TableCell>
+                  <TableCell>{employee.name}</TableCell>
+                  <TableCell>{employee.designation}</TableCell>
+                  <TableCell>{employee.hq || "N/A"}</TableCell>
+                  <TableCell>{employee.doj ? format(new Date(employee.doj), "dd MMM yyyy") : 'N/A'}</TableCell>
                   <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
@@ -277,7 +284,7 @@ export default function EmployeeMasterPage() {
               ))}
               {employees.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     No employee data available. Use 'Add New Employee' or 'Upload Employees'.
                   </TableCell>
                 </TableRow>
@@ -289,5 +296,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-
-    

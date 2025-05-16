@@ -7,27 +7,28 @@ export interface EmployeeDetail {
   name: string;
   designation: string;
   doj: string; // YYYY-MM-DD
-  status: "Active" | "Left"; // Changed to specific values
-  division: string; 
+  status: "Active" | "Left";
+  division: string;
+  hq: string; // New field
   grossMonthlySalary: number;
 }
 
 export interface LeaveHistoryEntry {
   id: string;
   employeeId: string;
-  employeeName: string; // For convenience, though ideally looked up
+  employeeName: string;
   leaveType: LeaveType;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
-  days: number; // Can be 0.5 for half-days
+  days: number;
 }
 
 export const sampleEmployees: EmployeeDetail[] = [
-  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15", status: "Active", division: "Technology", grossMonthlySalary: 75000 },
-  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20", status: "Active", division: "Management", grossMonthlySalary: 90000 },
-  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01", status: "Active", division: "Design", grossMonthlySalary: 65000 },
-  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05", status: "Active", division: "Analytics", grossMonthlySalary: 70000 },
-  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01", status: "Left", division: "Technology", grossMonthlySalary: 60000 },
+  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15", status: "Active", division: "Technology", hq: "New York", grossMonthlySalary: 75000 },
+  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20", status: "Active", division: "Management", hq: "London", grossMonthlySalary: 90000 },
+  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01", status: "Active", division: "Design", hq: "San Francisco", grossMonthlySalary: 65000 },
+  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05", status: "Active", division: "Analytics", hq: "New York", grossMonthlySalary: 70000 },
+  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01", status: "Left", division: "Technology", hq: "London", grossMonthlySalary: 60000 },
 ];
 
 export const sampleLeaveHistory: LeaveHistoryEntry[] = [
@@ -38,6 +39,5 @@ export const sampleLeaveHistory: LeaveHistoryEntry[] = [
   { id: "L005", employeeId: "E003", employeeName: "Mike Johnson", leaveType: "SL", startDate: "2024-05-10", endDate: "2024-05-10", days: 0.5 },
   { id: "L006", employeeId: "E001", employeeName: "John Doe", leaveType: "SL", startDate: "2024-04-01", endDate: "2024-04-01", days: 1 },
   { id: "L007", employeeId: "E004", employeeName: "Alice Brown", leaveType: "CL", startDate: "2024-08-01", endDate: "2024-08-01", days: 1 },
-  // Add more entries to test balances, e.g., for E001 for PL eligibility
-  { id: "L008", employeeId: "E001", employeeName: "John Doe", leaveType: "PL", startDate: "2023-08-01", endDate: "2023-08-02", days: 2 }, // John Doe PL after 6 months in 2023
+  { id: "L008", employeeId: "E001", employeeName: "John Doe", leaveType: "PL", startDate: "2023-08-01", endDate: "2023-08-02", days: 2 },
 ];
