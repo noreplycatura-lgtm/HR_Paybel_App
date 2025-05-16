@@ -26,6 +26,10 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename";
+const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context";
+
 export default function AttendancePage() {
   const { toast } = useToast();
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
@@ -48,21 +52,50 @@ export default function AttendancePage() {
 
 
   React.useEffect(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const monthName = months[now.getMonth()];
+    setIsLoading(true); 
 
-    setCurrentYear(year);
-    setCurrentMonthName(monthName);
+    const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+    const storedFileName = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
+    const storedContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
 
-    if (!selectedMonth) setSelectedMonth(monthName);
-    if (selectedYear === 0) setSelectedYear(year);
-    
-    if (!uploadMonth) setUploadMonth(monthName);
-    if (uploadYear === 0) setUploadYear(year);
+    const now = new Date(); // Define now here to be accessible in both branches
+    const defaultYear = now.getFullYear();
+    const defaultMonthName = months[now.getMonth()];
+    setCurrentYear(defaultYear); // Always set current year for dropdown population
+    setCurrentMonthName(defaultMonthName); // Always set current month for dropdown population
 
+    if (storedRawData && storedFileName && storedContext) {
+      try {
+        const parsedRawData = JSON.parse(storedRawData) as EmployeeAttendanceData[];
+        const parsedContext = JSON.parse(storedContext) as { month: string; year: number };
+
+        setRawAttendanceData(parsedRawData);
+        setUploadedFileName(storedFileName);
+        setUploadContext(parsedContext);
+
+        setSelectedMonth(parsedContext.month);
+        setSelectedYear(parsedContext.year);
+        setUploadMonth(parsedContext.month);
+        setUploadYear(parsedContext.year);
+      } catch (error) {
+        console.error("Error parsing attendance data from localStorage:", error);
+        localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+        localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
+        localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+        
+        setSelectedMonth(defaultMonthName);
+        setSelectedYear(defaultYear);
+        setUploadMonth(defaultMonthName);
+        setUploadYear(defaultYear);
+      }
+    } else {
+      setSelectedMonth(defaultMonthName);
+      setSelectedYear(defaultYear);
+      setUploadMonth(defaultMonthName);
+      setUploadYear(defaultYear);
+    }
     setIsLoading(false);
-  }, []); // Removed dependencies to ensure this runs only once on mount to set initial values
+  }, []);
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth || selectedYear === 0) {
@@ -74,8 +107,8 @@ export default function AttendancePage() {
     if (monthIndex === -1) return;
 
     const processedData = rawAttendanceData.map(emp => {
-      if (!emp.doj) { // Handle cases where DOJ might be missing in uploaded data
-        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A') }; // Mark all as Absent
+      if (!emp.doj) { 
+        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A') }; 
       }
       const employeeStartDate = parseISO(emp.doj);
       const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
@@ -186,7 +219,15 @@ export default function AttendancePage() {
         const newUploadContext = { month: uploadMonth, year: uploadYear };
         setUploadContext(newUploadContext);
         
-        // Automatically switch to the view tab and set its filters to the uploaded month/year
+        try {
+          localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY, JSON.stringify(newAttendanceData));
+          localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY, file.name);
+          localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY, JSON.stringify(newUploadContext));
+        } catch (storageError) {
+            console.error("Error saving attendance data to localStorage:", storageError);
+            toast({ title: "Storage Error", description: "Could not save attendance data locally. It will be lost on refresh.", variant: "destructive" });
+        }
+        
         setSelectedMonth(uploadMonth);
         setSelectedYear(uploadYear);
         setIsLoading(false); 
@@ -196,12 +237,10 @@ export default function AttendancePage() {
           description: `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`,
         });
         
-        // Programmatically click the "View & Filter Attendance" tab trigger
         const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
         if (viewTabTrigger) {
           viewTabTrigger.click();
         }
-
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
@@ -305,7 +344,6 @@ export default function AttendancePage() {
     const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
     
-    // Example rows for the template
     const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
     if (daysForTemplate >= 7) { sampleRow1[4+5] = "W"; sampleRow1[4+6] = "W"; } 
     if (daysForTemplate >= 11) sampleRow1[4+10] = "CL"; 
@@ -353,6 +391,15 @@ export default function AttendancePage() {
         setProcessedAttendanceData([]);
         setUploadedFileName(null);
         setUploadContext(null); 
+        
+        try {
+          localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+          localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
+          localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+        } catch (error) {
+            console.error("Error clearing attendance data from localStorage:", error);
+        }
+
         toast({
             title: "Data Cleared",
             description: `Uploaded attendance data for ${selectedMonth} ${selectedYear} has been cleared.`,
@@ -669,4 +716,6 @@ export default function AttendancePage() {
     </>
   );
 }
+    
+
     
