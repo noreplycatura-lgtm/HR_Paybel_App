@@ -72,7 +72,7 @@ export default function EmployeeMasterPage() {
       }
     }
     setIsLoadingData(false);
-  }, [toast]);
+  }, []); // Corrected dependency array, was [toast]
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -139,6 +139,13 @@ export default function EmployeeMasterPage() {
       toast({ title: "Permission Denied", description: "Login as editor to edit employees.", variant: "destructive" });
       return;
     }
+    // Placeholder: In a real app, you would open a dialog with the employee's data pre-filled
+    // For now, we can re-use the existing dialog and pre-fill it, or just show a toast.
+    // const employeeToEdit = employees.find(emp => emp.id === employeeId);
+    // if (employeeToEdit) {
+    //   form.reset(employeeToEdit); // This would need form to handle gross salary as number
+    //   setIsDialogOpen(true);
+    // }
     toast({
       title: "Prototype Action",
       description: `Editing employee ${employeeId} is not yet implemented.`,
@@ -150,6 +157,12 @@ export default function EmployeeMasterPage() {
       toast({ title: "Permission Denied", description: "Login as editor to delete employees.", variant: "destructive" });
       return;
     }
+    // Placeholder: In a real app, you'd show a confirmation dialog.
+    // For now, if we implement delete from localStorage:
+    // const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
+    // setEmployees(updatedEmployees);
+    // saveEmployeesToLocalStorage(updatedEmployees);
+    // toast({ title: "Employee Deleted", description: `Employee ${employeeId} removed.` });
     toast({
       title: "Prototype Action",
       description: `Deleting employee ${employeeId} is not yet implemented. (Data is from localStorage/sample)`,
@@ -186,7 +199,7 @@ export default function EmployeeMasterPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                 <fieldset disabled={!isEditor} className="space-y-4">
+                 <fieldset disabled={!isEditor} className="space-y-4" title={!isEditor ? "Login as editor to make changes" : ""}>
                     <FormField control={form.control} name="code" render={({ field }) => (
                     <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -304,3 +317,4 @@ export default function EmployeeMasterPage() {
   );
 }
 
+  
