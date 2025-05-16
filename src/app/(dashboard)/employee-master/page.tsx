@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
@@ -26,7 +26,14 @@ const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
   name: z.string().min(1, "Employee name is required"),
   designation: z.string().min(1, "Designation is required"),
-  doj: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Valid date is required"}),
+  doj: z.string().refine((val) => {
+    if (!val) return false;
+    try {
+      return isValid(parseISO(val));
+    } catch {
+      return false;
+    }
+  }, { message: "Valid date (YYYY-MM-DD) is required"}),
   status: z.enum(["Active", "Left"], { required_error: "Status is required" }),
   division: z.string().min(1, "Division is required"),
   hq: z.string().min(1, "HQ is required"),
@@ -63,17 +70,17 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees); // Fallback to sample if nothing in LS
+          setEmployees(sampleEmployees); 
           saveEmployeesToLocalStorage(sampleEmployees);
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees); // Fallback to sample on error
+        setEmployees(sampleEmployees); 
         toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []); 
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -88,7 +95,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     const newEmployee: EmployeeDetail = {
-      id: values.code, // Use employee code as ID, ensure it's unique if possible
+      id: values.code, 
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -109,13 +116,13 @@ export default function EmployeeMasterPage() {
       }
       try {
         const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
-        if (lines.length < 2) { // Header + at least one data row
+        if (lines.length < 2) { 
           toast({ title: "Invalid File", description: "File is empty or has no data rows. Header + at least one data row expected.", variant: "destructive" });
           return;
         }
 
-        const dataRows = lines.slice(1); // Skip header row
-        const expectedColumns = 8; // Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary
+        const dataRows = lines.slice(1); 
+        const expectedColumns = 8; 
 
         const newEmployees: EmployeeDetail[] = dataRows.map((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
@@ -130,27 +137,36 @@ export default function EmployeeMasterPage() {
           const name = values[3];
           const designation = values[4];
           const hq = values[5];
-          const doj = values[6]; // Assuming YYYY-MM-DD or similar string format
-          const grossMonthlySalary = parseFloat(values[7]);
+          const doj = values[6]; 
+          const grossMonthlySalaryStr = values[7];
+          
+          const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
 
           if (!code || !name || !status || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary).`);
+            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary). DOJ: ${doj}`);
             return null;
           }
           if (status !== "Active" && status !== "Left") {
             console.warn(`Skipping row ${rowIndex + 1} due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
             return null;
           }
+          // Basic check for DOJ format from CSV, assuming YYYY-MM-DD. More robust validation can be added.
+          let formattedDoj = doj;
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
+             console.warn(`Row ${rowIndex + 1}: DOJ "${doj}" is not in YYYY-MM-DD format. Attempting to parse. Consider standardizing input.`);
+             // Attempt to parse common formats or set as invalid. For now, keep original for parseISO to handle.
+          }
+
 
           return {
-            id: code, // Using code as ID
+            id: code, 
             status,
             division,
             code,
             name,
             designation,
             hq,
-            doj,
+            doj: formattedDoj,
             grossMonthlySalary,
           };
         }).filter(item => item !== null) as EmployeeDetail[];
@@ -160,7 +176,7 @@ export default function EmployeeMasterPage() {
           return;
         }
 
-        setEmployees(newEmployees); // Replace existing employees with uploaded ones
+        setEmployees(newEmployees); 
         saveEmployeesToLocalStorage(newEmployees);
         toast({
           title: "Employees Uploaded",
@@ -342,7 +358,25 @@ export default function EmployeeMasterPage() {
                   <TableCell>{employee.name}</TableCell>
                   <TableCell>{employee.designation}</TableCell>
                   <TableCell>{employee.hq || "N/A"}</TableCell>
-                  <TableCell>{employee.doj ? format(parseISO(employee.doj), "dd MMM yyyy") : 'N/A'}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      if (employee.doj && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
+                        try {
+                          const parsedDate = parseISO(employee.doj);
+                          // Check if parseISO resulted in a valid date
+                          if (!isValid(parsedDate)) { 
+                            // console.warn(`Invalid DOJ string encountered: ${employee.doj}`);
+                            return employee.doj; // Show original string if parseISO deems it invalid
+                          }
+                          return format(parsedDate, "dd MMM yyyy");
+                        } catch (e) {
+                          // console.warn(`Error formatting DOJ: ${employee.doj}`, e);
+                          return employee.doj; // Show original string if any error during parsing/formatting
+                        }
+                      }
+                      return 'N/A';
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
@@ -368,5 +402,7 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+
+    
 
     
