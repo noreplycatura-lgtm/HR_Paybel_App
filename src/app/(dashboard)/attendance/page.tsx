@@ -200,8 +200,6 @@ export default function AttendancePage() {
         if (isBefore(currentDateInLoop, startOfDay(employeeStartDate))) {
           return '-';
         }
-        // Return the status as is from rawAttendanceData (already processed for blanks/hyphens from file to 'A')
-        // No leave balance check here; balances are managed and can go negative on Leave Management page.
         return status; 
       });
       
@@ -299,8 +297,8 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0];
           
-          const hq = "N/A"; 
-          const grossMonthlySalary = 0; 
+          const hq = "N/A"; // Not in attendance CSV per template
+          const grossMonthlySalary = 0; // Not in attendance CSV
 
           if (encounteredCodes.has(code)) {
             skippedDuplicateCount++;
@@ -339,12 +337,12 @@ export default function AttendancePage() {
             }
         }
 
-        setRawAttendanceData(newAttendanceData);
-        setProcessedAttendanceData([]); 
-        setUploadedFileName(file.name);
-        setSelectedMonth(uploadMonth); 
+        setRawAttendanceData(newAttendanceData); // Set the raw data from the file
+        setProcessedAttendanceData([]); // Clear processed, will be recalculated by effect
+        setUploadedFileName(file.name); // Set filename for the current view context
+        setSelectedMonth(uploadMonth); // Switch view to the uploaded month/year
         setSelectedYear(uploadYear);
-        setSearchTerm(''); 
+        setSearchTerm(''); // Clear search term
 
         let toastDescription = `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`;
         if (skippedDuplicateCount > 0) {
@@ -459,6 +457,7 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
+    // Corrected order: Status, Division, Code, Name, Designation, DOJ, then day numbers
     const headers = ["Status", "Division", "Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
@@ -810,8 +809,8 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (isLoadingState && filteredAttendanceData.length === 0) { 
-                    return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}...</div>;
+                if (isLoadingState && filteredAttendanceData.length === 0 && (!selectedMonth || selectedYear === 0) ) { 
+                    return <div className="text-center py-8 text-muted-foreground">Initializing...</div>;
                 }
                  if (!selectedMonth || !selectedYear || selectedYear === 0) {
                   return (
@@ -939,6 +938,10 @@ export default function AttendancePage() {
                             No employees found matching "{searchTerm}" for {selectedMonth} {selectedYear}.
                         </div>
                     );
+                }
+                // Default message if no other condition matched, especially for when data is loading for a selected month.
+                if (isLoadingState) {
+                     return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}...</div>;
                 }
                 return ( 
                   <div className="text-center py-8 text-muted-foreground">

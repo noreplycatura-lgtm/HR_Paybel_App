@@ -294,7 +294,9 @@ export default function EmployeeMasterPage() {
         const searchTerm = filterTerm.toLowerCase();
         return (
           employee.code.toLowerCase().includes(searchTerm) ||
-          employee.name.toLowerCase().includes(searchTerm)
+          employee.name.toLowerCase().includes(searchTerm) ||
+          (employee.division && employee.division.toLowerCase().includes(searchTerm)) ||
+          (employee.designation && employee.designation.toLowerCase().includes(searchTerm))
         );
       });
   }, [employees, filterTerm]);
@@ -416,7 +418,7 @@ export default function EmployeeMasterPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Filter by Code or Name..."
+                placeholder="Filter by Code, Name, Division..."
                 className="pl-8"
                 value={filterTerm}
                 onChange={(e) => setFilterTerm(e.target.value)}
@@ -461,15 +463,20 @@ export default function EmployeeMasterPage() {
                             const parts = employee.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                                else if (parseInt(parts[0]) <=12 && parseInt(parts[1]) <=31) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                                // Attempt common non-ISO formats like dd-MM-yyyy or MM-dd-yyyy
+                                if (parseInt(parts[2]) > 1000) { // Likely yyyy is last
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // dd-MM-yyyy
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // MM-dd-yyyy
+                                } else if (parseInt(parts[0]) > 1000) { // Likely yyyy is first (already ISO-like)
+                                     reparsedDate = parseISO(employee.doj);
+                                }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return employee.doj; 
+                            return employee.doj; // Fallback to original string if still not parsable
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return employee.doj; 
+                          return employee.doj; // Fallback on any error
                         }
                       }
                       return 'N/A';
@@ -500,8 +507,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-    
-
-    
-
-    

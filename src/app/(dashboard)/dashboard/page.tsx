@@ -5,7 +5,7 @@ import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserCheck, CalendarCheck, History, DollarSign, HardDrive } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; 
+import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data"; 
 
 // localStorage keys - ensure these match attendance page v4 and employee master v1
 const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
@@ -37,13 +37,13 @@ export default function DashboardPage() {
     let activeEmployeesCount = 0;
     let overallAttendanceValue = "N/A";
     let attendanceDescription = "From last uploaded file";
-    const totalLeaveRecords = sampleLeaveHistory.length;
+    const totalLeaveRecords = 0; // sampleLeaveHistory is now empty, so this will be 0 unless actual applications are stored
 
     if (typeof window !== 'undefined') {
       // Calculate Total Active Employees
       try {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        let employeesToUseForCount: EmployeeDetail[] = sampleEmployees; 
+        let employeesToUseForCount: EmployeeDetail[] = []; // Default to empty if nothing found
 
         if (storedEmployeesStr !== null) {
           try {
@@ -51,16 +51,22 @@ export default function DashboardPage() {
             if (Array.isArray(parsedEmployees)) {
               employeesToUseForCount = parsedEmployees;
             } else {
-              console.error("Employee master data in localStorage is not an array. Using sample data for count.");
+              console.error("Employee master data in localStorage is not an array.");
+              // Keep employeesToUseForCount as empty
             }
           } catch (parseError) {
-            console.error("Error parsing employee master data from localStorage for dashboard. Using sample data for count.", parseError);
+            console.error("Error parsing employee master data from localStorage for dashboard.", parseError);
+             // Keep employeesToUseForCount as empty
           }
+        } else {
+            // If no key exists, it means master was never saved or was cleared.
+            // For dashboard, we'll show 0 instead of falling back to samples here.
+            employeesToUseForCount = [];
         }
         activeEmployeesCount = employeesToUseForCount.filter(emp => emp.status === "Active").length;
       } catch (error) {
         console.error("Error accessing or processing employee master data for dashboard count:", error);
-        activeEmployeesCount = sampleEmployees.filter(emp => emp.status === "Active").length;
+        activeEmployeesCount = 0; // Default to 0 on error
       }
 
       // Calculate Overall Attendance from last upload context
@@ -83,8 +89,9 @@ export default function DashboardPage() {
                   emp.attendance.forEach(status => {
                     if (status === "P") {
                       presentCount++;
-                      relevantEntriesCount++;
-                    } else if (status === "A" || status === "HD") {
+                    }
+                    // Consider P, A, HD as relevant for percentage base
+                    if (status === "P" || status === "A" || status === "HD") {
                       relevantEntriesCount++;
                     }
                   });
@@ -98,6 +105,8 @@ export default function DashboardPage() {
                 overallAttendanceValue = "No P/A/HD data";
               }
               attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
+            } else {
+                 attendanceDescription = `No attendance entries in ${lastUploadContext.month} ${lastUploadContext.year} file.`;
             }
           } else {
              attendanceDescription = `No attendance data found for last upload context (${lastUploadContext.month} ${lastUploadContext.year})`;

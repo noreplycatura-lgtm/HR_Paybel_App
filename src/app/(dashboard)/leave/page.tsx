@@ -35,7 +35,6 @@ interface LeaveDisplayData extends EmployeeDetail {
   balanceCLAtMonthEnd: number;
   balanceSLAtMonthEnd: number;
   balancePLAtMonthEnd: number;
-  isPLEligibleThisMonth: boolean;
 }
 
 // Simplified interface for parsing attendance data within LeavePage
@@ -136,15 +135,11 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
       .map(emp => {
-        // Calculate total accrued leaves up to the end of the selected month,
-        // considering opening balances and monthly accruals. For this initial calculation,
-        // we pass an empty array for leaveApplications because the actual "Used" leaves
-        // for the current month will be sourced directly from attendance data.
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
           emp, 
           selectedYear, 
           monthIndex, 
-          [], // Pass empty array here; actual "used" from attendance is handled next
+          [], // Pass empty array for applications; used leaves from attendance handled next
           openingBalances
         );
 
@@ -177,8 +172,7 @@ export default function LeavePage() {
             }
           }
         }
-
-        // Final balance = Accrued by end of month (including this month's accrual) - Used from this month's attendance
+        
         const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
         const finalBalanceSL = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
@@ -188,16 +182,15 @@ export default function LeavePage() {
           usedCLInMonth: usedCLFromAttendance,
           usedSLInMonth: usedSLFromAttendance,
           usedPLInMonth: usedPLFromAttendance,
-          balanceCLAtMonthEnd: finalBalanceCL, // This can go negative
-          balanceSLAtMonthEnd: finalBalanceSL, // This can go negative
-          balancePLAtMonthEnd: finalBalancePL, // This can go negative
-          isPLEligibleThisMonth: accruedDetails.isPLEligibleThisMonth,
+          balanceCLAtMonthEnd: finalBalanceCL,
+          balanceSLAtMonthEnd: finalBalanceSL,
+          balancePLAtMonthEnd: finalBalancePL,
         };
     });
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, openingBalances, selectedMonth, selectedYear, toast]); // Removed leaveApplications from dependency as it's not directly used for this display
+  }, [employees, openingBalances, selectedMonth, selectedYear, toast]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -222,7 +215,6 @@ export default function LeavePage() {
   
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
-    // Financial year starts in April. If selected month is Jan-Mar, FY started previous year.
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
