@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -22,7 +23,7 @@ interface LeaveHistoryEntry {
   startDate: string;
   endDate: string;
   days: number;
-  status: 'Approved' | 'Pending' | 'Rejected';
+  // status: 'Approved' | 'Pending' | 'Rejected'; // Removed status
 }
 
 const sampleLeaveBalances: LeaveBalance[] = [
@@ -32,15 +33,18 @@ const sampleLeaveBalances: LeaveBalance[] = [
 ];
 
 const sampleLeaveHistory: LeaveHistoryEntry[] = [
-  { id: "L001", employeeName: "John Doe", leaveType: "PL", startDate: "2024-07-10", endDate: "2024-07-11", days: 2, status: "Approved" },
-  { id: "L002", employeeName: "Jane Smith", leaveType: "SL", startDate: "2024-07-15", endDate: "2024-07-15", days: 1, status: "Approved" },
-  { id: "L003", employeeName: "Mike Johnson", leaveType: "CL", startDate: "2024-07-20", endDate: "2024-07-20", days: 1, status: "Pending" },
+  { id: "L001", employeeName: "John Doe", leaveType: "PL", startDate: "2024-07-10", endDate: "2024-07-11", days: 2 },
+  { id: "L002", employeeName: "Jane Smith", leaveType: "SL", startDate: "2024-07-15", endDate: "2024-07-15", days: 1 },
+  { id: "L003", employeeName: "Mike Johnson", leaveType: "CL", startDate: "2024-07-20", endDate: "2024-07-20", days: 1 },
 ];
 
 export default function LeavePage() {
   return (
     <>
-      <PageHeader title="Leave Management" description="View and manage employee leave balances and history.">
+      <PageHeader 
+        title="Leave Management" 
+        description="View employee leave balances and history. Leaves are automatically recorded if sufficient balance is available."
+      >
         <Button variant="outline">
           <Download className="mr-2 h-4 w-4" />
           Download Leave Balance (Excel)
@@ -70,7 +74,7 @@ export default function LeavePage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle>Leave History</CardTitle>
-          <CardDescription>Recent leave applications and their statuses.</CardDescription>
+          <CardDescription>Recent leave applications. Leaves are automatically recorded based on available balance.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -81,7 +85,7 @@ export default function LeavePage() {
                 <TableHead>Start Date</TableHead>
                 <TableHead>End Date</TableHead>
                 <TableHead className="text-center">Days</TableHead>
-                <TableHead className="text-center">Status</TableHead>
+                {/* <TableHead className="text-center">Status</TableHead> Removed Status Column */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,25 +98,19 @@ export default function LeavePage() {
                   <TableCell>{entry.startDate}</TableCell>
                   <TableCell>{entry.endDate}</TableCell>
                   <TableCell className="text-center">{entry.days}</TableCell>
-                  <TableCell className="text-center">
+                  {/* <TableCell className="text-center">
                     <Badge 
-                      variant={
-                        entry.status === 'Approved' ? 'default' : 
-                        entry.status === 'Pending' ? 'outline' : 'destructive'
-                      }
-                      className={
-                        entry.status === 'Approved' ? 'bg-green-500 hover:bg-green-600' :
-                        entry.status === 'Pending' ? 'bg-yellow-400 hover:bg-yellow-500 text-black' : ''
-                      }
+                      variant={'default'} // All leaves are effectively 'approved' or 'taken'
+                      className={'bg-green-500 hover:bg-green-600'}
                     >
-                      {entry.status}
+                      Taken 
                     </Badge>
-                  </TableCell>
+                  </TableCell> Removed Status Cell */}
                 </TableRow>
               ))}
               {sampleLeaveHistory.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">No leave history found.</TableCell>
+                  <TableCell colSpan={5} className="text-center">No leave history found.</TableCell>
                 </TableRow>
               )}
             </TableBody>
