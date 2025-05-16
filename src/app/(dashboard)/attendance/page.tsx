@@ -13,21 +13,45 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter } from "lucide-react";
 
-const sampleAttendanceData = [
-  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2022-01-15", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
-  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2021-05-20", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
-  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2023-03-01", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
-];
+interface EmployeeAttendance {
+  id: string;
+  code: string;
+  name: string;
+  designation: string;
+  doj: string;
+  attendance: string[];
+}
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const currentYear = new Date().getFullYear();
-const currentMonthName = months[new Date().getMonth()];
 
 export default function AttendancePage() {
   const { toast } = useToast();
-  const [attendanceData, setAttendanceData] = React.useState(sampleAttendanceData);
-  const [selectedMonth, setSelectedMonth] = React.useState(currentMonthName);
-  const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
+  const [attendanceData, setAttendanceData] = React.useState<EmployeeAttendance[]>([]);
+  const [currentMonthName, setCurrentMonthName] = React.useState('');
+  const [currentYear, setCurrentYear] = React.useState(0);
+  const [selectedMonth, setSelectedMonth] = React.useState('');
+  const [selectedYear, setSelectedYear] = React.useState<number>(0);
+
+
+  React.useEffect(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthName = months[now.getMonth()];
+
+    setCurrentYear(year);
+    setCurrentMonthName(monthName);
+    setSelectedYear(year);
+    setSelectedMonth(monthName);
+
+    // Generate sample data on client mount to avoid hydration issues
+    const generateSampleData = (): EmployeeAttendance[] => [
+      { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2022-01-15", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
+      { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2021-05-20", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
+      { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2023-03-01", attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)]) },
+    ];
+    setAttendanceData(generateSampleData());
+  }, []);
+
 
   const handleFileUpload = (file: File) => {
     toast({
@@ -44,15 +68,15 @@ export default function AttendancePage() {
     });
   };
   
-  const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
-  const availableYears = [currentYear, currentYear - 1, currentYear - 2, currentYear -3, currentYear -4];
+  const daysInMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 31;
+  const availableYears = currentYear > 0 ? [currentYear, currentYear - 1, currentYear - 2, currentYear -3, currentYear -4] : [];
 
 
   return (
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
         <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance (Excel)" />
-        <Button variant="outline" onClick={handleDownloadReport}> {/* Added onClick handler */}
+        <Button variant="outline" onClick={handleDownloadReport}>
             <Download className="mr-2 h-4 w-4" />
             Download Report
         </Button>
@@ -64,22 +88,26 @@ export default function AttendancePage() {
           <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Select Month" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
-            <SelectTrigger className="w-full sm:w-[120px]">
-              <SelectValue placeholder="Select Year" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {selectedMonth && (
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Select Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {selectedYear > 0 && availableYears.length > 0 && (
+            <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+              <SelectTrigger className="w-full sm:w-[120px]">
+                <SelectValue placeholder="Select Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
           <Select>
             <SelectTrigger className="w-full sm:w-[180px]">
@@ -99,13 +127,16 @@ export default function AttendancePage() {
 
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle>Attendance Records for {selectedMonth} {selectedYear}</CardTitle>
+          <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
             <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth}).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
+         {attendanceData.length === 0 ? (
+            <div className="text-center py-8">Loading attendance data...</div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -149,8 +180,10 @@ export default function AttendancePage() {
               </TableRow>
             </TableFooter>
           </Table>
+          )}
         </CardContent>
       </Card>
     </>
   );
 }
+
