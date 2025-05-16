@@ -21,7 +21,7 @@ import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Retained for potential future use or if parts of calc rely on it
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 
 
@@ -40,7 +40,7 @@ interface LeaveDisplayData extends EmployeeDetail {
 export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); // Still needed for calculation if used
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
@@ -51,10 +51,9 @@ export default function LeavePage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
 
-  // State for editing opening balances
   const [isEditOpeningBalanceDialogOpen, setIsEditOpeningBalanceDialogOpen] = React.useState(false);
   const [editingEmployeeForOB, setEditingEmployeeForOB] = React.useState<EmployeeDetail | null>(null);
-  const [editingOBYear, setEditingOBYear] = React.useState<number>(0); // Financial Year Start
+  const [editingOBYear, setEditingOBYear] = React.useState<number>(0); 
   const [editableOB_CL, setEditableOB_CL] = React.useState<number>(0);
   const [editableOB_SL, setEditableOB_SL] = React.useState<number>(0);
   const [editableOB_PL, setEditableOB_PL] = React.useState<number>(0);
@@ -237,8 +236,7 @@ export default function LeavePage() {
       `Used PL (${selectedMonth} ${selectedYear})`,
       `Balance CL (End of ${selectedMonth} ${selectedYear})`,
       `Balance SL (End of ${selectedMonth} ${selectedYear})`,
-      `Balance PL (End of ${selectedMonth} ${selectedYear})`,
-      "Eligible For Accrual This Month"
+      `Balance PL (End of ${selectedMonth} ${selectedYear})`
     ];
     csvRows.push(headers);
 
@@ -269,8 +267,7 @@ export default function LeavePage() {
         emp.usedPLInMonth.toFixed(1),
         emp.balanceCLAtMonthEnd.toFixed(1),
         emp.balanceSLAtMonthEnd.toFixed(1),
-        emp.balancePLAtMonthEnd.toFixed(1), 
-        emp.isPLEligibleThisMonth ? 'Yes' : 'No'
+        emp.balancePLAtMonthEnd.toFixed(1)
       ];
       csvRows.push(row);
     });
@@ -479,7 +476,7 @@ export default function LeavePage() {
       </Dialog>
 
 
-      <Card className="mb-6 shadow-md">
+      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
             <CardTitle>Filters</CardTitle>
         </CardHeader>
@@ -503,12 +500,12 @@ export default function LeavePage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-md">
+      <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
-            <br/>Only 'Active' employees are shown. 'Eligible Accrual' column indicates completion of 5 months service for any leave type.
+            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -535,13 +532,12 @@ export default function LeavePage() {
                 <TableHead className="text-center min-w-[90px]">Balance CL</TableHead>
                 <TableHead className="text-center min-w-[90px]">Balance SL</TableHead>
                 <TableHead className="text-center min-w-[90px]">Balance PL</TableHead>
-                <TableHead className="text-center min-w-[100px]">Eligible Accrual</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && displayData.length === 0 ? ( 
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center py-8">
+                  <TableCell colSpan={14} className="text-center py-8">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                     {employees.length > 0 ? "Calculating leave balances..." : "Loading employee data..."}
                   </TableCell>
@@ -598,11 +594,10 @@ export default function LeavePage() {
                   <TableCell className="text-center font-semibold">{emp.balanceCLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceSLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balancePLAtMonthEnd.toFixed(1)}</TableCell>
-                  <TableCell className="text-center">{emp.isPLEligibleThisMonth ? 'Yes' : 'No'}</TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
                     {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." : 
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
                      "Please select month and year to view leave summary."}
@@ -616,5 +611,3 @@ export default function LeavePage() {
     </>
   );
 }
-
-    
