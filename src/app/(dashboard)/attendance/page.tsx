@@ -18,6 +18,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2, Loader2, Edit } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
+// import { sampleEmployees, sampleLeaveHistory } from "@/lib/hr-data"; // sampleEmployees no longer used directly here
 import { sampleLeaveHistory } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
@@ -126,29 +127,12 @@ export default function AttendancePage() {
       setProcessedAttendanceData([]);
       return;
     }
-    
-    if (uploadedFileName && typeof window !== 'undefined') {
-        const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
-        if (lastUploadContextStr) {
-            try {
-                const lastUploadContext = JSON.parse(lastUploadContextStr);
-                if (lastUploadContext.month !== selectedMonth || lastUploadContext.year !== selectedYear) {
-                    setProcessedAttendanceData([]); 
-                    return;
-                }
-            } catch { /* ignore parse error on context key */ }
-        } else if (rawAttendanceData.length > 0) {
-           const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
-           if (localStorage.getItem(rawDataKey) === null) { 
-                setProcessedAttendanceData([]);
-                return;
-           }
-        }
-    }
-
+    // If rawAttendanceData is populated, it means data for the selectedMonth/Year was loaded from LS.
+    // We should proceed to process it without checking the global lastUploadContextKey here.
+    // The lastUploadContextKey is primarily for the dashboard.
 
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) {
+    if (monthIndex === -1) { // Should ideally not happen if selectedMonth is from our 'months' array
         setProcessedAttendanceData([]);
         return;
     }
@@ -210,7 +194,7 @@ export default function AttendancePage() {
       return { ...emp, processedAttendance: newProcessedAttendance };
     });
     setProcessedAttendanceData(processedData);
-  }, [selectedMonth, selectedYear, rawAttendanceData, uploadedFileName]);
+  }, [selectedMonth, selectedYear, rawAttendanceData]);
 
 
   const handleFileUpload = (file: File) => {
@@ -231,7 +215,6 @@ export default function AttendancePage() {
         return;
       }
 
-      // Filename validation
       const fileNameLower = file.name.toLowerCase();
       const uploadMonthLower = uploadMonth.toLowerCase();
       const uploadYearStr = uploadYear.toString();
@@ -941,3 +924,6 @@ export default function AttendancePage() {
     </>
   );
 }
+
+
+    
