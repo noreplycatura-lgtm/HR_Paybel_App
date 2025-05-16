@@ -18,7 +18,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory, sampleEmployees } from "@/lib/hr-data"; // sampleEmployees might be used as fallback
+import { sampleLeaveHistory, sampleEmployees } from "@/lib/hr-data"; 
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -56,8 +56,11 @@ export default function AttendancePage() {
   const [isLoadingState, setIsLoadingState] = React.useState(true);
   const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null);
   
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = React.useState(false);
+  const [isClearDataDialogOpen, setIsClearDataDialogOpen] = React.useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = React.useState('');
+  const [dialogClearMonth, setDialogClearMonth] = React.useState<string>('');
+  const [dialogClearYear, setDialogClearYear] = React.useState<number>(0);
+
 
   const [isEditAttendanceDialogOpen, setIsEditAttendanceDialogOpen] = React.useState(false);
   const [editingAttendanceEmployee, setEditingAttendanceEmployee] = React.useState<EmployeeAttendanceData | null>(null);
@@ -80,8 +83,27 @@ export default function AttendancePage() {
 
     setCurrentYear(defaultYear);
     setCurrentMonthName(defaultMonthName);
-    setSelectedYear(defaultYear);
-    setSelectedMonth(defaultMonthName);
+    
+    if (typeof window !== 'undefined') {
+        const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+        if (lastContextStr) {
+            try {
+                const lastContext = JSON.parse(lastContextStr);
+                setSelectedMonth(lastContext.month || defaultMonthName);
+                setSelectedYear(lastContext.year || defaultYear);
+            } catch (e) {
+                setSelectedMonth(defaultMonthName);
+                setSelectedYear(defaultYear);
+            }
+        } else {
+            setSelectedMonth(defaultMonthName);
+            setSelectedYear(defaultYear);
+        }
+    } else {
+        setSelectedMonth(defaultMonthName);
+        setSelectedYear(defaultYear);
+    }
+    
     setUploadMonth(defaultMonthName);
     setUploadYear(defaultYear);
     
@@ -95,7 +117,7 @@ export default function AttendancePage() {
         if (storedMaster) {
           setEmployeeMasterList(JSON.parse(storedMaster));
         } else {
-           setEmployeeMasterList(sampleEmployees); // Fallback to sample if nothing in local storage
+           setEmployeeMasterList(sampleEmployees); 
         }
       } catch (error) {
         console.error("Error loading employee master for attendance cross-check:", error);
@@ -177,8 +199,8 @@ export default function AttendancePage() {
         name: emp.name,
         designation: emp.designation,
         doj: emp.doj,
-        status: emp.status || "Active", // Default to Active if status is missing
-        division: emp.division || "N/A", // Default to N/A if division is missing
+        status: emp.status || "Active", 
+        division: emp.division || "N/A", 
         hq: emp.hq || "N/A",
         grossMonthlySalary: emp.grossMonthlySalary || 0,
       };
@@ -354,7 +376,7 @@ export default function AttendancePage() {
         setUploadedFileName(file.name);
         setSelectedMonth(uploadMonth); 
         setSelectedYear(uploadYear);
-        setSearchTerm(''); // Clear search on new upload
+        setSearchTerm(''); 
 
         let toastDescription = `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`;
         if (skippedDuplicateCount > 0) {
@@ -493,53 +515,62 @@ export default function AttendancePage() {
   };
 
   const triggerDeleteConfirmation = () => {
-    if (canDeleteCurrentData) {
-        setShowDeleteConfirmation(true);
-    } else {
-        toast({
-            title: "No Data to Clear",
-            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} to clear.`,
-            variant: "destructive"
-        });
-    }
+    setDialogClearMonth(''); 
+    setDialogClearYear(0);
+    setDeleteConfirmationText('');
+    setIsClearDataDialogOpen(true);
   };
 
   const confirmAndDeleteData = () => {
-    if (deleteConfirmationText === "DELETE" && selectedMonth && selectedYear > 0) {
-        const { rawDataKey, fileNameKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
+    if (deleteConfirmationText === "DELETE" && dialogClearMonth && dialogClearYear > 0) {
+        const { rawDataKey, fileNameKey } = getDynamicLocalStorageKeys(dialogClearMonth, dialogClearYear);
+        let dataExisted = false;
         if (rawDataKey && fileNameKey && typeof window !== 'undefined') {
-            try {
-              localStorage.removeItem(rawDataKey);
-              localStorage.removeItem(fileNameKey);
-              const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
-              if (lastContextStr) {
+            if (localStorage.getItem(rawDataKey)) dataExisted = true;
+            localStorage.removeItem(rawDataKey);
+            localStorage.removeItem(fileNameKey);
+            
+            const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+            if (lastContextStr) {
+              try {
                 const lastContext = JSON.parse(lastContextStr);
-                if (lastContext.month === selectedMonth && lastContext.year === selectedYear) {
+                if (lastContext.month === dialogClearMonth && lastContext.year === dialogClearYear) {
                   localStorage.removeItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
                 }
-              }
-            } catch (error) {
-                console.error("Error clearing attendance data from localStorage:", error);
+              } catch (e) { console.error("Error parsing last upload context for deletion:", e); }
             }
         }
-        setRawAttendanceData([]);
-        setProcessedAttendanceData([]);
-        setFilteredAttendanceData([]);
-        setUploadedFileName(null); 
-
-        toast({
-            title: "Data Cleared",
-            description: `Uploaded attendance data for ${selectedMonth} ${selectedYear} has been cleared.`,
-        });
+        
+        if (dialogClearMonth === selectedMonth && dialogClearYear === selectedYear) {
+            setRawAttendanceData([]);
+            setProcessedAttendanceData([]);
+            setFilteredAttendanceData([]);
+            setUploadedFileName(null); 
+        }
+        
+        if (dataExisted) {
+            toast({
+                title: "Data Cleared",
+                description: `Uploaded attendance data for ${dialogClearMonth} ${dialogClearYear} has been cleared.`,
+            });
+        } else {
+             toast({
+                title: "No Data Found",
+                description: `No uploaded data found for ${dialogClearMonth} ${dialogClearYear} to clear.`,
+                variant: "destructive"
+            });
+        }
     } else {
          toast({
             title: "Incorrect Confirmation or Missing Selection",
-            description: "The text you entered did not match 'DELETE' or month/year not selected. Data has not been cleared.",
+            description: "The text you entered did not match 'DELETE' or month/year not selected for deletion. Data has not been cleared.",
             variant: "destructive",
         });
     }
-    setShowDeleteConfirmation(false);
+    setIsClearDataDialogOpen(false);
     setDeleteConfirmationText('');
+    setDialogClearMonth('');
+    setDialogClearYear(0);
   };
   
   const handleOpenEditAttendanceDialog = (employeeCode: string) => {
@@ -579,7 +610,7 @@ export default function AttendancePage() {
       return emp;
     });
 
-    setRawAttendanceData(updatedRawAttendanceData); // This will trigger the useEffect for processedAttendanceData and then for filteredAttendanceData
+    setRawAttendanceData(updatedRawAttendanceData); 
 
     const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
     if (rawDataKey && typeof window !== 'undefined') {
@@ -600,7 +631,6 @@ export default function AttendancePage() {
   const daysInSelectedUploadMonth = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
-  const canDeleteCurrentData = !!(uploadedFileName && selectedMonth && selectedYear > 0 && rawAttendanceData.length > 0);
   const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-');
 
 
@@ -626,35 +656,72 @@ export default function AttendancePage() {
          <Button
             variant="destructive"
             onClick={triggerDeleteConfirmation}
-            disabled={!canDeleteCurrentData}
+            disabled={isLoadingState} 
         >
             <Trash2 className="mr-2 h-4 w-4" />
-            Clear Data for {selectedMonth && selectedYear > 0 ? `${selectedMonth} ${selectedYear}`: 'Current View'}
+            Clear Uploaded Data
         </Button>
       </PageHeader>
 
-      <AlertDialog open={showDeleteConfirmation} onOpenChange={setShowDeleteConfirmation}>
+      <AlertDialog open={isClearDataDialogOpen} onOpenChange={(isOpen) => {
+          setIsClearDataDialogOpen(isOpen);
+          if (!isOpen) {
+              setDeleteConfirmationText('');
+              setDialogClearMonth('');
+              setDialogClearYear(0);
+          }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>Clear Uploaded Attendance Data</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the uploaded attendance data for
-              <strong> {selectedMonth} {selectedYear}</strong> from this browser's storage.
-              <br />
-              Please type <strong>DELETE</strong> in the box below to confirm.
+              Select the month and year to permanently delete its uploaded attendance data. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
+            <Select value={dialogClearMonth} onValueChange={setDialogClearMonth}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Month to Clear" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dialogClearYear > 0 ? dialogClearYear.toString() : ""} onValueChange={(value) => setDialogClearYear(parseInt(value))}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Year to Clear" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {dialogClearMonth && dialogClearYear > 0 && (
+            <p className="text-sm text-muted-foreground mb-2">
+              You are about to delete data for <strong>{dialogClearMonth} {dialogClearYear}</strong>.
+              <br />
+              Please type <strong>DELETE</strong> in the box below to confirm.
+            </p>
+          )}
+          
           <Input
             value={deleteConfirmationText}
             onChange={(e) => setDeleteConfirmationText(e.target.value)}
             placeholder="Type DELETE to confirm"
             className="my-2"
+            disabled={!dialogClearMonth || dialogClearYear === 0}
           />
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteConfirmationText('')}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => {
+                setDeleteConfirmationText('');
+                setDialogClearMonth('');
+                setDialogClearYear(0);
+            }}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmAndDeleteData}
-              disabled={deleteConfirmationText !== "DELETE"}
+              disabled={deleteConfirmationText !== "DELETE" || !dialogClearMonth || dialogClearYear === 0}
               variant="destructive"
             >
               Delete
@@ -984,3 +1051,4 @@ export default function AttendancePage() {
   );
 }
 
+    
