@@ -26,7 +26,7 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v2"; // Updated key for new structure
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v2";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename_v2";
 const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v2";
 
@@ -117,14 +117,12 @@ export default function AttendancePage() {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-') };
       }
 
-      // Use a minimal EmployeeDetail for leave calculations, ensure DOJ is correct
       const employeeForLeaveCalc: EmployeeDetail = {
         id: emp.id,
         code: emp.code,
         name: emp.name,
         designation: emp.designation,
         doj: emp.doj,
-        // status and division are not strictly needed for leave calc but good to have
         status: emp.status, 
         division: emp.division
       };
@@ -208,7 +206,13 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(status => status.trim().toUpperCase() || 'A'); 
+          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(status => {
+            const trimmedUpperStatus = status.trim().toUpperCase();
+            if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
+              return 'A'; // Convert blank or hyphen to Absent
+            }
+            return trimmedUpperStatus;
+          }); 
 
           return {
             id: code, 
@@ -541,7 +545,7 @@ export default function AttendancePage() {
               <CardDescription>
                 Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
                 <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
-                <br/> '-' indicates the employee had not joined by the selected month/day or no data available for that day.
+                <br/> '-' indicates the employee had not joined by the selected month/day. Blank or '-' cells in uploaded file are treated as 'A'.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -739,6 +743,8 @@ export default function AttendancePage() {
     </>
   );
 }
+    
+
     
 
     
