@@ -28,10 +28,13 @@ const employeeFormSchema = z.object({
   designation: z.string().min(1, "Designation is required"),
   doj: z.string().refine((val) => {
     if (!val) return false;
+    // Attempt to parse, ensuring it's a valid date string accepted by `new Date()` and then `parseISO`
+    // HTML date input typically provides 'YYYY-MM-DD'
     try {
-      return isValid(parseISO(val));
+        const date = parseISO(val); // parseISO is strict about ISO 8601 format
+        return isValid(date);
     } catch {
-      return false;
+        return false;
     }
   }, { message: "Valid date (YYYY-MM-DD) is required"}),
   status: z.enum(["Active", "Left"], { required_error: "Status is required" }),
@@ -45,8 +48,9 @@ type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
-  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [isEmployeeFormOpen, setIsEmployeeFormOpen] = React.useState(false);
   const [isLoadingData, setIsLoadingData] = React.useState(true);
+  const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null);
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -94,16 +98,57 @@ export default function EmployeeMasterPage() {
   };
 
   const onSubmit = (values: EmployeeFormValues) => {
-    const newEmployee: EmployeeDetail = {
-      id: values.code, 
-      ...values,
-    };
-    const updatedEmployees = [...employees, newEmployee];
-    setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
-    toast({ title: "Employee Added", description: `${values.name} has been added to the master list.` });
-    setIsDialogOpen(false);
-    form.reset();
+    if (editingEmployeeId) {
+      // Edit existing employee
+      const updatedEmployees = employees.map(emp => 
+        emp.id === editingEmployeeId ? { ...emp, ...values, id: editingEmployeeId } : emp
+      );
+      setEmployees(updatedEmployees);
+      saveEmployeesToLocalStorage(updatedEmployees);
+      toast({ title: "Employee Updated", description: `${values.name}'s details have been updated.` });
+    } else {
+      // Add new employee
+      const newEmployee: EmployeeDetail = {
+        id: values.code, // Using code as ID for simplicity in prototype
+        ...values,
+      };
+      const updatedEmployees = [...employees, newEmployee];
+      setEmployees(updatedEmployees);
+      saveEmployeesToLocalStorage(updatedEmployees);
+      toast({ title: "Employee Added", description: `${values.name} has been added to the master list.` });
+    }
+    setIsEmployeeFormOpen(false);
+    setEditingEmployeeId(null);
+    form.reset(); // Reset form to default values
+  };
+
+  const handleAddNewEmployee = () => {
+    setEditingEmployeeId(null); // Ensure we are in "add" mode
+    form.reset(); // Reset form to default values for a new entry
+    setIsEmployeeFormOpen(true);
+  };
+
+  const handleEditEmployee = (employeeId: string) => {
+    const employeeToEdit = employees.find(emp => emp.id === employeeId);
+    if (employeeToEdit) {
+      setEditingEmployeeId(employeeId);
+      form.reset(employeeToEdit); // Pre-fill form with employee data
+      setIsEmployeeFormOpen(true);
+    }
+  };
+
+  const handleDeleteEmployee = (employeeId: string) => {
+    const employeeToDelete = employees.find(emp => emp.id === employeeId);
+    if (confirm(`Are you sure you want to delete ${employeeToDelete?.name || `Employee ID ${employeeId}`}?`)) {
+        const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
+        setEmployees(updatedEmployees);
+        saveEmployeesToLocalStorage(updatedEmployees);
+        toast({
+          title: "Employee Removed",
+          description: `${employeeToDelete?.name || `Employee ID ${employeeId}`} has been removed from the list.`,
+          variant: "destructive"
+        });
+    }
   };
 
   const handleUploadEmployees = (file: File) => {
@@ -150,11 +195,21 @@ export default function EmployeeMasterPage() {
             console.warn(`Skipping row ${rowIndex + 1} due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
             return null;
           }
-          // Basic check for DOJ format from CSV, assuming YYYY-MM-DD. More robust validation can be added.
           let formattedDoj = doj;
           if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
-             console.warn(`Row ${rowIndex + 1}: DOJ "${doj}" is not in YYYY-MM-DD format. Attempting to parse. Consider standardizing input.`);
-             // Attempt to parse common formats or set as invalid. For now, keep original for parseISO to handle.
+             console.warn(`Row ${rowIndex + 1}: DOJ "${doj}" is not in YYYY-MM-DD format. Attempting to parse or standardize.`);
+             // For this prototype, we'll try to make sure it's acceptable to parseISO or date input
+             // A more robust solution would involve date-fns parse with format strings if formats vary
+             try {
+                const d = new Date(doj); // Try to parse it flexibly
+                if (isValid(d)) {
+                    formattedDoj = format(d, 'yyyy-MM-dd');
+                } else {
+                    console.warn(`Could not reliably parse DOJ "${doj}" for row ${rowIndex + 1}. Keeping original.`);
+                }
+             } catch {
+                console.warn(`Error parsing DOJ "${doj}" for row ${rowIndex + 1}. Keeping original.`);
+             }
           }
 
 
@@ -180,7 +235,7 @@ export default function EmployeeMasterPage() {
         saveEmployeesToLocalStorage(newEmployees);
         toast({
           title: "Employees Uploaded",
-          description: `${newEmployees.length} employee records processed from ${file.name}.`,
+          description: `${newEmployees.length} employee records processed from ${file.name}. Existing data has been replaced.`,
         });
 
       } catch (error) {
@@ -214,26 +269,6 @@ export default function EmployeeMasterPage() {
     toast({ title: "Template Downloaded", description: "employee_master_template.csv downloaded." });
   };
 
-
-  const handleEditEmployee = (employeeId: string) => {
-    toast({
-      title: "Prototype Action",
-      description: `Editing employee ${employeeId} is not yet implemented.`,
-    });
-  };
-
-  const handleDeleteEmployee = (employeeId: string) => {
-    const employeeToDelete = employees.find(emp => emp.id === employeeId);
-    const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
-    setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
-    toast({
-      title: "Employee Removed",
-      description: `${employeeToDelete?.name || `Employee ID ${employeeId}`} has been removed from the list.`,
-      variant: "destructive"
-    });
-  };
-
   if (isLoadingData) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -248,24 +283,30 @@ export default function EmployeeMasterPage() {
         title="Employee Master"
         description="View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, Gross Salary."
       >
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
+            setIsEmployeeFormOpen(isOpen);
+            if (!isOpen) { // If dialog is closing
+                setEditingEmployeeId(null); // Reset editing state
+                form.reset(); // Clear form
+            }
+        }}>
           <DialogTrigger asChild>
-            <Button variant="outline" title="Add a new employee to the master list">
+            <Button variant="outline" onClick={handleAddNewEmployee} title="Add a new employee to the master list">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[525px]">
             <DialogHeader>
-              <DialogTitle>Add New Employee</DialogTitle>
+              <DialogTitle>{editingEmployeeId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
               <DialogDescription>
-                Fill in the details for the new employee. Click save when you're done.
+                {editingEmployeeId ? "Update the details for this employee." : "Fill in the details for the new employee. Click save when you're done."}
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
                  <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="code" render={({ field }) => (
-                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem> /* Disable code edit for existing */
                     )} />
                     <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -279,7 +320,7 @@ export default function EmployeeMasterPage() {
                     <FormField control={form.control} name="status" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                             <FormControl>
                             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                             </FormControl>
@@ -304,7 +345,9 @@ export default function EmployeeMasterPage() {
                  </fieldset>
                 <DialogFooter>
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit" title="Save this new employee">Save Employee</Button>
+                  <Button type="submit" title={editingEmployeeId ? "Update this employee's details" : "Save this new employee"}>
+                    {editingEmployeeId ? "Update Employee" : "Save Employee"}
+                  </Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -363,15 +406,12 @@ export default function EmployeeMasterPage() {
                       if (employee.doj && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.doj);
-                          // Check if parseISO resulted in a valid date
                           if (!isValid(parsedDate)) { 
-                            // console.warn(`Invalid DOJ string encountered: ${employee.doj}`);
-                            return employee.doj; // Show original string if parseISO deems it invalid
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          // console.warn(`Error formatting DOJ: ${employee.doj}`, e);
-                          return employee.doj; // Show original string if any error during parsing/formatting
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -402,7 +442,4 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-
-    
-
     
