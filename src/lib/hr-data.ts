@@ -7,8 +7,9 @@ export interface EmployeeDetail {
   name: string;
   designation: string;
   doj: string; // YYYY-MM-DD
-  status?: string; // New: Active/Left
-  division?: string; // New: e.g., Tech, HR
+  status: "Active" | "Left"; // Changed to specific values
+  division: string; 
+  grossMonthlySalary: number;
 }
 
 export interface LeaveHistoryEntry {
@@ -22,11 +23,11 @@ export interface LeaveHistoryEntry {
 }
 
 export const sampleEmployees: EmployeeDetail[] = [
-  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15", status: "Active", division: "Technology" },
-  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20", status: "Active", division: "Management" },
-  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01", status: "Active", division: "Design" },
-  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05", status: "Active", division: "Analytics" },
-  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01", status: "Left", division: "Technology" },
+  { id: "E001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2023-01-15", status: "Active", division: "Technology", grossMonthlySalary: 75000 },
+  { id: "E002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2024-03-20", status: "Active", division: "Management", grossMonthlySalary: 90000 },
+  { id: "E003", code: "E003", name: "Mike Johnson", designation: "UI/UX Designer", doj: "2022-10-01", status: "Active", division: "Design", grossMonthlySalary: 65000 },
+  { id: "E004", code: "E004", name: "Alice Brown", designation: "Data Analyst", doj: "2024-06-05", status: "Active", division: "Analytics", grossMonthlySalary: 70000 },
+  { id: "E005", code: "E005", name: "Bob Williams", designation: "QA Engineer", doj: "2023-08-01", status: "Left", division: "Technology", grossMonthlySalary: 60000 },
 ];
 
 export const sampleLeaveHistory: LeaveHistoryEntry[] = [
