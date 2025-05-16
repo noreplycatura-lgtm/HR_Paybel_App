@@ -10,104 +10,44 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { differenceInMonths, parseISO, format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail, type LeaveHistoryEntry } from "@/lib/hr-data";
+import { calculateMonthsOfService, calculateAllLeaveBalancesForEmployee } from "@/lib/hr-calculations";
+import type { LeaveBalanceItem } from "@/lib/hr-types";
 
-interface LeaveBalance {
-  type: 'CL' | 'SL' | 'PL';
-  accrued: number;
-  used: number;
-  balance: number;
-  eligible?: boolean; // For PL
-}
-
-interface EmployeeDetail {
-  id: string;
-  name: string;
-  doj: string; // YYYY-MM-DD
-}
-
-interface LeaveHistoryEntry {
-  id: string;
-  employeeId: string; 
-  employeeName: string;
-  leaveType: 'CL' | 'SL' | 'PL';
-  startDate: string;
-  endDate: string;
-  days: number;
-}
-
-const sampleEmployeesWithDoj: EmployeeDetail[] = [
-  { id: "E001", name: "John Doe", doj: "2023-01-15" },
-  { id: "E002", name: "Jane Smith", doj: "2024-03-20" }, 
-  { id: "E003", name: "Mike Johnson", doj: "2022-10-01" },
-  { id: "E004", name: "Alice Brown", doj: "2024-06-05" }, 
-];
-
-const sampleLeaveHistory: LeaveHistoryEntry[] = [
-  { id: "L001", employeeId: "E001", employeeName: "John Doe", leaveType: "PL", startDate: "2024-07-10", endDate: "2024-07-11", days: 2 },
-  { id: "L002", employeeId: "E002", employeeName: "Jane Smith", leaveType: "SL", startDate: "2024-07-15", endDate: "2024-07-15", days: 1 },
-  { id: "L003", employeeId: "E003", employeeName: "Mike Johnson", leaveType: "CL", startDate: "2024-07-20", endDate: "2024-07-20", days: 1 },
-  { id: "L004", employeeId: "E001", employeeName: "John Doe", leaveType: "CL", startDate: "2024-06-05", endDate: "2024-06-05", days: 1 },
-  { id: "L005", employeeId: "E003", employeeName: "Mike Johnson", leaveType: "SL", startDate: "2024-05-10", endDate: "2024-05-10", days: 0.5 },
-  { id: "L006", employeeId: "E001", employeeName: "John Doe", leaveType: "SL", startDate: "2024-04-01", endDate: "2024-04-01", days: 1 },
-];
-
-const calculateMonthsOfService = (dojString: string, referenceDate: Date = new Date()): number => {
-  const doj = parseISO(dojString);
-  const months = differenceInMonths(referenceDate, doj);
-  return Math.max(0, months); 
-};
 
 export default function LeavePage() {
   const { toast } = useToast();
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | undefined>();
-  const [calculatedLeaveBalances, setCalculatedLeaveBalances] = React.useState<LeaveBalance[]>([]);
+  const [calculatedLeaveBalances, setCalculatedLeaveBalances] = React.useState<LeaveBalanceItem[]>([]);
   const [filteredLeaveHistory, setFilteredLeaveHistory] = React.useState<LeaveHistoryEntry[]>([]);
   const [currentEmployee, setCurrentEmployee] = React.useState<EmployeeDetail | undefined>();
+  const [monthsCompleted, setMonthsCompleted] = React.useState(0);
+
 
   React.useEffect(() => {
     if (selectedEmployeeId) {
-      const employee = sampleEmployeesWithDoj.find(emp => emp.id === selectedEmployeeId);
+      const employee = sampleEmployees.find(emp => emp.id === selectedEmployeeId);
       setCurrentEmployee(employee);
 
       if (employee) {
-        const currentDate = new Date(); 
-        const completedMonths = calculateMonthsOfService(employee.doj, currentDate);
-
-        const accruedCL = completedMonths * 0.6;
-        const accruedSL = completedMonths * 0.6;
+        const today = new Date();
+        setMonthsCompleted(calculateMonthsOfService(employee.doj, today));
         
-        let accruedPL = 0;
-        const plEligible = completedMonths >= 6;
-        if (plEligible) {
-          accruedPL = (completedMonths - 5) * 1.2;
-        }
+        const balances = calculateAllLeaveBalancesForEmployee(employee, sampleLeaveHistory, today);
 
-        const usedCL = sampleLeaveHistory
-          .filter(h => h.employeeId === selectedEmployeeId && h.leaveType === 'CL')
-          .reduce((sum, h) => sum + h.days, 0);
-        const usedSL = sampleLeaveHistory
-          .filter(h => h.employeeId === selectedEmployeeId && h.leaveType === 'SL')
-          .reduce((sum, h) => sum + h.days, 0);
-        const usedPL = sampleLeaveHistory
-          .filter(h => h.employeeId === selectedEmployeeId && h.leaveType === 'PL')
-          .reduce((sum, h) => sum + h.days, 0);
-
-        setCalculatedLeaveBalances([
-          { type: 'CL', accrued: accruedCL, used: usedCL, balance: Math.max(0, accruedCL - usedCL) },
-          { type: 'SL', accrued: accruedSL, used: usedSL, balance: Math.max(0, accruedSL - usedSL) },
-          { type: 'PL', accrued: accruedPL, used: usedPL, balance: Math.max(0, accruedPL - usedPL), eligible: plEligible },
-        ]);
-
-        setFilteredLeaveHistory(sampleLeaveHistory.filter(h => h.employeeId === selectedEmployeeId));
+        setCalculatedLeaveBalances([balances.CL, balances.SL, balances.PL]);
+        setFilteredLeaveHistory(sampleLeaveHistory.filter(h => h.employeeId === selectedEmployeeId).sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()));
       } else {
         setCalculatedLeaveBalances([]);
         setFilteredLeaveHistory([]);
+        setMonthsCompleted(0);
       }
     } else {
       setCurrentEmployee(undefined);
       setCalculatedLeaveBalances([]);
       setFilteredLeaveHistory([]);
+      setMonthsCompleted(0);
     }
   }, [selectedEmployeeId]);
 
@@ -172,8 +112,8 @@ export default function LeavePage() {
                     <SelectValue placeholder="Select an employee to view leave details" />
                 </SelectTrigger>
                 <SelectContent>
-                    {sampleEmployeesWithDoj.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</SelectItem>
+                    {sampleEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>
                     ))}
                 </SelectContent>
             </Select>
@@ -183,8 +123,8 @@ export default function LeavePage() {
       {selectedEmployeeId && currentEmployee ? (
         <>
           <div className="mb-4 text-lg font-semibold">
-            Leave Balances for: {currentEmployee.name} (DOJ: {new Date(currentEmployee.doj).toLocaleDateString()})
-            ({calculateMonthsOfService(currentEmployee.doj)} months completed)
+            Leave Balances for: {currentEmployee.name} (DOJ: {currentEmployee.doj ? new Date(currentEmployee.doj).toLocaleDateString() : 'N/A'})
+            ({monthsCompleted} months completed)
           </div>
           <div className="grid gap-6 md:grid-cols-3 mb-6">
             {calculatedLeaveBalances.map(leave => (
@@ -204,7 +144,7 @@ export default function LeavePage() {
                 <CardContent>
                   <p className="text-xs text-muted-foreground">
                     {leave.type === 'PL' && "Paid Leaves carry forward. Eligible after 6 months."}
-                    {(leave.type === 'CL' || leave.type === 'SL') && `${leave.type} reset at year end.`}
+                    {(leave.type === 'CL' || leave.type === 'SL') && `${leave.type} reset at year end (policy not yet implemented).`}
                   </p>
                 </CardContent>
               </Card>
@@ -258,5 +198,3 @@ export default function LeavePage() {
     </>
   );
 }
-
-    
