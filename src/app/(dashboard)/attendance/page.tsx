@@ -231,6 +231,22 @@ export default function AttendancePage() {
         return;
       }
 
+      // Filename validation
+      const fileNameLower = file.name.toLowerCase();
+      const uploadMonthLower = uploadMonth.toLowerCase();
+      const uploadYearStr = uploadYear.toString();
+
+      if (!fileNameLower.includes(uploadMonthLower) || !fileNameLower.includes(uploadYearStr)) {
+        toast({
+          title: "Filename Mismatch",
+          description: `The filename '${file.name}' does not seem to correspond to the selected period '${uploadMonth} ${uploadYear}'. Please ensure the filename contains both the month name (e.g., '${uploadMonthLower}') and the year (e.g., '${uploadYearStr}').`,
+          variant: "destructive",
+          duration: 9000,
+        });
+        return;
+      }
+
+
       try {
         const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
         if (lines.length < 2) {
