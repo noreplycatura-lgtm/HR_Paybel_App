@@ -12,15 +12,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Download, Edit, PlusCircle, Trash2 } from "lucide-react";
+import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import type { LeaveApplication, LeaveType } from "@/lib/hr-types";
+import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
+// Placeholder key for future opening balance storage
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -47,7 +51,6 @@ export default function LeavePage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
 
-  // State for Edit Leave Dialog
   const [isEditLeaveDialogOpen, setIsEditLeaveDialogOpen] = React.useState(false);
   const [editingEmployeeForLeave, setEditingEmployeeForLeave] = React.useState<EmployeeDetail | null>(null);
   const [newLeaveType, setNewLeaveType] = React.useState<LeaveType>('CL');
@@ -153,11 +156,13 @@ export default function LeavePage() {
     }
     const monthIndex = months.indexOf(selectedMonth);
     const leaveStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
-    // Ensure end date doesn't exceed month end - this is a simplification
-    const tentativeEndDate = dateFnsAddDays(leaveStartDate, newLeaveDays - 1);
-    const monthEndDate = dateFnsAddDays(startOfMonth(dateFnsAddDays(leaveStartDate, 35)), -1); // Approx end of month
-    const actualEndDate = isBefore(tentativeEndDate, monthEndDate) ? tentativeEndDate : monthEndDate;
-    const actualLeaveDays = differenceInCalendarDays(actualEndDate, leaveStartDate) + 1;
+    
+    const monthEndDate = endOfMonth(leaveStartDate);
+    let tentativeEndDate = dateFnsAddDays(leaveStartDate, newLeaveDays - 1);
+    if (isBefore(monthEndDate, tentativeEndDate)) {
+        tentativeEndDate = monthEndDate;
+    }
+    const actualLeaveDays = differenceInCalendarDays(tentativeEndDate, leaveStartDate) + 1;
 
 
     const newApp: LeaveApplication = {
@@ -165,15 +170,15 @@ export default function LeavePage() {
       employeeId: editingEmployeeForLeave.id,
       leaveType: newLeaveType,
       startDate: format(leaveStartDate, 'yyyy-MM-dd'),
-      endDate: format(actualEndDate, 'yyyy-MM-dd'),
-      days: actualLeaveDays, // Use actual days within the month
+      endDate: format(tentativeEndDate, 'yyyy-MM-dd'),
+      days: actualLeaveDays, 
     };
 
     const updatedApplications = [...leaveApplications, newApp];
     setLeaveApplications(updatedApplications);
     localStorage.setItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(updatedApplications));
-    toast({ title: "Leave Added", description: `${newLeaveType} for ${actualLeaveDays} day(s) added for ${editingEmployeeForLeave.name}.` });
-    setNewLeaveDays(1); // Reset form
+    toast({ title: "Leave Added", description: `${newLeaveType} for ${actualLeaveDays} day(s) added for ${editingEmployeeForLeave.name} in ${selectedMonth} ${selectedYear}.` });
+    setNewLeaveDays(1);
   };
 
   const handleRemoveLeaveApplication = (appId: string) => {
@@ -245,7 +250,7 @@ export default function LeavePage() {
         emp.usedPLInMonth.toFixed(1),
         emp.balanceCLAtMonthEnd.toFixed(1),
         emp.balanceSLAtMonthEnd.toFixed(1),
-        emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "0.0",
+        emp.balancePLAtMonthEnd.toFixed(1), // PL balance is always shown now
         emp.isPLEligibleThisMonth ? 'Yes' : 'No'
       ];
       csvRows.push(row);
@@ -269,10 +274,37 @@ export default function LeavePage() {
       description: `Leave summary report for selected employees (${selectedMonth} ${selectedYear}) is being downloaded.`,
     });
   };
+
+  const handleOpeningBalanceUpload = (file: File) => {
+    toast({
+      title: "File Received for Opening Balances",
+      description: `${file.name} has been received. (Prototype: Actual data processing and integration with calculations is not yet implemented.)`,
+      duration: 7000,
+    });
+  };
+
+  const handleDownloadOpeningBalanceTemplate = () => {
+    const headers = ["EmployeeCode", "OpeningCL", "OpeningSL", "OpeningPL", "FinancialYearStart"];
+    const sampleData = [
+        ["E001", "2.0", "3.0", "5.0", "2024"],
+        ["E002", "1.5", "2.5", "10.0", "2024"],
+    ];
+    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `opening_leave_balance_template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Template Downloaded", description: "opening_leave_balance_template.csv downloaded." });
+  };
   
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
-  const isAllSelected = displayData.length > 0 && selectedEmployeeIds.size === displayData.length;
-  const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < displayData.length;
+  const isAllSelected = displayData.length > 0 && selectedEmployeeIds.size === displayData.filter(emp => emp.status === "Active").length;
+  const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < displayData.filter(emp => emp.status === "Active").length;
 
   const applicationsForDialog = editingEmployeeForLeave && selectedMonth && selectedYear ? 
     leaveApplications.filter(app => {
@@ -298,6 +330,17 @@ export default function LeavePage() {
         title="Leave Management Dashboard"
         description="View employee leave balances. CL/SL (0.6/month after 5 months service) reset Apr-Mar; PL (1.2/month after 5 months service) carries forward."
       >
+        <FileUploadButton
+            onFileUpload={handleOpeningBalanceUpload}
+            buttonText="Upload Opening Balances (CSV)"
+            acceptedFileTypes=".csv"
+            icon={<Upload className="mr-2 h-4 w-4" />}
+            title="Upload CSV with opening leave balances for employees"
+        />
+        <Button onClick={handleDownloadOpeningBalanceTemplate} variant="link" className="p-0 h-auto">
+            <Download className="mr-2 h-4 w-4" />
+            Download Opening Balance Template (CSV)
+        </Button>
          <Button onClick={handleDownloadReport} variant="outline" disabled={selectedEmployeeIds.size === 0}>
             <Download className="mr-2 h-4 w-4" />
             Download Report for Selected (CSV)
@@ -404,7 +447,7 @@ export default function LeavePage() {
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
-            <br/>Only 'Active' employees are shown. The 'Eligible Accrual' column indicates if an employee has completed 5 months of service and is eligible for leave accrual.
+            <br/>Only 'Active' employees are shown. 'Eligible Accrual' column indicates completion of 5 months service.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -473,6 +516,8 @@ export default function LeavePage() {
                                 if (parseInt(parts[2]) > 1000) { 
                                      reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
                                      if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
+                                } else if (parseInt(parts[0]) > 1000) { // Handle YYYY-DD-MM or YYYY-MM-DD
+                                     reparsedDate = parseISO(`${parts[0]}-${parts[1]}-${parts[2]}`);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
@@ -491,7 +536,7 @@ export default function LeavePage() {
                   <TableCell className="text-center">{emp.usedPLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceCLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceSLAtMonthEnd.toFixed(1)}</TableCell>
-                  <TableCell className="text-center font-semibold">{emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "0.0"}</TableCell>
+                  <TableCell className="text-center font-semibold">{emp.balancePLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center">{emp.isPLEligibleThisMonth ? 'Yes' : 'No'}</TableCell>
                 </TableRow>
               )) : (
@@ -510,5 +555,6 @@ export default function LeavePage() {
     </>
   );
 }
+
 
     
