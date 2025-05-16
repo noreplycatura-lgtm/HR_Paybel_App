@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
@@ -44,7 +45,6 @@ export default function AttendancePage() {
     setSelectedYear(year);
     setSelectedMonth(monthName);
 
-    // Only generate sample attendance patterns if no file has been "uploaded"
     if (uploadedFileName) {
       setIsLoading(false);
       return;
@@ -56,11 +56,11 @@ export default function AttendancePage() {
     }));
     setRawAttendanceData(initialAttendanceData);
     setIsLoading(false);
-  }, [uploadedFileName]); // Depend on uploadedFileName
+  }, [uploadedFileName]);
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth) {
-      setProcessedAttendanceData([]); 
+      setProcessedAttendanceData([]);
       return;
     }
 
@@ -119,8 +119,7 @@ export default function AttendancePage() {
       description: `${file.name} has been received. Simulating data processing. (Actual Excel parsing and data update from the file are not implemented in this prototype).`,
     });
     setUploadedFileName(file.name);
-    setRawAttendanceData([]); // Clear existing data to simulate replacement
-    // Processed data will be cleared by the useEffect above
+    setRawAttendanceData([]); 
   };
 
   const handleDownloadReport = () => {
@@ -130,189 +129,225 @@ export default function AttendancePage() {
       variant: "default",
     });
   };
+
+  const handleDownloadSampleTemplate = () => {
+    toast({
+      title: "Feature Not Implemented",
+      description: "Sample Excel template download is not yet available.",
+      variant: "default",
+    });
+  };
   
   const daysInMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
 
-
   return (
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
-        <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance (Excel)" />
         <Button variant="outline" onClick={handleDownloadReport}>
             <Download className="mr-2 h-4 w-4" />
             Download Report
         </Button>
       </PageHeader>
 
-      <Card className="mb-6 shadow-md">
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-          {isLoading && !selectedMonth ? ( // Show skeleton if isLoading and selectedMonth is not set yet
-            <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
-          ) : (
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Select Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {isLoading && selectedYear === 0 ? ( // Show skeleton if isLoading and selectedYear is not set
-             <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
-          ) : (
-            <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
-              <SelectTrigger className="w-full sm:w-[120px]">
-                <SelectValue placeholder="Select Year" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
-          <Select>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Select Division" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tech">Technology</SelectItem>
-              <SelectItem value="hr">Human Resources</SelectItem>
-              <SelectItem value="sales">Sales</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button>
-            <Filter className="mr-2 h-4 w-4" /> Apply Filters
-          </Button>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="view" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:w-[450px]">
+          <TabsTrigger value="view">View & Filter Attendance</TabsTrigger>
+          <TabsTrigger value="upload">Upload Attendance Data</TabsTrigger>
+        </TabsList>
+        <TabsContent value="view">
+          <Card className="my-6 shadow-md">
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+              <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
+              {isLoading && !selectedMonth ? (
+                <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
+              ) : (
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {isLoading && selectedYear === 0 ? (
+                 <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
+              ) : (
+                <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+                  <SelectTrigger className="w-full sm:w-[120px]">
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
+              <Select>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select Division" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tech">Technology</SelectItem>
+                  <SelectItem value="hr">Human Resources</SelectItem>
+                  <SelectItem value="sales">Sales</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button>
+                <Filter className="mr-2 h-4 w-4" /> Apply Filters
+              </Button>
+            </CardContent>
+          </Card>
 
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
-          <CardDescription>
-            Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
-            <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
-            <br/> '-' indicates the employee had not joined by the selected month/day.
-            <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth > 0 ? daysInMonth : 'current month'}).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-         {(() => {
-            if (uploadedFileName && rawAttendanceData.length === 0 && !isLoading) {
-              return (
-                <div className="text-center py-8 text-muted-foreground">
-                  Attempting to process attendance from '{uploadedFileName}'.<br />
-                  (Full Excel parsing and display from file is not yet implemented in this prototype.)
-                </div>
-              );
-            }
-            if (isLoading || !selectedMonth || !selectedYear) {
-              return (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading initial data or select month/year to view records...
-                </div>
-              );
-            }
-            if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
-                 return <div className="text-center py-8 text-muted-foreground">Processing attendance data...</div>;
-            }
-            if (processedAttendanceData.length > 0 && daysInMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
-              return (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[80px]">Code</TableHead>
-                      <TableHead className="min-w-[150px]">Name</TableHead>
-                      <TableHead className="min-w-[150px]">Designation</TableHead>
-                      <TableHead className="min-w-[100px]">DOJ</TableHead>
-                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
-                        <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
-                      ))}
-                       <TableHead className="text-center min-w-[100px]">Working Days (P)</TableHead>
-                       <TableHead className="text-center min-w-[100px]">Absent-1 (A)</TableHead>
-                       <TableHead className="text-center min-w-[110px]">Absent-2 (A+HD)</TableHead>
-                       <TableHead className="text-center min-w-[100px]">Weekoff (W)</TableHead>
-                       <TableHead className="text-center min-w-[100px]">Total CL (Used)</TableHead>
-                       <TableHead className="text-center min-w-[100px]">Total PL (Used)</TableHead>
-                       <TableHead className="text-center min-w-[100px]">Total SL (Used)</TableHead>
-                       <TableHead className="text-center min-w-[110px]">Paid Holiday (PH)</TableHead>
-                       <TableHead className="text-center min-w-[130px]">Total Days (Month)</TableHead>
-                       <TableHead className="text-center min-w-[120px]">Paid Days</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {processedAttendanceData.map((emp) => {
-                      if (!emp.processedAttendance) { 
-                        return <TableRow key={emp.id}><TableCell colSpan={daysInMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
-                      }
-                      const finalAttendanceToUse = emp.processedAttendance;
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
+              <CardDescription>
+                Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
+                <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
+                <br/> '-' indicates the employee had not joined by the selected month/day.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+            {(() => {
+                if (uploadedFileName && rawAttendanceData.length === 0 && !isLoading) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Attempting to process attendance from '{uploadedFileName}'.<br />
+                      (Full Excel parsing and display from file is not yet implemented in this prototype.)
+                    </div>
+                  );
+                }
+                if (isLoading || !selectedMonth || !selectedYear) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading initial data or select month/year to view records...
+                    </div>
+                  );
+                }
+                if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
+                    return <div className="text-center py-8 text-muted-foreground">Processing attendance data...</div>;
+                }
+                if (processedAttendanceData.length > 0 && daysInMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
+                  return (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[80px]">Code</TableHead>
+                          <TableHead className="min-w-[150px]">Name</TableHead>
+                          <TableHead className="min-w-[150px]">Designation</TableHead>
+                          <TableHead className="min-w-[100px]">DOJ</TableHead>
+                          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+                            <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
+                          ))}
+                          <TableHead className="text-center min-w-[100px]">Working Days (P)</TableHead>
+                          <TableHead className="text-center min-w-[100px]">Absent-1 (A)</TableHead>
+                          <TableHead className="text-center min-w-[110px]">Absent-2 (A+HD)</TableHead>
+                          <TableHead className="text-center min-w-[100px]">Weekoff (W)</TableHead>
+                          <TableHead className="text-center min-w-[100px]">Total CL (Used)</TableHead>
+                          <TableHead className="text-center min-w-[100px]">Total PL (Used)</TableHead>
+                          <TableHead className="text-center min-w-[100px]">Total SL (Used)</TableHead>
+                          <TableHead className="text-center min-w-[110px]">Paid Holiday (PH)</TableHead>
+                          <TableHead className="text-center min-w-[130px]">Total Days (Month)</TableHead>
+                          <TableHead className="text-center min-w-[120px]">Paid Days</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {processedAttendanceData.map((emp) => {
+                          if (!emp.processedAttendance) { 
+                            return <TableRow key={emp.id}><TableCell colSpan={daysInMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
+                          }
+                          const finalAttendanceToUse = emp.processedAttendance;
 
-                      const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
-                      const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
-                      const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
-                      const absent2AHd = absent1A + (halfDays * 0.5); 
-                      const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
-                      const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
-                      const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
-                      const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
-                      const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
-                      const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
+                          const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
+                          const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
+                          const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
+                          const absent2AHd = absent1A + (halfDays * 0.5); 
+                          const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
+                          const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
+                          const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
+                          const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
+                          const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
+                          const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
 
-                      const totalDaysCalculated = daysInMonth - notJoinedDays; 
-                      const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
-                      
-                      return (
-                      <TableRow key={emp.id}>
-                        <TableCell>{emp.code}</TableCell>
-                        <TableCell>{emp.name}</TableCell>
-                        <TableCell>{emp.designation}</TableCell>
-                        <TableCell>{emp.doj}</TableCell>
-                        {finalAttendanceToUse.map((status, index) => (
-                          <TableCell key={index} className="text-center">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ATTENDANCE_STATUS_COLORS[status] || 'bg-gray-200 text-gray-800'}`}>
-                              {status}
-                            </span>
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-center font-semibold">{workingDaysP}</TableCell>
-                        <TableCell className="text-center font-semibold">{absent1A}</TableCell>
-                        <TableCell className="text-center font-semibold">{absent2AHd.toFixed(1)}</TableCell>
-                        <TableCell className="text-center font-semibold">{weekOffsW}</TableCell>
-                        <TableCell className="text-center font-semibold">{totalCLUsed}</TableCell>
-                        <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
-                        <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
-                        <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
-                        <TableCell className="text-center font-semibold">{totalDaysCalculated < 0 ? 0 : totalDaysCalculated}</TableCell>
-                        <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>
-                      </TableRow>
-                    )})}
-                  </TableBody>
-                  <TableFooter>
-                    <TableRow>
-                      <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
-                      <TableCell colSpan={daysInMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
-                    </TableRow>
-                  </TableFooter>
-                </Table>
-              );
-            }
-            return (
-              <div className="text-center py-8 text-muted-foreground">
-                No attendance data available for the selected month and year.
+                          const totalDaysCalculated = daysInMonth - notJoinedDays; 
+                          const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+                          
+                          return (
+                          <TableRow key={emp.id}>
+                            <TableCell>{emp.code}</TableCell>
+                            <TableCell>{emp.name}</TableCell>
+                            <TableCell>{emp.designation}</TableCell>
+                            <TableCell>{emp.doj}</TableCell>
+                            {finalAttendanceToUse.map((status, index) => (
+                              <TableCell key={index} className="text-center">
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ATTENDANCE_STATUS_COLORS[status] || 'bg-gray-200 text-gray-800'}`}>
+                                  {status}
+                                </span>
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-center font-semibold">{workingDaysP}</TableCell>
+                            <TableCell className="text-center font-semibold">{absent1A}</TableCell>
+                            <TableCell className="text-center font-semibold">{absent2AHd.toFixed(1)}</TableCell>
+                            <TableCell className="text-center font-semibold">{weekOffsW}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalCLUsed}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
+                            <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalDaysCalculated < 0 ? 0 : totalDaysCalculated}</TableCell>
+                            <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>
+                          </TableRow>
+                        )})}
+                      </TableBody>
+                      <TableFooter>
+                        <TableRow>
+                          <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
+                          <TableCell colSpan={daysInMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
+                        </TableRow>
+                      </TableFooter>
+                    </Table>
+                  );
+                }
+                return (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No attendance data available for the selected month and year.
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="upload">
+          <Card className="my-6 shadow-md">
+            <CardHeader>
+              <CardTitle>Upload Attendance Data</CardTitle>
+              <CardDescription>
+                Upload an Excel file with employee attendance.
+                <br/>Expected columns: Code, Name, Designation, DOJ, and daily status columns (e.g., 1 to {daysInMonth > 0 ? daysInMonth : '31'}).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance Excel" />
+                <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto">
+                  <Download className="mr-2 h-4 w-4" /> Download Sample Template
+                </Button>
               </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
+               {uploadedFileName && (
+                <p className="text-sm text-muted-foreground">
+                  Last uploaded: {uploadedFileName}. (Data processing is simulated in prototype)
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
-
 
     
