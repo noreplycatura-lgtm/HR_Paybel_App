@@ -213,7 +213,7 @@ export default function AttendancePage() {
 
         const dataRows = lines.slice(1);
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
-        const expectedBaseColumns = 8;
+        const expectedBaseColumns = 7; // Status, Division, Code, Name, Designation, HQ, DOJ
 
         const newAttendanceData: EmployeeAttendanceData[] = dataRows.map((row, rowIndex) => {
           const values = row.split(',');
@@ -228,7 +228,9 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const hq = values[5]?.trim() || "N/A";
           const doj = values[6]?.trim() || new Date().toISOString().split('T')[0];
-          const grossMonthlySalary = parseFloat(values[7]?.trim()) || 0;
+          
+          // Gross Monthly Salary is not expected in attendance upload, set to 0 or fetch from master later.
+          const grossMonthlySalary = 0; 
 
 
           const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusValue => {
@@ -322,7 +324,7 @@ export default function AttendancePage() {
     const csvRows: string[][] = [];
 
     const headers = [
-      "Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "GrossSalary",
+      "Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
       ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
       "Working Days (P)", "Absent-1 (A)", "Absent-2 (A+HD)", "Weekoff (W)",
       "Total CL (Used)", "Total PL (Used)", "Total SL (Used)", "Paid Holiday (PH)",
@@ -356,7 +358,6 @@ export default function AttendancePage() {
         emp.designation,
         emp.hq || "N/A",
         emp.doj,
-        (emp.grossMonthlySalary || 0).toString(),
         ...finalAttendanceToUse,
         workingDaysP.toString(),
         absent1A.toString(),
@@ -394,19 +395,8 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "GrossSalary", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
+    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
-
-    // No sample data rows, only headers
-    // const sampleRow1 = ["Active", "Technology", "E001", "John Doe", "Software Engineer", "New York", "2023-01-15", "75000", ...Array(daysForTemplate).fill("P")];
-    // if (daysForTemplate >= 7) { sampleRow1[8+5] = "W"; sampleRow1[8+6] = "W"; }
-    // if (daysForTemplate >= 11) sampleRow1[8+10] = "CL";
-    // csvRows.push(sampleRow1);
-
-    // const sampleRow2 = ["Active", "Sales", "E002", "Jane Smith", "Project Manager", "London", "2024-03-20", "90000", ...Array(daysForTemplate).fill("P")];
-    // if (daysForTemplate >= 15) { sampleRow2[8+13] = "A"; sampleRow2[8+14] = "HD"; }
-    // csvRows.push(sampleRow2);
-
 
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -648,7 +638,6 @@ export default function AttendancePage() {
                           <TableHead className="min-w-[150px]">Designation</TableHead>
                           <TableHead className="min-w-[120px]">HQ</TableHead>
                           <TableHead className="min-w-[100px]">DOJ</TableHead>
-                          <TableHead className="min-w-[120px]">Gross Salary</TableHead>
                           {Array.from({ length: daysInSelectedViewMonth }, (_, i) => i + 1).map(day => (
                             <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
                           ))}
@@ -667,7 +656,7 @@ export default function AttendancePage() {
                       <TableBody>
                         {processedAttendanceData.map((emp) => {
                           if (!emp.processedAttendance) {
-                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 18}>Loading data for {emp.name}...</TableCell></TableRow>;
+                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 17}>Loading data for {emp.name}...</TableCell></TableRow>;
                           }
                           const finalAttendanceToUse = emp.processedAttendance;
 
@@ -694,7 +683,6 @@ export default function AttendancePage() {
                             <TableCell>{emp.designation}</TableCell>
                             <TableCell>{emp.hq || "N/A"}</TableCell>
                             <TableCell>{emp.doj}</TableCell>
-                            <TableCell>{(emp.grossMonthlySalary || 0).toLocaleString('en-IN')}</TableCell>
                             {finalAttendanceToUse.map((status, index) => (
                               <TableCell key={index} className="text-center">
                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ATTENDANCE_STATUS_COLORS[status] || 'bg-gray-200 text-gray-800'}`}>
@@ -717,7 +705,7 @@ export default function AttendancePage() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={8} className="font-semibold text-right">Total Employees Displayed:</TableCell>
+                          <TableCell colSpan={7} className="font-semibold text-right">Total Employees Displayed:</TableCell>
                           <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
                         </TableRow>
                       </TableFooter>
@@ -740,7 +728,7 @@ export default function AttendancePage() {
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>
                 Select the month and year, then upload a CSV file with employee attendance.
-                <br/>Expected columns: Status, Division, Code, Name, Designation, HQ, DOJ, GrossSalary, and daily status columns (1 to {daysInSelectedUploadMonth}).
+                <br/>Expected columns: Status, Division, Code, Name, Designation, HQ, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -791,5 +779,7 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    
 
     
