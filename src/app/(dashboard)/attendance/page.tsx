@@ -15,7 +15,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2, Loader2, Edit } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory } from "@/lib/hr-data";
+import { sampleLeaveHistory } from "@/lib/hr-data"; // sampleEmployees is not used here anymore
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -26,6 +26,7 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+// Updated to v4 to ensure data structure changes don't conflict with old localStorage
 const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
@@ -124,19 +125,30 @@ export default function AttendancePage() {
       return;
     }
     
+    // Check if the rawAttendanceData corresponds to the selectedMonth and selectedYear
+    // This assumes rawAttendanceData is specific to an uploaded context.
+    // We verify this by checking if uploadedFileName is set, implying an upload occurred.
+    // If the selected view doesn't match the context of the uploaded file (if any), we clear processed data.
+    if (uploadedFileName && typeof window !== 'undefined') {
+        const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+        if (lastUploadContextStr) {
+            try {
+                const lastUploadContext = JSON.parse(lastUploadContextStr);
+                if (lastUploadContext.month !== selectedMonth || lastUploadContext.year !== selectedYear) {
+                    setProcessedAttendanceData([]); // Clear if view doesn't match upload context
+                    return;
+                }
+            } catch { /* ignore parse error on context key */ }
+        }
+    }
+
+
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
         setProcessedAttendanceData([]);
         return;
     }
     
-    // Check if the current view (selectedMonth, selectedYear) matches the context of the rawAttendanceData
-    // This assumes rawAttendanceData only holds data for one specific month/year context after an upload.
-    // To handle multiple months in rawAttendanceData, this logic would need to filter rawAttendanceData first.
-    // For now, we assume rawAttendanceData is specific to the context it was loaded/uploaded for.
-    // If selectedMonth/Year changed and rawAttendanceData hasn't been re-fetched/cleared for the new period,
-    // it might process old data. The useEffect for loading data should handle this.
-
     const processedData = rawAttendanceData.map(emp => {
       if (!emp.doj) {
         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A') };
@@ -194,7 +206,7 @@ export default function AttendancePage() {
       return { ...emp, processedAttendance: newProcessedAttendance };
     });
     setProcessedAttendanceData(processedData);
-  }, [selectedMonth, selectedYear, rawAttendanceData]);
+  }, [selectedMonth, selectedYear, rawAttendanceData, uploadedFileName]); // Added uploadedFileName dependency
 
 
   const handleFileUpload = (file: File) => {
@@ -243,6 +255,7 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0];
           
+          // Values for EmployeeDetail fields not in this specific CSV upload format, can be N/A or default
           const hq = "N/A"; 
           const grossMonthlySalary = 0; 
 
@@ -309,6 +322,7 @@ export default function AttendancePage() {
           duration: 7000,
         });
 
+        // Automatically switch to the "View & Filter Attendance" tab
         const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
         if (viewTabTrigger) {
           viewTabTrigger.click();
@@ -454,13 +468,21 @@ export default function AttendancePage() {
             try {
               localStorage.removeItem(rawDataKey);
               localStorage.removeItem(fileNameKey);
+              // Also clear last upload context if it matches the month being deleted
+              const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+              if (lastContextStr) {
+                const lastContext = JSON.parse(lastContextStr);
+                if (lastContext.month === selectedMonth && lastContext.year === selectedYear) {
+                  localStorage.removeItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+                }
+              }
             } catch (error) {
                 console.error("Error clearing attendance data from localStorage:", error);
             }
         }
         setRawAttendanceData([]);
         setProcessedAttendanceData([]);
-        setUploadedFileName(null);
+        setUploadedFileName(null); // Clear uploaded file name as data for this context is gone
 
         toast({
             title: "Data Cleared",
@@ -479,9 +501,9 @@ export default function AttendancePage() {
   
   const handleEditAttendance = (employeeCode: string) => {
     toast({
-        title: "Prototype Action",
-        description: `Editing attendance for employee ${employeeCode} directly in the table is not yet implemented.`,
-        duration: 5000,
+        title: "Inline Editing Not Available",
+        description: `Directly editing attendance for employee ${employeeCode} in this table is a feature planned for the future. This functionality is not yet implemented in the current prototype.`,
+        duration: 7000,
     });
   };
 
