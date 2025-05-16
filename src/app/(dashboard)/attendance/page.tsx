@@ -138,10 +138,8 @@ export default function AttendancePage() {
                 }
             } catch { /* ignore parse error on context key */ }
         } else if (rawAttendanceData.length > 0) {
-           // If there's raw data but no upload context, it implies direct modification or old data not matching current view.
-           // This scenario shouldn't typically happen with the current flow but as a safeguard:
            const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
-           if (localStorage.getItem(rawDataKey) === null) { // Check if data for current view actually exists
+           if (localStorage.getItem(rawDataKey) === null) { 
                 setProcessedAttendanceData([]);
                 return;
            }
@@ -240,10 +238,23 @@ export default function AttendancePage() {
           return;
         }
 
-        const dataRows = lines.slice(1);
+        const headerLine = lines[0];
+        const headerValues = headerLine.split(',');
+        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
+        const actualDayColumnsInFile = headerValues.length - expectedBaseColumns;
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
-        const expectedBaseColumns = 6; 
 
+        if (actualDayColumnsInFile !== daysInUploadMonth) {
+          toast({
+            title: "File Format Error",
+            description: `The number of day columns in the file (${actualDayColumnsInFile}) does not match the number of days in ${uploadMonth} ${uploadYear} (${daysInUploadMonth}). Please ensure the file corresponds to the selected month.`,
+            variant: "destructive",
+            duration: 7000,
+          });
+          return;
+        }
+
+        const dataRows = lines.slice(1);
         const newAttendanceData: EmployeeAttendanceData[] = [];
         const encounteredCodes = new Set<string>();
         let skippedDuplicateCount = 0;
@@ -496,10 +507,9 @@ export default function AttendancePage() {
     const employee = rawAttendanceData.find(emp => emp.code === employeeCode);
     if (employee && selectedYear > 0 && selectedMonth) {
       const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
-      // Ensure attendance array has correct length for the month, padding with 'A' if necessary
       const currentRawAttendance = [...employee.attendance];
       while(currentRawAttendance.length < daysInMonth) {
-        currentRawAttendance.push('A'); // Default to Absent if raw data is shorter
+        currentRawAttendance.push('A'); 
       }
       setEditableDailyStatuses(currentRawAttendance.slice(0, daysInMonth));
       setEditingAttendanceEmployee(employee);
@@ -915,6 +925,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-
-      
