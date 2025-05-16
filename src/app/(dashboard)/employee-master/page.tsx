@@ -61,16 +61,17 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees);
+          setEmployees(sampleEmployees); // Fallback to sample if localStorage is empty
+          saveEmployeesToLocalStorage(sampleEmployees); // Optionally prime localStorage
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees);
-        toast({ title: "Data Load Error", description: "Could not load employee data. Using defaults.", variant: "destructive" });
+        setEmployees(sampleEmployees); // Fallback to sample on error
+        toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, []); // Corrected dependency array
+  }, []); // Empty dependency array to run once on mount
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -85,7 +86,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     const newEmployee: EmployeeDetail = {
-      id: `E${Date.now().toString().slice(-4)}`,
+      id: `E${Date.now().toString().slice(-4)}`, // Simple unique ID generation
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -99,8 +100,9 @@ export default function EmployeeMasterPage() {
   const handleUploadEmployees = (file: File) => {
     toast({
       title: "File Received",
-      description: `${file.name} received. (Prototype: Full CSV parsing not yet implemented for Employee Master).`,
+      description: `${file.name} received. (Prototype: Full CSV parsing for Employee Master not yet implemented).`,
     });
+    // Actual CSV parsing and employee update logic would go here in a full implementation
   };
 
   const handleDownloadSampleTemplate = () => {
@@ -132,9 +134,14 @@ export default function EmployeeMasterPage() {
   };
 
   const handleDeleteEmployee = (employeeId: string) => {
+     // In a real app, you'd show a confirmation dialog here.
+    // For prototype, directly filter and update.
+    const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
+    setEmployees(updatedEmployees);
+    saveEmployeesToLocalStorage(updatedEmployees);
     toast({
-      title: "Prototype Action",
-      description: `Deleting employee ${employeeId} is not yet implemented. (Data is from localStorage/sample)`,
+      title: "Employee Removed (Prototype)",
+      description: `Employee ${employeeId} has been removed from the list.`,
       variant: "destructive"
     });
   };
