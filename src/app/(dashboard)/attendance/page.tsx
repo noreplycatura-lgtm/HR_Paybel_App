@@ -11,11 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2, Loader2, Edit } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory } from "@/lib/hr-data"; // sampleEmployees is not used here anymore
+import { sampleLeaveHistory } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -26,7 +29,6 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// Updated to v4 to ensure data structure changes don't conflict with old localStorage
 const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
@@ -52,6 +54,11 @@ export default function AttendancePage() {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = React.useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = React.useState('');
 
+  const [isEditAttendanceDialogOpen, setIsEditAttendanceDialogOpen] = React.useState(false);
+  const [editingAttendanceEmployee, setEditingAttendanceEmployee] = React.useState<EmployeeAttendanceData | null>(null);
+  const [editableDailyStatuses, setEditableDailyStatuses] = React.useState<string[]>([]);
+
+
   const getDynamicLocalStorageKeys = (month: string, year: number) => {
     if (!month || year === 0) return { rawDataKey: null, fileNameKey: null };
     return {
@@ -60,7 +67,6 @@ export default function AttendancePage() {
     };
   };
 
-  // Effect for initializing default month/year and loading initial data for that period
   React.useEffect(() => {
     setIsLoadingState(true);
     const now = new Date();
@@ -74,11 +80,9 @@ export default function AttendancePage() {
     setUploadMonth(defaultMonthName);
     setUploadYear(defaultYear);
     
-    // This effect will trigger the data loading effect below once selectedMonth/Year are set
     setIsLoadingState(false); 
   }, []);
 
-  // Effect for loading data when selectedMonth or selectedYear changes
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
       setRawAttendanceData([]);
@@ -101,17 +105,15 @@ export default function AttendancePage() {
           console.error(`Error parsing attendance data from localStorage for ${selectedMonth} ${selectedYear}:`, error);
           toast({
             title: "Data Load Error",
-            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. It might be corrupted.`,
+            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. It might be corrupted. Data has not been cleared from storage.`,
             variant: "destructive",
             duration: 7000,
           });
           setRawAttendanceData([]);
           setUploadedFileName(null);
-          // localStorage.removeItem(rawDataKey); // Removed to prevent data loss on parse error
-          // localStorage.removeItem(fileNameKey);
         }
       } else {
-        setRawAttendanceData([]); // No data for this period
+        setRawAttendanceData([]); 
         setUploadedFileName(null);
       }
     }
@@ -125,20 +127,24 @@ export default function AttendancePage() {
       return;
     }
     
-    // Check if the rawAttendanceData corresponds to the selectedMonth and selectedYear
-    // This assumes rawAttendanceData is specific to an uploaded context.
-    // We verify this by checking if uploadedFileName is set, implying an upload occurred.
-    // If the selected view doesn't match the context of the uploaded file (if any), we clear processed data.
     if (uploadedFileName && typeof window !== 'undefined') {
         const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
         if (lastUploadContextStr) {
             try {
                 const lastUploadContext = JSON.parse(lastUploadContextStr);
                 if (lastUploadContext.month !== selectedMonth || lastUploadContext.year !== selectedYear) {
-                    setProcessedAttendanceData([]); // Clear if view doesn't match upload context
+                    setProcessedAttendanceData([]); 
                     return;
                 }
             } catch { /* ignore parse error on context key */ }
+        } else if (rawAttendanceData.length > 0) {
+           // If there's raw data but no upload context, it implies direct modification or old data not matching current view.
+           // This scenario shouldn't typically happen with the current flow but as a safeguard:
+           const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
+           if (localStorage.getItem(rawDataKey) === null) { // Check if data for current view actually exists
+                setProcessedAttendanceData([]);
+                return;
+           }
         }
     }
 
@@ -206,7 +212,7 @@ export default function AttendancePage() {
       return { ...emp, processedAttendance: newProcessedAttendance };
     });
     setProcessedAttendanceData(processedData);
-  }, [selectedMonth, selectedYear, rawAttendanceData, uploadedFileName]); // Added uploadedFileName dependency
+  }, [selectedMonth, selectedYear, rawAttendanceData, uploadedFileName]);
 
 
   const handleFileUpload = (file: File) => {
@@ -236,7 +242,7 @@ export default function AttendancePage() {
 
         const dataRows = lines.slice(1);
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
-        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
+        const expectedBaseColumns = 6; 
 
         const newAttendanceData: EmployeeAttendanceData[] = [];
         const encounteredCodes = new Set<string>();
@@ -255,7 +261,6 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0];
           
-          // Values for EmployeeDetail fields not in this specific CSV upload format, can be N/A or default
           const hq = "N/A"; 
           const grossMonthlySalary = 0; 
 
@@ -275,16 +280,7 @@ export default function AttendancePage() {
           });
 
           newAttendanceData.push({
-            id: code,
-            status,
-            division,
-            code,
-            name,
-            designation,
-            hq,
-            doj,
-            grossMonthlySalary,
-            attendance: dailyStatuses,
+            id: code, status, division, code, name, designation, hq, doj, grossMonthlySalary, attendance: dailyStatuses,
           });
         });
 
@@ -305,11 +301,10 @@ export default function AttendancePage() {
             }
         }
 
-        // Update state to reflect newly uploaded data
         setRawAttendanceData(newAttendanceData);
-        setProcessedAttendanceData([]); // Clear processed data to trigger re-processing
+        setProcessedAttendanceData([]); 
         setUploadedFileName(file.name);
-        setSelectedMonth(uploadMonth); // Switch view to the uploaded month/year
+        setSelectedMonth(uploadMonth); 
         setSelectedYear(uploadYear);
 
         let toastDescription = `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`;
@@ -322,7 +317,6 @@ export default function AttendancePage() {
           duration: 7000,
         });
 
-        // Automatically switch to the "View & Filter Attendance" tab
         const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
         if (viewTabTrigger) {
           viewTabTrigger.click();
@@ -468,7 +462,6 @@ export default function AttendancePage() {
             try {
               localStorage.removeItem(rawDataKey);
               localStorage.removeItem(fileNameKey);
-              // Also clear last upload context if it matches the month being deleted
               const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
               if (lastContextStr) {
                 const lastContext = JSON.parse(lastContextStr);
@@ -482,7 +475,7 @@ export default function AttendancePage() {
         }
         setRawAttendanceData([]);
         setProcessedAttendanceData([]);
-        setUploadedFileName(null); // Clear uploaded file name as data for this context is gone
+        setUploadedFileName(null); 
 
         toast({
             title: "Data Cleared",
@@ -499,12 +492,59 @@ export default function AttendancePage() {
     setDeleteConfirmationText('');
   };
   
-  const handleEditAttendance = (employeeCode: string) => {
-    toast({
-        title: "Inline Editing Not Available",
-        description: `Directly editing attendance for employee ${employeeCode} in this table is a feature planned for the future. This functionality is not yet implemented in the current prototype.`,
-        duration: 7000,
+  const handleOpenEditAttendanceDialog = (employeeCode: string) => {
+    const employee = rawAttendanceData.find(emp => emp.code === employeeCode);
+    if (employee && selectedYear > 0 && selectedMonth) {
+      const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
+      // Ensure attendance array has correct length for the month, padding with 'A' if necessary
+      const currentRawAttendance = [...employee.attendance];
+      while(currentRawAttendance.length < daysInMonth) {
+        currentRawAttendance.push('A'); // Default to Absent if raw data is shorter
+      }
+      setEditableDailyStatuses(currentRawAttendance.slice(0, daysInMonth));
+      setEditingAttendanceEmployee(employee);
+      setIsEditAttendanceDialogOpen(true);
+    } else {
+       toast({ title: "Error", description: "Could not find employee data to edit or month/year not set.", variant: "destructive"});
+    }
+  };
+
+  const handleDailyStatusChange = (dayIndex: number, newStatus: string) => {
+    setEditableDailyStatuses(prevStatuses => {
+      const newStatuses = [...prevStatuses];
+      newStatuses[dayIndex] = newStatus;
+      return newStatuses;
     });
+  };
+
+  const handleUpdateAttendance = () => {
+    if (!editingAttendanceEmployee || !selectedMonth || selectedYear === 0) {
+      toast({ title: "Error", description: "No employee selected for update or invalid period.", variant: "destructive"});
+      return;
+    }
+
+    const updatedRawAttendanceData = rawAttendanceData.map(emp => {
+      if (emp.code === editingAttendanceEmployee.code) {
+        return { ...emp, attendance: [...editableDailyStatuses] };
+      }
+      return emp;
+    });
+
+    setRawAttendanceData(updatedRawAttendanceData);
+
+    const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
+    if (rawDataKey && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(rawDataKey, JSON.stringify(updatedRawAttendanceData));
+        toast({ title: "Attendance Updated", description: `Attendance for ${editingAttendanceEmployee.name} for ${selectedMonth} ${selectedYear} has been updated.`});
+      } catch (storageError) {
+        console.error("Error saving updated attendance data to localStorage:", storageError);
+        toast({ title: "Storage Error", description: "Could not save updated attendance data locally.", variant: "destructive" });
+      }
+    }
+    
+    setIsEditAttendanceDialogOpen(false);
+    setEditingAttendanceEmployee(null);
   };
 
   const daysInSelectedViewMonth = (selectedYear && selectedMonth && selectedYear > 0) ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
@@ -512,6 +552,8 @@ export default function AttendancePage() {
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
   const canDeleteCurrentData = !!(uploadedFileName && selectedMonth && selectedYear > 0 && rawAttendanceData.length > 0);
+  const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-');
+
 
   if (isLoadingState && !selectedMonth) { 
     return (
@@ -572,6 +614,49 @@ export default function AttendancePage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Dialog open={isEditAttendanceDialogOpen} onOpenChange={(isOpen) => {
+          setIsEditAttendanceDialogOpen(isOpen);
+          if (!isOpen) setEditingAttendanceEmployee(null);
+      }}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit Attendance for {editingAttendanceEmployee?.name}</DialogTitle>
+            <DialogDescription>
+              Month: {selectedMonth} {selectedYear}. Modify daily attendance statuses below.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] p-1">
+            <div className="grid grid-cols-5 sm:grid-cols-7 gap-x-2 gap-y-4 p-2">
+              {editableDailyStatuses.map((status, dayIndex) => (
+                <div key={dayIndex} className="flex flex-col space-y-1">
+                  <Label htmlFor={`day-${dayIndex + 1}`} className="text-xs font-medium text-center">Day {dayIndex + 1}</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(newStatus) => handleDailyStatusChange(dayIndex, newStatus)}
+                  >
+                    <SelectTrigger id={`day-${dayIndex + 1}`} className="h-9">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {validAttendanceStatuses.map(statOpt => (
+                        <SelectItem key={statOpt} value={statOpt}>{statOpt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <DialogClose asChild>
+                <Button type="button" variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button type="button" onClick={handleUpdateAttendance}>Update Attendance</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       <Tabs defaultValue="view" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:w-[450px]">
           <TabsTrigger value="view">View & Filter Attendance</TabsTrigger>
@@ -587,7 +672,7 @@ export default function AttendancePage() {
               {(isLoadingState && !selectedMonth) ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth} >
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Month" />
                   </SelectTrigger>
@@ -599,7 +684,7 @@ export default function AttendancePage() {
               {(isLoadingState && selectedYear === 0) ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+                <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))} >
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Year" />
                   </SelectTrigger>
@@ -658,7 +743,7 @@ export default function AttendancePage() {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       No data found for {selectedMonth} {selectedYear}. <br />
-                      (Last file for this period: '{uploadedFileName}', but data is empty or was cleared).
+                      (File for this period: '{uploadedFileName}', but data is empty or was cleared).
                     </div>
                   );
                 }
@@ -714,7 +799,7 @@ export default function AttendancePage() {
                           return (
                           <TableRow key={emp.id}>
                             <TableCell>
-                                <Button variant="ghost" size="icon" onClick={() => handleEditAttendance(emp.code)} title={`Edit attendance for ${emp.name}`}>
+                                <Button variant="ghost" size="icon" onClick={() => handleOpenEditAttendanceDialog(emp.code)} title={`Edit attendance for ${emp.name}`}>
                                     <Edit className="h-4 w-4" />
                                 </Button>
                             </TableCell>
@@ -803,7 +888,6 @@ export default function AttendancePage() {
                   variant="link"
                   onClick={handleDownloadSampleTemplate}
                   className="p-0 h-auto text-left"
-                  disabled={!uploadMonth || !uploadYear || uploadYear === 0 }
                 >
                   <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
@@ -831,3 +915,6 @@ export default function AttendancePage() {
     </>
   );
 }
+
+
+      
