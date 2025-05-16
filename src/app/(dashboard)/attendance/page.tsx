@@ -40,8 +40,8 @@ export default function AttendancePage() {
 
     setCurrentYear(year);
     setCurrentMonthName(monthName);
-    setSelectedYear(year);
-    setSelectedMonth(monthName);
+    setSelectedYear(year); // Initialize selectedYear
+    setSelectedMonth(monthName); // Initialize selectedMonth
 
     // Generate sample data on client mount to avoid hydration issues
     const generateSampleData = (): EmployeeAttendance[] => [
@@ -68,7 +68,7 @@ export default function AttendancePage() {
     });
   };
   
-  const daysInMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 31;
+  const daysInMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
   const availableYears = currentYear > 0 ? [currentYear, currentYear - 1, currentYear - 2, currentYear -3, currentYear -4] : [];
 
 
@@ -88,7 +88,7 @@ export default function AttendancePage() {
           <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-          {selectedMonth && (
+          {selectedMonth ? (
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Select Month" />
@@ -97,8 +97,10 @@ export default function AttendancePage() {
                 {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
               </SelectContent>
             </Select>
+          ) : (
+            <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" /> // Placeholder for month select
           )}
-          {selectedYear > 0 && availableYears.length > 0 && (
+          {selectedYear > 0 && availableYears.length > 0 ? (
             <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
               <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
@@ -107,6 +109,8 @@ export default function AttendancePage() {
                 {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
               </SelectContent>
             </Select>
+          ) : (
+             <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" /> // Placeholder for year select
           )}
           <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
           <Select>
@@ -130,12 +134,12 @@ export default function AttendancePage() {
           <CardTitle>Attendance Records for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
-            <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth}).
+            <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth > 0 ? daysInMonth : 'current month'}).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-         {attendanceData.length === 0 ? (
-            <div className="text-center py-8">Loading attendance data...</div>
+         {attendanceData.length === 0 || daysInMonth === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Loading attendance data or select month/year...</div>
           ) : (
           <Table>
             <TableHeader>
@@ -155,7 +159,7 @@ export default function AttendancePage() {
                  <TableHead className="text-center min-w-[100px]">Total PL (Used)</TableHead>
                  <TableHead className="text-center min-w-[100px]">Total SL (Used)</TableHead>
                  <TableHead className="text-center min-w-[110px]">Paid Holiday (PH)</TableHead>
-                 <TableHead className="text-center min-w-[130px]">Total Days</TableHead>
+                 <TableHead className="text-center min-w-[130px]">Total Days (Month)</TableHead>
                  <TableHead className="text-center min-w-[120px]">Paid Days</TableHead>
               </TableRow>
             </TableHeader>
@@ -172,8 +176,8 @@ export default function AttendancePage() {
                 const totalSLUsed = relevantAttendance.filter(s => s === 'SL').length;
                 const paidHolidaysPH = relevantAttendance.filter(s => s === 'PH').length;
 
-                const totalDaysCalculated = workingDaysP + weekOffsW + absent2AHd + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
-                const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
+                const totalDaysCalculated = daysInMonth; // Changed to reflect days in month
+                const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5); // Paid days calculation adjustment
                 
                 return (
                 <TableRow key={emp.id}>
@@ -196,8 +200,8 @@ export default function AttendancePage() {
                   <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
                   <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
                   <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
-                  <TableCell className="text-center font-semibold">{totalDaysCalculated.toFixed(1)}</TableCell>
-                  <TableCell className="text-center font-semibold">{paidDaysCalculated}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalDaysCalculated}</TableCell>
+                  <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>
                 </TableRow>
               )})}
             </TableBody>
@@ -214,4 +218,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
