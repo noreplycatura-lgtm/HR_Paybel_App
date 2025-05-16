@@ -4,94 +4,152 @@
 import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, User, Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO } from 'date-fns';
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail, type LeaveHistoryEntry } from "@/lib/hr-data";
-import { calculateMonthsOfService, calculateAllLeaveBalancesForEmployee } from "@/lib/hr-calculations";
-import type { LeaveBalanceItem } from "@/lib/hr-types";
+import { format, parseISO, getYear, getMonth } from 'date-fns';
+import type { EmployeeDetail } from "@/lib/hr-data";
+import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
+import type { LeaveApplication } from "@/lib/hr-types";
 
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // For storing applied leaves
+
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+interface LeaveDisplayData extends EmployeeDetail {
+  usedCLInMonth: number;
+  usedSLInMonth: number;
+  usedPLInMonth: number;
+  balanceCLAtMonthEnd: number;
+  balanceSLAtMonthEnd: number;
+  balancePLAtMonthEnd: number;
+  isPLEligibleThisMonth: boolean;
+}
 
 export default function LeavePage() {
   const { toast } = useToast();
-  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | undefined>();
-  const [calculatedLeaveBalances, setCalculatedLeaveBalances] = React.useState<LeaveBalanceItem[]>([]);
-  const [filteredLeaveHistory, setFilteredLeaveHistory] = React.useState<LeaveHistoryEntry[]>([]);
-  const [currentEmployee, setCurrentEmployee] = React.useState<EmployeeDetail | undefined>();
-  const [monthsCompleted, setMonthsCompleted] = React.useState(0);
-  const [isLoading, setIsLoading] = React.useState(false);
-
+  const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
+  
+  const [currentYear, setCurrentYear] = React.useState(0);
+  const [selectedMonth, setSelectedMonth] = React.useState<string>('');
+  const [selectedYear, setSelectedYear] = React.useState<number>(0);
+  
+  const [displayData, setDisplayData] = React.useState<LeaveDisplayData[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (selectedEmployeeId) {
-      setIsLoading(true);
-      const employee = sampleEmployees.find(emp => emp.id === selectedEmployeeId);
-      setCurrentEmployee(employee);
+    const now = new Date();
+    setCurrentYear(now.getFullYear());
+    setSelectedMonth(months[now.getMonth()]);
+    setSelectedYear(now.getFullYear());
+  }, []);
 
-      if (employee) {
-        const today = new Date();
-        setMonthsCompleted(calculateMonthsOfService(employee.doj, today));
+  React.useEffect(() => {
+    setIsLoading(true);
+    if (typeof window !== 'undefined') {
+      try {
+        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployees) {
+          setEmployees(JSON.parse(storedEmployees));
+        } else {
+          // Fallback to empty or sample if needed, for now empty if master isn't set up.
+          setEmployees([]); 
+          toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive" });
+        }
 
-        const balances = calculateAllLeaveBalancesForEmployee(employee, sampleLeaveHistory, today);
-
-        setCalculatedLeaveBalances([balances.CL, balances.SL, balances.PL]);
-        setFilteredLeaveHistory(sampleLeaveHistory.filter(h => h.employeeId === selectedEmployeeId).sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime()));
-      } else {
-        setCalculatedLeaveBalances([]);
-        setFilteredLeaveHistory([]);
-        setMonthsCompleted(0);
+        const storedLeaveApplications = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveApplications) {
+          setLeaveApplications(JSON.parse(storedLeaveApplications));
+        } else {
+          setLeaveApplications([]); // No prior leave applications
+        }
+      } catch (error) {
+        console.error("Error loading data from localStorage:", error);
+        toast({ title: "Data Load Error", description: "Could not load data from local storage.", variant: "destructive" });
+        setEmployees([]);
+        setLeaveApplications([]);
       }
-      setIsLoading(false);
-    } else {
-      setCurrentEmployee(undefined);
-      setCalculatedLeaveBalances([]);
-      setFilteredLeaveHistory([]);
-      setMonthsCompleted(0);
     }
-  }, [selectedEmployeeId]);
+    setIsLoading(false);
+  }, []);
 
-  const handleDownloadLeaveBalance = () => {
-    if (!currentEmployee || calculatedLeaveBalances.length === 0) {
+  React.useEffect(() => {
+    if (isLoading || !selectedMonth || !selectedYear || employees.length === 0) {
+      setDisplayData([]);
+      return;
+    }
+    setIsLoading(true);
+    const monthIndex = months.indexOf(selectedMonth);
+    if (monthIndex === -1) {
+      setDisplayData([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const newDisplayData = employees.map(emp => {
+      if (emp.status === "Left") { // Optionally skip "Left" employees or handle differently
+        return {
+          ...emp,
+          usedCLInMonth: 0, usedSLInMonth: 0, usedPLInMonth: 0,
+          balanceCLAtMonthEnd: 0, balanceSLAtMonthEnd: 0, balancePLAtMonthEnd: 0,
+          isPLEligibleThisMonth: false,
+        };
+      }
+      const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(emp, selectedYear, monthIndex, leaveApplications);
+      return {
+        ...emp,
+        ...leaveDetails,
+      };
+    });
+    setDisplayData(newDisplayData);
+    setIsLoading(false);
+  }, [employees, leaveApplications, selectedMonth, selectedYear, isLoading]);
+
+
+  const handleDownloadReport = () => {
+     if (displayData.length === 0) {
       toast({
         title: "No Data",
-        description: "Please select an employee to download their leave details.",
+        description: "No leave data available to download for the selected period.",
         variant: "destructive",
       });
       return;
     }
 
     const csvRows: string[][] = [];
-    csvRows.push([`Leave History for ${currentEmployee.name} (${currentEmployee.code})`]);
-    csvRows.push(["Month", "Start Date", "End Date", "Leave Type", "Days Taken"]);
-    if (filteredLeaveHistory.length > 0) {
-      const sortedHistoryForCSV = [...filteredLeaveHistory].sort((a,b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
-      sortedHistoryForCSV.forEach(entry => {
-        csvRows.push([
-          format(parseISO(entry.startDate), 'MMMM yyyy'),
-          entry.startDate,
-          entry.endDate,
-          entry.leaveType,
-          entry.days.toString()
-        ]);
-      });
-    } else {
-      csvRows.push(["No leave history found for this period."]);
-    }
-    csvRows.push([""]);
-    csvRows.push(["Current Leave Balances Summary as of " + format(new Date(), 'yyyy-MM-dd')]);
-    csvRows.push(["Leave Type", "Total Accrued", "Total Used", "Current Balance", "PL Eligible"]);
-    calculatedLeaveBalances.forEach(lb => {
-      csvRows.push([
-        lb.type,
-        lb.accrued.toFixed(1),
-        lb.used.toFixed(1),
-        lb.balance.toFixed(1),
-        lb.type === 'PL' ? (lb.eligible ? 'Yes' : 'No') : 'N/A'
-      ]);
+    const headers = [
+      "Division", "Code", "Name", "Designation", "HQ", "DOJ",
+      `Used CL (${selectedMonth} ${selectedYear})`,
+      `Used SL (${selectedMonth} ${selectedYear})`,
+      `Used PL (${selectedMonth} ${selectedYear})`,
+      `Balance CL (End of ${selectedMonth} ${selectedYear})`,
+      `Balance SL (End of ${selectedMonth} ${selectedYear})`,
+      `Balance PL (End of ${selectedMonth} ${selectedYear})`,
+      "PL Eligible This Month"
+    ];
+    csvRows.push(headers);
+
+    displayData.forEach(emp => {
+      const row = [
+        emp.division,
+        emp.code,
+        emp.name,
+        emp.designation,
+        emp.hq,
+        emp.doj ? format(parseISO(emp.doj), 'dd-MMM-yyyy') : 'N/A',
+        emp.usedCLInMonth.toFixed(1),
+        emp.usedSLInMonth.toFixed(1),
+        emp.usedPLInMonth.toFixed(1),
+        emp.balanceCLAtMonthEnd.toFixed(1),
+        emp.balanceSLAtMonthEnd.toFixed(1),
+        emp.balancePLAtMonthEnd.toFixed(1),
+        emp.isPLEligibleThisMonth ? 'Yes' : 'No'
+      ];
+      csvRows.push(row);
     });
 
     const csvContent = csvRows.map(row => row.join(',')).join('\\n');
@@ -100,7 +158,7 @@ export default function LeavePage() {
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const formattedDate = format(new Date(), 'yyyy-MM-dd');
-    link.setAttribute("download", `leave_report_${currentEmployee.name.replace(/\s+/g, '_')}_${formattedDate}.csv`);
+    link.setAttribute("download", `leave_summary_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -109,11 +167,13 @@ export default function LeavePage() {
 
     toast({
       title: "Download Started",
-      description: `Detailed leave report for ${currentEmployee.name} is being downloaded.`,
+      description: `Leave summary report for ${selectedMonth} ${selectedYear} is being downloaded.`,
     });
   };
+  
+  const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
 
-  if (isLoading && !currentEmployee) { // Show loader only when actively fetching for a selected ID
+  if (isLoading && displayData.length === 0 && employees.length > 0) { // Initial load or recalculation in progress
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -124,119 +184,94 @@ export default function LeavePage() {
   return (
     <>
       <PageHeader
-        title="Leave Management"
-        description="View and manage individual employee leave balances and history. Leaves are automatically calculated based on service tenure and usage. PL is applicable after 6 months of service."
+        title="Leave Management Dashboard"
+        description="View employee leave balances based on accruals, usage, and financial year policies. CL/SL reset annually (Apr-Mar); PL carries forward."
       >
-        <Button
-            variant="outline"
-            onClick={handleDownloadLeaveBalance}
-            disabled={!selectedEmployeeId}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Download Leave Report (CSV)
+         <Button onClick={handleDownloadReport} variant="outline" disabled={displayData.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Download Report (CSV)
         </Button>
       </PageHeader>
 
-      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
+      <Card className="mb-6 shadow-md">
         <CardHeader>
-            <CardTitle>Select Employee</CardTitle>
+            <CardTitle>Filters</CardTitle>
         </CardHeader>
-        <CardContent>
-            <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                <SelectTrigger className="w-full sm:w-[280px]">
-                    <SelectValue placeholder="Select an employee to view leave details" />
+        <CardContent className="flex flex-col sm:flex-row gap-4">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Select Month" />
                 </SelectTrigger>
                 <SelectContent>
-                    {sampleEmployees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>
-                    ))}
+                    {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+                </SelectContent>
+            </Select>
+            <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+                <SelectTrigger className="w-full sm:w-[120px]">
+                    <SelectValue placeholder="Select Year" />
+                </SelectTrigger>
+                <SelectContent>
+                    {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
                 </SelectContent>
             </Select>
         </CardContent>
       </Card>
 
-      {isLoading && currentEmployee && ( // Show loader when employee is selected and data is loading
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      )}
-
-
-      {!isLoading && selectedEmployeeId && currentEmployee ? (
-        <>
-          <div className="mb-4 text-lg font-semibold">
-            Leave Balances for: {currentEmployee.name} (DOJ: {currentEmployee.doj ? format(parseISO(currentEmployee.doj), 'dd MMM yyyy') : 'N/A'})
-            ({monthsCompleted} months completed)
-          </div>
-          <div className="grid gap-6 md:grid-cols-3 mb-6">
-            {calculatedLeaveBalances.map(leave => (
-              <Card key={leave.type} className="shadow-md hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {leave.type} Balance
-                    <Badge variant={(leave.balance > 0 || (leave.type === 'PL' && !leave.eligible)) ? "default" : "destructive"}>
-                      {leave.type === 'PL' && !leave.eligible ? 'N/A' : leave.balance.toFixed(1)}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    Total Accrued: {leave.accrued.toFixed(1)}, Used: {leave.used.toFixed(1)}
-                    {leave.type === 'PL' && !leave.eligible && " (Not eligible yet)"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground">
-                    {leave.type === 'PL' && "Paid Leaves carry forward. Eligible after 6 months."}
-                    {(leave.type === 'CL' || leave.type === 'SL') && `${leave.type} reset at year end (policy not yet implemented).`}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Card className="shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle>Leave History for {currentEmployee.name}</CardTitle>
-              <CardDescription>Recent leave applications for the selected employee (chronological order).</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Leave Type</TableHead>
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>End Date</TableHead>
-                    <TableHead className="text-center">Days</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLeaveHistory.slice().sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <Badge variant="secondary">{entry.leaveType}</Badge>
-                      </TableCell>
-                      <TableCell>{format(parseISO(entry.startDate), 'dd MMM yyyy')}</TableCell>
-                      <TableCell>{format(parseISO(entry.endDate), 'dd MMM yyyy')}</TableCell>
-                      <TableCell className="text-center">{entry.days}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredLeaveHistory.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center">No leave history found for {currentEmployee.name}.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </>
-      ) : !isLoading && ( // Only show this if not loading and no employee selected
-        <Card className="shadow-md hover:shadow-lg transition-shadow">
-            <CardContent className="pt-6 text-center text-muted-foreground">
-                <User className="mx-auto h-12 w-12 mb-4" />
-                <p>Please select an employee to view their leave details.</p>
-            </CardContent>
-        </Card>
-      )}
+      <Card className="shadow-md">
+        <CardHeader>
+          <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
+          <CardDescription>
+            Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
+            (Note: Leave application functionality is not yet part of this prototype, so 'Used' leaves will be 0).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[120px]">Division</TableHead>
+                <TableHead className="min-w-[80px]">Code</TableHead>
+                <TableHead className="min-w-[150px]">Name</TableHead>
+                <TableHead className="min-w-[150px]">Designation</TableHead>
+                <TableHead className="min-w-[100px]">HQ</TableHead>
+                <TableHead className="min-w-[100px]">DOJ</TableHead>
+                <TableHead className="text-center min-w-[80px]">Used CL</TableHead>
+                <TableHead className="text-center min-w-[80px]">Used SL</TableHead>
+                <TableHead className="text-center min-w-[80px]">Used PL</TableHead>
+                <TableHead className="text-center min-w-[90px]">Balance CL</TableHead>
+                <TableHead className="text-center min-w-[90px]">Balance SL</TableHead>
+                <TableHead className="text-center min-w-[90px]">Balance PL</TableHead>
+                <TableHead className="text-center min-w-[100px]">PL Eligible</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayData.length > 0 ? displayData.map((emp) => (
+                <TableRow key={emp.id} className={emp.status === "Left" ? "opacity-60" : ""}>
+                  <TableCell>{emp.division}</TableCell>
+                  <TableCell>{emp.code}</TableCell>
+                  <TableCell>{emp.name} {emp.status === "Left" ? "(Left)" : ""}</TableCell>
+                  <TableCell>{emp.designation}</TableCell>
+                  <TableCell>{emp.hq}</TableCell>
+                  <TableCell>{emp.doj ? format(parseISO(emp.doj), 'dd MMM yyyy') : 'N/A'}</TableCell>
+                  <TableCell className="text-center">{emp.usedCLInMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.usedSLInMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.usedPLInMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center font-semibold">{emp.balanceCLAtMonthEnd.toFixed(1)}</TableCell>
+                  <TableCell className="text-center font-semibold">{emp.balanceSLAtMonthEnd.toFixed(1)}</TableCell>
+                  <TableCell className="text-center font-semibold">{emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "N/A"}</TableCell>
+                  <TableCell className="text-center">{emp.isPLEligibleThisMonth ? 'Yes' : 'No'}</TableCell>
+                </TableRow>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                    {employees.length === 0 && !isLoading ? "No employees found in Employee Master." : "No data to display for the selected period or employees."}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </>
   );
 }
