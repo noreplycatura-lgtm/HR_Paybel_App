@@ -16,9 +16,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Filter, Trash2, Loader2, Edit } from "lucide-react";
+import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-// import { sampleEmployees, sampleLeaveHistory } from "@/lib/hr-data"; // sampleEmployees no longer used directly here
 import { sampleLeaveHistory } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
@@ -39,12 +38,14 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
+  const [filteredAttendanceData, setFilteredAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
   
   const [selectedMonth, setSelectedMonth] = React.useState('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
+  const [searchTerm, setSearchTerm] = React.useState('');
 
   const [uploadMonth, setUploadMonth] = React.useState<string>('');
   const [uploadYear, setUploadYear] = React.useState<number>(0);
@@ -127,12 +128,9 @@ export default function AttendancePage() {
       setProcessedAttendanceData([]);
       return;
     }
-    // If rawAttendanceData is populated, it means data for the selectedMonth/Year was loaded from LS.
-    // We should proceed to process it without checking the global lastUploadContextKey here.
-    // The lastUploadContextKey is primarily for the dashboard.
 
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) { // Should ideally not happen if selectedMonth is from our 'months' array
+    if (monthIndex === -1) { 
         setProcessedAttendanceData([]);
         return;
     }
@@ -195,6 +193,21 @@ export default function AttendancePage() {
     });
     setProcessedAttendanceData(processedData);
   }, [selectedMonth, selectedYear, rawAttendanceData]);
+
+  React.useEffect(() => {
+    if (!searchTerm) {
+      setFilteredAttendanceData(processedAttendanceData);
+      return;
+    }
+    const lowercasedFilter = searchTerm.toLowerCase();
+    const filtered = processedAttendanceData.filter(emp => {
+      return (
+        emp.name.toLowerCase().includes(lowercasedFilter) ||
+        emp.code.toLowerCase().includes(lowercasedFilter)
+      );
+    });
+    setFilteredAttendanceData(filtered);
+  }, [processedAttendanceData, searchTerm]);
 
 
   const handleFileUpload = (file: File) => {
@@ -316,6 +329,7 @@ export default function AttendancePage() {
         setUploadedFileName(file.name);
         setSelectedMonth(uploadMonth); 
         setSelectedYear(uploadYear);
+        setSearchTerm(''); // Clear search on new upload
 
         let toastDescription = `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`;
         if (skippedDuplicateCount > 0) {
@@ -347,10 +361,10 @@ export default function AttendancePage() {
   };
 
   const handleDownloadReport = () => {
-    if (processedAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0) {
+    if (filteredAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0) {
       toast({
         title: "No Data",
-        description: "No attendance data available to download for the selected period. Please upload or select a period with data.",
+        description: "No attendance data available to download for the selected period and filter. Please upload or select a period with data and ensure your filter returns results.",
         variant: "destructive",
       });
       return;
@@ -368,7 +382,7 @@ export default function AttendancePage() {
     ];
     csvRows.push(headers);
 
-    processedAttendanceData.forEach(emp => {
+    filteredAttendanceData.forEach(emp => {
       if (!emp.processedAttendance) return;
       const finalAttendanceToUse = emp.processedAttendance;
 
@@ -414,7 +428,7 @@ export default function AttendancePage() {
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const formattedDate = format(new Date(), 'yyyy-MM-dd');
-    link.setAttribute("download", `attendance_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
+    link.setAttribute("download", `attendance_report_${selectedMonth}_${selectedYear}_${searchTerm ? 'filtered_' : ''}${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -485,6 +499,7 @@ export default function AttendancePage() {
         }
         setRawAttendanceData([]);
         setProcessedAttendanceData([]);
+        setFilteredAttendanceData([]);
         setUploadedFileName(null); 
 
         toast({
@@ -539,7 +554,7 @@ export default function AttendancePage() {
       return emp;
     });
 
-    setRawAttendanceData(updatedRawAttendanceData);
+    setRawAttendanceData(updatedRawAttendanceData); // This will trigger the useEffect for processedAttendanceData and then for filteredAttendanceData
 
     const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
     if (rawDataKey && typeof window !== 'undefined') {
@@ -578,7 +593,7 @@ export default function AttendancePage() {
         <Button
             variant="outline"
             onClick={handleDownloadReport}
-            disabled={processedAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0}
+            disabled={filteredAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0}
         >
             <Download className="mr-2 h-4 w-4" />
             Download Report (CSV)
@@ -675,13 +690,13 @@ export default function AttendancePage() {
           <Card className="my-6 shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Filters</CardTitle>
-              <CardDescription>Filter attendance records by month and year. (More filters like employee/division are illustrative).</CardDescription>
+              <CardDescription>Filter attendance records by month, year, and employee name/code. (Division filter is illustrative).</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
+            <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4 items-center">
               {(isLoadingState && !selectedMonth) ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedMonth} onValueChange={setSelectedMonth} >
+                <Select value={selectedMonth} onValueChange={(value) => { setSelectedMonth(value); setSearchTerm(''); }}>
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Month" />
                   </SelectTrigger>
@@ -693,7 +708,7 @@ export default function AttendancePage() {
               {(isLoadingState && selectedYear === 0) ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))} >
+                <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => { setSelectedYear(parseInt(value)); setSearchTerm(''); }} >
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Year" />
                   </SelectTrigger>
@@ -702,7 +717,16 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" disabled />
+              <div className="relative w-full sm:w-auto sm:flex-grow">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                    type="search"
+                    placeholder="Filter by Employee Name/Code..." 
+                    className="w-full sm:w-[250px] pl-8" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
               <Select disabled>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Select Division" />
@@ -711,9 +735,6 @@ export default function AttendancePage() {
                   <SelectItem value="tech">Technology</SelectItem>
                 </SelectContent>
               </Select>
-              <Button disabled>
-                <Filter className="mr-2 h-4 w-4" /> Apply Filters
-              </Button>
             </CardContent>
           </Card>
 
@@ -728,7 +749,7 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (isLoadingState && processedAttendanceData.length === 0) { 
+                if (isLoadingState && filteredAttendanceData.length === 0) { 
                     return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}...</div>;
                 }
                  if (!selectedMonth || !selectedYear || selectedYear === 0) {
@@ -757,7 +778,7 @@ export default function AttendancePage() {
                   );
                 }
                 
-                if (processedAttendanceData.length > 0 && daysInSelectedViewMonth > 0) {
+                if (filteredAttendanceData.length > 0 && daysInSelectedViewMonth > 0) {
                   return (
                     <Table>
                       <TableHeader>
@@ -785,7 +806,7 @@ export default function AttendancePage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {processedAttendanceData.map((emp) => {
+                        {filteredAttendanceData.map((emp) => {
                           if (!emp.processedAttendance) {
                             return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 17}>Loading data for {emp.name}...</TableCell></TableRow>;
                           }
@@ -840,12 +861,23 @@ export default function AttendancePage() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={7} className="font-semibold text-right">Total Employees Displayed:</TableCell>
-                          <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
+                          <TableCell colSpan={7} className="font-semibold text-right">
+                            {searchTerm ? `Filtered Employees Displayed:` : `Total Employees Displayed:`}
+                          </TableCell>
+                          <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">
+                            {filteredAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}
+                          </TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
                   );
+                }
+                 if (searchTerm && filteredAttendanceData.length === 0 && processedAttendanceData.length > 0) {
+                    return (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No employees found matching "{searchTerm}" for {selectedMonth} {selectedYear}.
+                        </div>
+                    );
                 }
                 return ( 
                   <div className="text-center py-8 text-muted-foreground">
@@ -864,6 +896,7 @@ export default function AttendancePage() {
               <CardDescription>
                 Select the month and year, then upload a CSV file with employee attendance.
                 <br/>Expected columns: Status, Division, Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
+                <br/>Filename must contain the selected month and year (e.g., 'attendance_april_2025.csv').
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -924,6 +957,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-
-    
