@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Download, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, getYear, getMonth, isValid } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
@@ -34,12 +35,13 @@ export default function LeavePage() {
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
   
-  const [currentYearState, setCurrentYearState] = React.useState(0); // Renamed to avoid conflict
+  const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
   
   const [displayData, setDisplayData] = React.useState<LeaveDisplayData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     const now = new Date();
@@ -73,18 +75,17 @@ export default function LeavePage() {
         setLeaveApplications([]);
       }
     }
-    setIsLoading(false); // Set to false after initial load attempt
+    setIsLoading(false); 
   }, [toast]);
 
   React.useEffect(() => {
-    // Prevent calculation if initial state isn't ready or employees not loaded
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0 || isLoading) {
       setDisplayData([]);
-      if (!isLoading && employees.length > 0) setIsLoading(false); // Ensure loading is false if we bail early but have employees
+      if (!isLoading && employees.length > 0) setIsLoading(false);
       return;
     }
     
-    setIsLoading(true); // Set loading true at the start of this effect
+    setIsLoading(true); 
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
       setDisplayData([]);
@@ -93,7 +94,7 @@ export default function LeavePage() {
     }
 
     const newDisplayData = employees
-      .filter(emp => emp.status === "Active") // Process only Active employees
+      .filter(emp => emp.status === "Active") 
       .map(emp => {
         const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(emp, selectedYear, monthIndex, leaveApplications);
         return {
@@ -102,18 +103,57 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
+    setSelectedEmployeeIds(new Set()); // Clear selections when data changes
     setIsLoading(false);
   }, [employees, leaveApplications, selectedMonth, selectedYear, isLoading]);
 
+  const handleSelectAll = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      const allActiveEmployeeIds = displayData.map(emp => emp.id);
+      setSelectedEmployeeIds(new Set(allActiveEmployeeIds));
+    } else {
+      setSelectedEmployeeIds(new Set());
+    }
+  };
+
+  const handleSelectEmployee = (employeeId: string, checked: boolean) => {
+    setSelectedEmployeeIds(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (checked) {
+        newSelected.add(employeeId);
+      } else {
+        newSelected.delete(employeeId);
+      }
+      return newSelected;
+    });
+  };
+  
+  const handleEditLeave = (employeeId: string) => {
+    toast({
+        title: "Prototype Action",
+        description: `Editing leave details for employee ID ${employeeId} is not yet implemented.`,
+    });
+  };
 
   const handleDownloadReport = () => {
-     if (displayData.length === 0) {
+     if (selectedEmployeeIds.size === 0) {
       toast({
-        title: "No Data",
-        description: "No leave data available to download for the selected period.",
+        title: "No Employees Selected",
+        description: "Please select at least one employee to download the report.",
         variant: "destructive",
       });
       return;
+    }
+
+    const selectedEmployeesData = displayData.filter(emp => selectedEmployeeIds.has(emp.id));
+
+    if (selectedEmployeesData.length === 0) {
+         toast({
+            title: "No Data",
+            description: "No leave data available to download for the selected employees.",
+            variant: "destructive",
+        });
+        return;
     }
 
     const csvRows: string[][] = [];
@@ -129,7 +169,7 @@ export default function LeavePage() {
     ];
     csvRows.push(headers);
 
-    displayData.forEach(emp => {
+    selectedEmployeesData.forEach(emp => {
       let formattedDoj = 'N/A';
       if (emp.doj) {
         try {
@@ -137,10 +177,10 @@ export default function LeavePage() {
           if (isValid(parsed)) {
             formattedDoj = format(parsed, 'dd-MMM-yyyy');
           } else {
-            formattedDoj = emp.doj; // Show original if not parsable by ISO
+            formattedDoj = emp.doj; 
           }
         } catch {
-          formattedDoj = emp.doj; // Show original on any parsing error
+          formattedDoj = emp.doj; 
         }
       }
 
@@ -168,7 +208,7 @@ export default function LeavePage() {
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const formattedDate = format(new Date(), 'yyyy-MM-dd');
-    link.setAttribute("download", `leave_summary_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
+    link.setAttribute("download", `selected_leave_summary_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -177,13 +217,16 @@ export default function LeavePage() {
 
     toast({
       title: "Download Started",
-      description: `Leave summary report for ${selectedMonth} ${selectedYear} is being downloaded.`,
+      description: `Leave summary report for selected employees (${selectedMonth} ${selectedYear}) is being downloaded.`,
     });
   };
   
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
+  const isAllSelected = displayData.length > 0 && selectedEmployeeIds.size === displayData.length;
+  const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < displayData.length;
 
-  if (isLoading && employees.length === 0) { // Initial page load state
+
+  if (isLoading && employees.length === 0) { 
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -195,11 +238,11 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances based on accruals, usage, and financial year policies. CL/SL (0.6/month) reset annually (Apr-Mar); PL (1.2/month) carries forward after 6 months eligibility."
+        description="View employee leave balances. CL/SL reset Apr-Mar (0.6/month after 5 months service); PL (1.2/month after 5 months service) carries forward."
       >
-         <Button onClick={handleDownloadReport} variant="outline" disabled={displayData.length === 0}>
+         <Button onClick={handleDownloadReport} variant="outline" disabled={selectedEmployeeIds.size === 0}>
             <Download className="mr-2 h-4 w-4" />
-            Download Report (CSV)
+            Download Report for Selected (CSV)
         </Button>
       </PageHeader>
 
@@ -233,13 +276,21 @@ export default function LeavePage() {
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
             (Note: Leave application functionality is not yet part of this prototype, so 'Used' leaves will be 0 unless applications are manually added to localStorage).
-            <br/>Only 'Active' employees are shown.
+            <br/>Only 'Active' employees are shown. The 'Eligible Accrual' column indicates if an employee has completed 5 months of service and is eligible for leave accrual.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={isAllSelected || (isIndeterminate ? 'indeterminate' : false)}
+                    onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
+                    aria-label="Select all rows"
+                  />
+                </TableHead>
+                <TableHead className="min-w-[60px]">Edit</TableHead>
                 <TableHead className="min-w-[120px]">Division</TableHead>
                 <TableHead className="min-w-[80px]">Code</TableHead>
                 <TableHead className="min-w-[150px]">Name</TableHead>
@@ -252,19 +303,31 @@ export default function LeavePage() {
                 <TableHead className="text-center min-w-[90px]">Balance CL</TableHead>
                 <TableHead className="text-center min-w-[90px]">Balance SL</TableHead>
                 <TableHead className="text-center min-w-[90px]">Balance PL</TableHead>
-                <TableHead className="text-center min-w-[100px]">PL Eligible</TableHead>
+                <TableHead className="text-center min-w-[100px]">Eligible Accrual</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && displayData.length === 0 && employees.length > 0 ? ( // Recalculation in progress
+              {isLoading && displayData.length === 0 && employees.length > 0 ? ( 
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-8">
+                  <TableCell colSpan={15} className="text-center py-8">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                     Calculating leave balances...
                   </TableCell>
                 </TableRow>
               ) : displayData.length > 0 ? displayData.map((emp) => (
-                <TableRow key={emp.id}>
+                <TableRow key={emp.id} data-state={selectedEmployeeIds.has(emp.id) ? "selected" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedEmployeeIds.has(emp.id)}
+                      onCheckedChange={(checked) => handleSelectEmployee(emp.id, !!checked)}
+                      aria-label={`Select row for ${emp.name}`}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditLeave(emp.id)} title={`Edit leave details for ${emp.name}`}>
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                   <TableCell>{emp.division || "N/A"}</TableCell>
                   <TableCell>{emp.code}</TableCell>
                   <TableCell>{emp.name}</TableCell>
@@ -275,24 +338,21 @@ export default function LeavePage() {
                       if (emp.doj && typeof emp.doj === 'string' && emp.doj.trim() !== '') {
                         try {
                           const parsedDate = parseISO(emp.doj);
-                          if (!isValid(parsedDate)) { // Check if parseISO resulted in a valid date
-                            // Attempt to parse common formats if ISO fails
+                          if (!isValid(parsedDate)) { 
                             const parts = emp.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                // Try DD-MM-YYYY or MM-DD-YYYY (assuming year is last part)
-                                // This is a basic attempt and might need refinement for more formats
-                                if (parseInt(parts[2]) > 1000) { // year is likely last
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try YYYY-MM-DD from DD-MM-YYYY
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try YYYY-DD-MM from MM-DD-YYYY
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj; // Show original if still not valid
+                            return emp.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj; // Show original if any error during parsing
+                          return emp.doj; 
                         }
                       }
                       return 'N/A';
@@ -308,7 +368,7 @@ export default function LeavePage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                     {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." : 
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
                      "Please select month and year to view leave summary."}
@@ -324,3 +384,4 @@ export default function LeavePage() {
 }
 
 
+    
