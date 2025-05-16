@@ -61,17 +61,17 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees); // Fallback to sample if localStorage is empty
-          saveEmployeesToLocalStorage(sampleEmployees); // Optionally prime localStorage
+          setEmployees(sampleEmployees); 
+          saveEmployeesToLocalStorage(sampleEmployees); 
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees); // Fallback to sample on error
+        setEmployees(sampleEmployees); 
         toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, []); // Empty dependency array to run once on mount
+  }, []); 
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -86,7 +86,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     const newEmployee: EmployeeDetail = {
-      id: `E${Date.now().toString().slice(-4)}`, // Simple unique ID generation
+      id: `E${Date.now().toString().slice(-4)}`, 
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -102,7 +102,6 @@ export default function EmployeeMasterPage() {
       title: "File Received",
       description: `${file.name} received. (Prototype: Full CSV parsing for Employee Master not yet implemented).`,
     });
-    // Actual CSV parsing and employee update logic would go here in a full implementation
   };
 
   const handleDownloadSampleTemplate = () => {
@@ -134,14 +133,13 @@ export default function EmployeeMasterPage() {
   };
 
   const handleDeleteEmployee = (employeeId: string) => {
-     // In a real app, you'd show a confirmation dialog here.
-    // For prototype, directly filter and update.
+    const employeeToDelete = employees.find(emp => emp.id === employeeId);
     const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
     setEmployees(updatedEmployees);
     saveEmployeesToLocalStorage(updatedEmployees);
     toast({
-      title: "Employee Removed (Prototype)",
-      description: `Employee ${employeeId} has been removed from the list.`,
+      title: "Employee Removed",
+      description: `${employeeToDelete?.name || `Employee ID ${employeeId}`} has been removed from the list.`,
       variant: "destructive"
     });
   };
@@ -291,3 +289,5 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+
+    

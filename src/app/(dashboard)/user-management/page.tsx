@@ -25,7 +25,7 @@ export default function UserManagementPage() {
       title: "Logout Initiated (Prototype)",
       description: "Redirecting to login page.",
     });
-    router.push("/login"); // Redirect to login page
+    router.push("/login"); 
   };
 
   return (
@@ -50,3 +50,5 @@ export default function UserManagementPage() {
     </>
   );
 }
+
+    
