@@ -18,7 +18,7 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import { sampleLeaveHistory } from "@/lib/hr-data"; 
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
-import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
+import { useEditorAuth } from "@/hooks/useEditorAuth"; 
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; 
@@ -27,7 +27,7 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3"; // Versioned key
+const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3"; 
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename_v3";
 const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v3";
 
@@ -45,7 +45,7 @@ export default function AttendancePage() {
   const [uploadMonth, setUploadMonth] = React.useState<string>('');
   const [uploadYear, setUploadYear] = React.useState<number>(0);
 
-  const [isLoadingState, setIsLoadingState] = React.useState(true); // For initial data load
+  const [isLoadingState, setIsLoadingState] = React.useState(true); 
   const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null);
   const [uploadContext, setUploadContext] = React.useState<{month: string, year: number} | null>(null);
 
@@ -194,7 +194,7 @@ export default function AttendancePage() {
 
         const dataRows = lines.slice(1);
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
-        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
+        const expectedBaseColumns = 6; 
         
         const newAttendanceData: EmployeeAttendanceData[] = dataRows.map((row, rowIndex) => {
           const values = row.split(',');
@@ -757,7 +757,7 @@ export default function AttendancePage() {
                   variant="link" 
                   onClick={handleDownloadSampleTemplate} 
                   className="p-0 h-auto text-left"
-                  disabled={!uploadMonth || !uploadYear || uploadYear === 0 } // Sample download can be public
+                  disabled={!uploadMonth || !uploadYear || uploadYear === 0 } 
                 >
                   <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
@@ -774,3 +774,4 @@ export default function AttendancePage() {
     </>
   );
 }
+
