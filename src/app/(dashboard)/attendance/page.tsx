@@ -81,12 +81,9 @@ export default function AttendancePage() {
             setUploadYear(parsedContext.year);
           } catch (error) {
             console.error("Error parsing attendance data from localStorage:", error);
-            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY); // Do not delete on parse error
-            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
-            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
             toast({
                 title: "Data Load Error",
-                description: "Could not load previously saved attendance data. It might be corrupted. Please clear data manually if needed.",
+                description: "Could not load previously saved attendance data. It might be corrupted. Please clear data manually if needed or re-upload.",
                 variant: "destructive",
                 duration: 7000,
             });
@@ -104,7 +101,7 @@ export default function AttendancePage() {
         }
     }
     setIsLoadingState(false);
-  }, []);
+  }, [toast]);
 
   React.useEffect(() => {
     if (isLoadingState || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth || selectedYear === 0) {
@@ -134,7 +131,7 @@ export default function AttendancePage() {
         doj: emp.doj,
         status: emp.status, 
         division: emp.division,
-        grossMonthlySalary: emp.grossMonthlySalary || 0, // Ensure grossMonthlySalary is present
+        grossMonthlySalary: emp.grossMonthlySalary || 0, 
       };
       let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
       
@@ -193,9 +190,9 @@ export default function AttendancePage() {
       }
 
       try {
-        const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line); // Handles both Windows and Unix newlines
+        const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line); 
         if (lines.length < 2) { 
-          toast({ title: "Invalid File", description: "File is empty or has no data rows.", variant: "destructive" });
+          toast({ title: "Invalid File", description: "File is empty or has no data rows. Header + at least one data row expected.", variant: "destructive" });
           return;
         }
 
@@ -232,7 +229,7 @@ export default function AttendancePage() {
             name,
             designation,
             doj,
-            grossMonthlySalary: 0, // Default or fetch from employee master if available
+            grossMonthlySalary: 0, // Will be populated from Employee Master if available, 0 for now.
             attendance: dailyStatuses,
           };
         }).filter(item => item !== null) as EmployeeAttendanceData[]; 
@@ -475,7 +472,7 @@ export default function AttendancePage() {
 
   return (
     <>
-      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
+      <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance. Blank/'-' in upload treated as Absent. Leaves without balance marked Absent.">
         <Button 
             variant="outline" 
             onClick={handleDownloadReport} 
@@ -601,8 +598,8 @@ export default function AttendancePage() {
                 if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
-                      Data loaded from '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
-                      The file might be empty, have an incorrect format, or failed to parse. Check console for errors or upload again.
+                      Data parsed from '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
+                      The file might be empty, have an incorrect format, or no valid data rows. Check console for errors or upload again.
                     </div>
                   );
                 }
@@ -737,7 +734,7 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col sm:flex-row gap-4">
-                <Select value={uploadMonth} onValueChange={setUploadMonth} disabled={isLoadingAuth || !isEditor}>
+                <Select value={uploadMonth} onValueChange={setUploadMonth} disabled={isLoadingAuth}>
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Upload Month" />
                   </SelectTrigger>
@@ -745,7 +742,7 @@ export default function AttendancePage() {
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Select value={uploadYear > 0 ? uploadYear.toString() : ""} onValueChange={(value) => setUploadYear(parseInt(value))} disabled={isLoadingAuth || !isEditor}>
+                <Select value={uploadYear > 0 ? uploadYear.toString() : ""} onValueChange={(value) => setUploadYear(parseInt(value))} disabled={isLoadingAuth}>
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Upload Year" />
                   </SelectTrigger>
@@ -760,7 +757,7 @@ export default function AttendancePage() {
                   buttonText="Upload Attendance CSV" 
                   acceptedFileTypes=".csv"
                   disabled={isLoadingAuth || !uploadMonth || !uploadYear || uploadYear === 0 || !isEditor}
-                  title={!isEditor ? "Login as editor to upload" : ""}
+                  title={!isEditor ? "Login as editor to upload" : (!uploadMonth || !uploadYear || uploadYear === 0 ? "Select month and year first" : "Upload attendance CSV file")}
                 />
                 <Button 
                   variant="link" 
@@ -783,4 +780,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
