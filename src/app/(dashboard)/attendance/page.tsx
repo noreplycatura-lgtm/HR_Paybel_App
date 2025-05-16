@@ -18,8 +18,8 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory, sampleEmployees } from "@/lib/hr-data"; 
-import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
+import { sampleLeaveHistory } from "@/lib/hr-data"; 
+import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
@@ -117,7 +117,7 @@ export default function AttendancePage() {
         if (storedMaster) {
           setEmployeeMasterList(JSON.parse(storedMaster));
         } else {
-           setEmployeeMasterList(sampleEmployees); 
+           setEmployeeMasterList([]); 
         }
       } catch (error) {
         console.error("Error loading employee master for attendance cross-check:", error);
@@ -205,9 +205,7 @@ export default function AttendancePage() {
         grossMonthlySalary: emp.grossMonthlySalary || 0,
       };
       let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
-
-      const monthsOfServiceThisMonthStart = calculateMonthsOfService(emp.doj, new Date(selectedYear, monthIndex, 1));
-      const isPLEligibleForThisMonth = monthsOfServiceThisMonthStart >= PL_ELIGIBILITY_MONTHS;
+      const isPLEligibleForThisMonth = balances.plEligibleThisMonth; // Use the flag from the calculation
 
       const daysInCurrentMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
       const rawMonthlyAttendance = emp.attendance.slice(0, daysInCurrentMonth);
