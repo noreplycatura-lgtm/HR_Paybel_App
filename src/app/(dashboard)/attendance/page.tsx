@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, Filter } from "lucide-react";
 import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
-import { startOfDay, parseISO, isBefore, isEqual } from "date-fns";
+import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; // Raw attendance from upload/generation
@@ -123,10 +123,82 @@ export default function AttendancePage() {
   };
 
   const handleDownloadReport = () => {
+    if (processedAttendanceData.length === 0 || !selectedMonth || !selectedYear) {
+      toast({
+        title: "No Data",
+        description: "No attendance data available to download for the selected period.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const daysInCurrentMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
+    const csvRows: string[][] = [];
+
+    // Headers
+    const headers = [
+      "Code", "Name", "Designation", "DOJ",
+      ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
+      "Working Days (P)", "Absent-1 (A)", "Absent-2 (A+HD)", "Weekoff (W)",
+      "Total CL (Used)", "Total PL (Used)", "Total SL (Used)", "Paid Holiday (PH)",
+      "Total Days (Month)", "Paid Days"
+    ];
+    csvRows.push(headers);
+
+    // Data rows
+    processedAttendanceData.forEach(emp => {
+      if (!emp.processedAttendance) return;
+      const finalAttendanceToUse = emp.processedAttendance;
+
+      const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
+      const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
+      const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
+      const absent2AHd = absent1A + (halfDays * 0.5);
+      const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
+      const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
+      const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
+      const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
+      const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
+      const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
+      const totalDaysCalculated = daysInCurrentMonth - notJoinedDays;
+      const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+
+      const row = [
+        emp.code,
+        emp.name,
+        emp.designation,
+        emp.doj,
+        ...finalAttendanceToUse,
+        workingDaysP.toString(),
+        absent1A.toString(),
+        absent2AHd.toFixed(1),
+        weekOffsW.toString(),
+        totalCLUsed.toString(),
+        totalPLUsed.toString(),
+        totalSLUsed.toString(),
+        paidHolidaysPH.toString(),
+        (totalDaysCalculated < 0 ? 0 : totalDaysCalculated).toString(),
+        paidDaysCalculated.toFixed(1)
+      ];
+      csvRows.push(row);
+    });
+
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const formattedDate = format(new Date(), 'yyyy-MM');
+    link.setAttribute("download", `attendance_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     toast({
-      title: "Feature Not Implemented",
-      description: "Excel report download is not yet available.",
-      variant: "default",
+      title: "Download Started",
+      description: `Attendance report for ${selectedMonth} ${selectedYear} is being downloaded.`,
     });
   };
 
@@ -146,7 +218,7 @@ export default function AttendancePage() {
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
         <Button variant="outline" onClick={handleDownloadReport}>
             <Download className="mr-2 h-4 w-4" />
-            Download Report
+            Download Report (CSV)
         </Button>
       </PageHeader>
 
@@ -349,5 +421,7 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    
 
     
