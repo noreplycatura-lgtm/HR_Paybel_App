@@ -119,7 +119,10 @@ export default function AttendancePage() {
       description: `${file.name} has been received. Simulating data processing. (Actual Excel parsing and data update from the file are not implemented in this prototype).`,
     });
     setUploadedFileName(file.name);
+    // Clear existing raw data to simulate it's being replaced by upload
     setRawAttendanceData([]); 
+    // Could potentially trigger a re-process here if actual parsing was implemented
+    // For now, the useEffect for processedAttendanceData will handle the empty rawData
   };
 
   const handleDownloadReport = () => {
@@ -160,7 +163,8 @@ export default function AttendancePage() {
       const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
       const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
       const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
-      const totalDaysCalculated = daysInCurrentMonth - notJoinedDays;
+      
+      const totalDaysCalculated = daysInCurrentMonth - notJoinedDays; // Show days in month excluding not-joined days
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
       const row = [
@@ -188,7 +192,7 @@ export default function AttendancePage() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    const formattedDate = format(new Date(), 'yyyy-MM');
+    const formattedDate = format(new Date(), 'yyyy-MM'); // Keep simple date for file name consistency
     link.setAttribute("download", `attendance_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -203,10 +207,37 @@ export default function AttendancePage() {
   };
 
   const handleDownloadSampleTemplate = () => {
+    const csvRows: string[][] = [];
+    const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: 31 }, (_, i) => (i + 1).toString())];
+    csvRows.push(headers);
+
+    // Add a couple of sample data rows
+    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(31).fill("P")];
+    sampleRow1[5] = "W"; // Example Weekoff
+    sampleRow1[6] = "W";
+    sampleRow1[10] = "CL"; // Example CL
+    csvRows.push(sampleRow1);
+
+    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(31).fill("P")];
+    sampleRow2[13] = "A"; // Example Absent
+    sampleRow2[14] = "HD"; // Example Half-Day
+    csvRows.push(sampleRow2);
+    
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "attendance_template_sample.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     toast({
-      title: "Feature Not Implemented",
-      description: "Sample Excel template download is not yet available.",
-      variant: "default",
+      title: "Sample Template Downloaded",
+      description: "attendance_template_sample.csv has been downloaded.",
     });
   };
   
@@ -234,6 +265,7 @@ export default function AttendancePage() {
               <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
+              {/* Month Selector */}
               {isLoading && !selectedMonth ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
@@ -246,6 +278,7 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
+              {/* Year Selector */}
               {isLoading && selectedYear === 0 ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
@@ -301,9 +334,12 @@ export default function AttendancePage() {
                     </div>
                   );
                 }
+                // This condition means raw data is present but processing hasn't finished or resulted in no processable employees
                 if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
+                    // Special check for uploaded file with no raw data yet
                     return <div className="text-center py-8 text-muted-foreground">Processing attendance data...</div>;
                 }
+                // This condition checks if there's processed data and at least one employee has their processed attendance array.
                 if (processedAttendanceData.length > 0 && daysInMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
                   return (
                     <Table>
@@ -330,10 +366,11 @@ export default function AttendancePage() {
                       </TableHeader>
                       <TableBody>
                         {processedAttendanceData.map((emp) => {
+                          // If processedAttendance is undefined, it means it's still being worked on or failed for this emp
                           if (!emp.processedAttendance) { 
                             return <TableRow key={emp.id}><TableCell colSpan={daysInMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
                           }
-                          const finalAttendanceToUse = emp.processedAttendance;
+                          const finalAttendanceToUse = emp.processedAttendance; // Already processed
 
                           const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
                           const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
@@ -384,6 +421,7 @@ export default function AttendancePage() {
                     </Table>
                   );
                 }
+                // Fallback if no processed data for the month, or no days in month (e.g. year not set)
                 return (
                   <div className="text-center py-8 text-muted-foreground">
                     No attendance data available for the selected month and year.
@@ -406,7 +444,7 @@ export default function AttendancePage() {
               <div className="flex items-center gap-4">
                 <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance Excel" />
                 <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto">
-                  <Download className="mr-2 h-4 w-4" /> Download Sample Template
+                  <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
                 </Button>
               </div>
                {uploadedFileName && (
@@ -425,3 +463,5 @@ export default function AttendancePage() {
     
 
     
+
+      
