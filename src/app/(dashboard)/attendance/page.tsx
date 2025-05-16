@@ -13,7 +13,8 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Filter, Trash2 } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; 
+import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data"; 
+import { sampleLeaveHistory } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
@@ -123,20 +124,84 @@ export default function AttendancePage() {
       });
       return;
     }
-    toast({
-      title: `File Received for ${uploadMonth} ${uploadYear}`,
-      description: `${file.name} has been received. Simulating data processing. (Actual Excel parsing and data update from the file are not implemented in this prototype).`,
-    });
-    setUploadedFileName(file.name);
-    const newUploadContext = {month: uploadMonth, year: uploadYear};
-    setUploadContext(newUploadContext);
-    
-    setRawAttendanceData([]); 
-    setProcessedAttendanceData([]);
-     
-    setSelectedMonth(newUploadContext.month);
-    setSelectedYear(newUploadContext.year);
-    setIsLoading(false); 
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) {
+        toast({ title: "Error Reading File", description: "Could not read the file content.", variant: "destructive" });
+        return;
+      }
+
+      try {
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+        if (lines.length < 2) { // Needs at least a header and one data row
+          toast({ title: "Invalid File", description: "File is empty or has no data rows.", variant: "destructive" });
+          return;
+        }
+
+        // const header = lines[0].split(',').map(h => h.trim()); // We can validate header if needed
+        const dataRows = lines.slice(1);
+        const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
+        
+        const newAttendanceData: EmployeeAttendanceData[] = dataRows.map((row, rowIndex) => {
+          const values = row.split(',');
+          if (values.length < 4 + daysInUploadMonth) {
+            // Not enough columns for this row, potentially skip or log an error
+            console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${4 + daysInUploadMonth}, got ${values.length}`);
+            return null; 
+          }
+          const code = values[0]?.trim() || `TEMP_ID_${rowIndex}`;
+          const name = values[1]?.trim() || "N/A";
+          const designation = values[2]?.trim() || "N/A";
+          const doj = values[3]?.trim() || new Date().toISOString().split('T')[0]; // Default to today if DOJ is missing
+          
+          const dailyStatuses = values.slice(4, 4 + daysInUploadMonth).map(status => status.trim() || 'A'); // Default to 'A' if status is empty
+
+          return {
+            id: code, // Using code as ID for simplicity from CSV
+            code,
+            name,
+            designation,
+            doj,
+            attendance: dailyStatuses,
+          };
+        }).filter(item => item !== null) as EmployeeAttendanceData[]; // Filter out nulls from skipped rows
+
+        if (newAttendanceData.length === 0) {
+            toast({ title: "No Data Processed", description: "No valid employee attendance data found in the file.", variant: "destructive"});
+            return;
+        }
+
+        setRawAttendanceData(newAttendanceData);
+        setUploadedFileName(file.name);
+        const newUploadContext = { month: uploadMonth, year: uploadYear };
+        setUploadContext(newUploadContext);
+        
+        // Set view to the uploaded data context
+        setSelectedMonth(uploadMonth);
+        setSelectedYear(uploadYear);
+        setIsLoading(false); 
+
+        toast({
+          title: "Attendance Data Loaded",
+          description: `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}.`,
+        });
+
+      } catch (error) {
+        console.error("Error parsing CSV:", error);
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format.", variant: "destructive" });
+        setRawAttendanceData([]);
+        setUploadedFileName(null);
+        setUploadContext(null);
+      }
+    };
+
+    reader.onerror = () => {
+      toast({ title: "File Read Error", description: "An error occurred while trying to read the file.", variant: "destructive" });
+    };
+
+    reader.readAsText(file);
   };
 
   const handleDownloadReport = () => {
@@ -224,28 +289,31 @@ export default function AttendancePage() {
     const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
+    // Use first 2 employees from actual hr-data for a more realistic template
     const templateEmployees = sampleEmployees.slice(0,2).map(emp => ({
       code: emp.code, name: emp.name, designation: emp.designation, doj: emp.doj
     }));
     
     templateEmployees.forEach((emp, index) => {
       const rowData = [emp.code, emp.name, emp.designation, emp.doj];
+      // Example daily statuses
       const dailyStatuses = Array(daysForTemplate).fill("P");
-      if (index === 0 && daysForTemplate >= 7) { 
-        dailyStatuses[5] = "W"; 
+      if (index === 0 && daysForTemplate >= 7) { // John Doe
+        dailyStatuses[5] = "W"; // Example Weekend
         dailyStatuses[6] = "W";
-        if (daysForTemplate >= 11) dailyStatuses[10] = "CL"; 
-      } else if (index === 1 && daysForTemplate >= 15) { 
-         dailyStatuses[13] = "A"; 
-         dailyStatuses[14] = "HD";
+        if (daysForTemplate >= 11) dailyStatuses[10] = "CL"; // Example CL
+      } else if (index === 1 && daysForTemplate >= 15) { // Jane Smith
+         dailyStatuses[13] = "A"; // Example Absent
+         dailyStatuses[14] = "HD"; // Example Half Day
       }
       rowData.push(...dailyStatuses);
       csvRows.push(rowData);
     });
     
+    // Fallback if sampleEmployees is empty
     if (templateEmployees.length === 0) { 
         const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
-        if (daysForTemplate >= 7) { sampleRow1[4+3] = "W"; sampleRow1[5+3] = "W"; }
+        if (daysForTemplate >= 7) { sampleRow1[4+3] = "W"; sampleRow1[5+3] = "W"; } // Indices are 0-based for array, 1-based for day
         if (daysForTemplate >= 11) sampleRow1[10+3] = "CL"; 
         csvRows.push(sampleRow1);
     }
@@ -254,7 +322,7 @@ export default function AttendancePage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url); // Ensure href is set
+    link.setAttribute("href", url); 
     const monthYearForFilename = (uploadMonth && uploadYear) ? `${uploadMonth}_${uploadYear}` : "sample";
     link.setAttribute("download", `attendance_template_${monthYearForFilename}.csv`);
     link.style.visibility = 'hidden';
@@ -270,7 +338,7 @@ export default function AttendancePage() {
   };
 
   const handleDeleteCurrentMonthData = () => {
-    if (uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
+    if (uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear && rawAttendanceData.length > 0) {
         if (window.confirm(`Are you sure you want to clear the uploaded attendance data for ${selectedMonth} ${selectedYear}? This action cannot be undone.`)) {
             setRawAttendanceData([]);
             setProcessedAttendanceData([]);
@@ -284,7 +352,7 @@ export default function AttendancePage() {
     } else {
         toast({
             title: "No Data to Clear",
-            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} in the current view to clear.`,
+            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} in the current view to clear, or no data has been uploaded yet.`,
             variant: "destructive"
         });
     }
@@ -306,7 +374,7 @@ export default function AttendancePage() {
         </Button>
          <Button variant="destructive" onClick={handleDeleteCurrentMonthData} disabled={!canDeleteCurrentData}>
             <Trash2 className="mr-2 h-4 w-4" />
-            Clear Data for {selectedMonth} {selectedYear}
+            Clear Data for {selectedMonth && selectedYear > 0 ? `${selectedMonth} ${selectedYear}`: 'Current View'}
         </Button>
       </PageHeader>
 
@@ -337,7 +405,7 @@ export default function AttendancePage() {
               {isLoading && selectedYear === 0 ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+                <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))}>
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Year" />
                   </SelectTrigger>
@@ -367,7 +435,7 @@ export default function AttendancePage() {
               <CardDescription>
                 Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
                 <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
-                <br/> '-' indicates the employee had not joined by the selected month/day.
+                <br/> '-' indicates the employee had not joined by the selected month/day or no data available.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -375,21 +443,22 @@ export default function AttendancePage() {
                 if (isLoading && (!selectedMonth || selectedYear === 0)) {
                     return <div className="text-center py-8 text-muted-foreground">Initializing...</div>;
                 }
-                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
-                  return (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
-                      (Full Excel parsing and display from file is not yet implemented in this prototype. Attendance data will appear here once actual data is loaded and processed.)
-                    </div>
-                  );
-                }
-                if (!selectedMonth || !selectedYear) {
+                 if (!selectedMonth || !selectedYear || selectedYear === 0) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       Please select month and year to view records.
                     </div>
                   );
                 }
+                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
+                      If no data appears, the file might be empty, in an incorrect format, or failed to parse. Check console for errors.
+                    </div>
+                  );
+                }
+               
                 if (processedAttendanceData.length === 0 && daysInSelectedViewMonth > 0) {
                     if (!uploadedFileName) {
                         return (
@@ -399,12 +468,22 @@ export default function AttendancePage() {
                             </div>
                         );
                     }
+                     // This case means a file was uploaded but resulted in no processable data for current view
                     return (
                         <div className="text-center py-8 text-muted-foreground">
-                            Processing data for {selectedMonth} {selectedYear}... If this persists, the uploaded file might be empty or in an incorrect format.
+                            No processed data available for {selectedMonth} {selectedYear}. <br/>
+                            This might be because the uploaded file ('{uploadedFileName}') was for a different period, was empty, or had format issues.
                         </div>
                     );
                 }
+                if (processedAttendanceData.length === 0 && !uploadedFileName) {
+                     return (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No attendance data available. Please upload a file via the 'Upload Attendance Data' tab.
+                        </div>
+                    );
+                }
+
 
                 if (processedAttendanceData.length > 0 && daysInSelectedViewMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
                   return (
@@ -488,8 +567,7 @@ export default function AttendancePage() {
                 }
                 return (
                   <div className="text-center py-8 text-muted-foreground">
-                     No attendance data available to display for the current selection. <br/>
-                     Please upload a file via the 'Upload Attendance Data' tab.
+                     An unexpected state occurred. Please try selecting month/year or uploading a file.
                   </div>
                 );
               })()}
@@ -501,7 +579,7 @@ export default function AttendancePage() {
             <CardHeader>
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>
-                Select the month and year, then upload an Excel/CSV file with employee attendance.
+                Select the month and year, then upload a CSV file with employee attendance.
                 <br/>Expected columns: Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
               </CardDescription>
             </CardHeader>
@@ -527,7 +605,8 @@ export default function AttendancePage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <FileUploadButton 
                   onFileUpload={handleFileUpload} 
-                  buttonText="Upload Attendance Excel/CSV" 
+                  buttonText="Upload Attendance CSV" 
+                  acceptedFileTypes=".csv"
                   disabled={!uploadMonth || !uploadYear || uploadYear === 0}
                 />
                 <Button 
@@ -541,7 +620,7 @@ export default function AttendancePage() {
               </div>
                {uploadedFileName && uploadContext && (
                 <p className="text-sm text-muted-foreground">
-                  Last upload attempt: {uploadedFileName} for {uploadContext.month} {uploadContext.year}. (Data display from file is not implemented in this prototype)
+                  Last successful upload: {uploadedFileName} for {uploadContext.month} {uploadContext.year}.
                 </p>
               )}
             </CardContent>
@@ -551,5 +630,5 @@ export default function AttendancePage() {
     </>
   );
 }
-
     
+
