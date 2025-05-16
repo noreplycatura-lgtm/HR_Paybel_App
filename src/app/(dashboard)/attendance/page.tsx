@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, Filter } from "lucide-react";
 import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data";
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
-import { startOfDay, parseISO } from "date-fns";
+import { startOfDay, parseISO, isBefore, isEqual } from "date-fns"; // Added isBefore and isEqual
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; // Raw attendance from upload/generation
@@ -25,11 +25,13 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 
 export default function AttendancePage() {
   const { toast } = useToast();
-  const [attendanceData, setAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
+  const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
+  const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
     const now = new Date();
@@ -46,72 +48,63 @@ export default function AttendancePage() {
       ...emp,
       attendance: Array(31).fill(null).map(() => ["P", "A", "HD", "W", "PH", "CL", "SL", "PL"][Math.floor(Math.random() * 8)])
     }));
-    setAttendanceData(initialAttendanceData);
+    setRawAttendanceData(initialAttendanceData);
+    setIsLoading(false);
   }, []);
 
   React.useEffect(() => {
-    if (attendanceData.length > 0 && selectedYear > 0 && selectedMonth) {
-      const monthIndex = months.indexOf(selectedMonth);
-      if (monthIndex === -1) return;
-
-      const processedData = attendanceData.map(emp => {
-        const employeeStartDate = emp.doj ? parseISO(emp.doj) : new Date(); // Default to today if DOJ is missing
-        const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
-        
-        // Employee must have joined before or on the first day of the selected month to have attendance
-        if (isBefore(startOfSelectedMonth, startOfDay(employeeStartDate)) && !isEqual(startOfSelectedMonth, startOfDay(employeeStartDate))) {
-           return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-') }; // Mark as not joined
-        }
-
-        let balances = getLeaveBalancesAtStartOfMonth(emp, selectedYear, monthIndex, sampleLeaveHistory);
-        
-        // Recalculate PL eligibility for *this specific month* based on service up to the start of this month
-        const monthsOfServiceThisMonthStart = calculateMonthsOfService(emp.doj, new Date(selectedYear, monthIndex, 1));
-        const isPLEligibleForThisMonth = monthsOfServiceThisMonthStart >= PL_ELIGIBILITY_MONTHS;
-
-        const daysInCurrentMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
-        const rawMonthlyAttendance = emp.attendance.slice(0, daysInCurrentMonth);
-
-        const newProcessedAttendance = rawMonthlyAttendance.map(originalStatus => {
-          let currentDayStatus = originalStatus;
-          
-          // Skip processing for days when employee had not joined
-          // This logic should be more fine-grained if DOJ is mid-month, for now, simple check
-          // const dayDate = new Date(selectedYear, monthIndex, dayIndex + 1);
-          // if (isBefore(dayDate, startOfDay(employeeStartDate))) {
-          //    return '-'; // Not joined yet
-          // }
-
-
-          if (originalStatus === "CL") {
-            if (balances.cl >= 1) {
-              balances.cl -= 1;
-            } else {
-              currentDayStatus = "A";
-            }
-          } else if (originalStatus === "SL") {
-            if (balances.sl >= 1) {
-              balances.sl -= 1;
-            } else {
-              currentDayStatus = "A";
-            }
-          } else if (originalStatus === "PL") {
-            if (isPLEligibleForThisMonth && balances.pl >= 1) {
-              balances.pl -= 1;
-            } else {
-              currentDayStatus = "A"; // Not eligible for PL or no PL balance
-            }
-          }
-          // Note: This doesn't handle half-day leaves combined with insufficient balance.
-          // For simplicity, CL/SL/PL are assumed full day for this conversion.
-          return currentDayStatus;
-        });
-        return { ...emp, processedAttendance: newProcessedAttendance };
-      });
-      setAttendanceData(processedData);
+    if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth) {
+      setProcessedAttendanceData([]); // Clear processed data if inputs are not ready
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, selectedYear]); // Dependency on original attendanceData removed to avoid loop, process only on month/year change
+
+    const monthIndex = months.indexOf(selectedMonth);
+    if (monthIndex === -1) return;
+
+    const processedData = rawAttendanceData.map(emp => {
+      const employeeStartDate = emp.doj ? parseISO(emp.doj) : new Date();
+      const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
+      
+      if (isBefore(startOfSelectedMonth, startOfDay(employeeStartDate)) && !isEqual(startOfSelectedMonth, startOfDay(employeeStartDate))) {
+         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-') };
+      }
+
+      let balances = getLeaveBalancesAtStartOfMonth(emp, selectedYear, monthIndex, sampleLeaveHistory);
+      
+      const monthsOfServiceThisMonthStart = calculateMonthsOfService(emp.doj, new Date(selectedYear, monthIndex, 1));
+      const isPLEligibleForThisMonth = monthsOfServiceThisMonthStart >= PL_ELIGIBILITY_MONTHS;
+
+      const daysInCurrentMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
+      const rawMonthlyAttendance = emp.attendance.slice(0, daysInCurrentMonth);
+
+      const newProcessedAttendance = rawMonthlyAttendance.map(originalStatus => {
+        let currentDayStatus = originalStatus;
+        
+        if (originalStatus === "CL") {
+          if (balances.cl >= 1) {
+            balances.cl -= 1;
+          } else {
+            currentDayStatus = "A";
+          }
+        } else if (originalStatus === "SL") {
+          if (balances.sl >= 1) {
+            balances.sl -= 1;
+          } else {
+            currentDayStatus = "A";
+          }
+        } else if (originalStatus === "PL") {
+          if (isPLEligibleForThisMonth && balances.pl >= 1) {
+            balances.pl -= 1;
+          } else {
+            currentDayStatus = "A"; 
+          }
+        }
+        return currentDayStatus;
+      });
+      return { ...emp, processedAttendance: newProcessedAttendance };
+    });
+    setProcessedAttendanceData(processedData);
+  }, [selectedMonth, selectedYear, rawAttendanceData, isLoading]);
 
 
   const handleFileUpload = (file: File) => {
@@ -149,7 +142,9 @@ export default function AttendancePage() {
           <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-          {selectedMonth ? (
+          {isLoading || !selectedMonth ? (
+            <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
+          ) : (
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Select Month" />
@@ -158,10 +153,10 @@ export default function AttendancePage() {
                 {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
               </SelectContent>
             </Select>
-          ) : (
-            <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
           )}
-          {selectedYear > 0 && availableYears.length > 0 ? (
+          {isLoading || selectedYear === 0 || availableYears.length === 0 ? (
+             <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
+          ) : (
             <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
               <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
@@ -170,8 +165,6 @@ export default function AttendancePage() {
                 {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
               </SelectContent>
             </Select>
-          ) : (
-             <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
           )}
           <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
           <Select>
@@ -196,11 +189,12 @@ export default function AttendancePage() {
           <CardDescription>
             Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
             <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
+            <br/> '-' indicates the employee had not joined by the selected month/day.
             <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth > 0 ? daysInMonth : 'current month'}).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-         {attendanceData.length === 0 || daysInMonth === 0 || !attendanceData[0]?.processedAttendance ? (
+         {isLoading || processedAttendanceData.length === 0 || daysInMonth === 0 || !processedAttendanceData[0]?.processedAttendance ? (
             <div className="text-center py-8 text-muted-foreground">Loading attendance data or select month/year...</div>
           ) : (
           <Table>
@@ -226,8 +220,8 @@ export default function AttendancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {attendanceData.map((emp) => {
-                if (!emp.processedAttendance) { // Should ideally not happen if loading state is correct
+              {processedAttendanceData.map((emp) => {
+                if (!emp.processedAttendance) { 
                   return <TableRow key={emp.id}><TableCell colSpan={daysInMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
                 }
                 const finalAttendanceToUse = emp.processedAttendance;
@@ -235,14 +229,13 @@ export default function AttendancePage() {
                 const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
                 const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
                 const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
-                const absent2AHd = absent1A + (halfDays * 0.5); // HD contributes 0.5 to A count
+                const absent2AHd = absent1A + (halfDays * 0.5); 
                 const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
                 const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
                 const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
                 const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
                 const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
                 const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
-
 
                 const totalDaysCalculated = daysInMonth - notJoinedDays; 
                 const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
@@ -268,7 +261,7 @@ export default function AttendancePage() {
                   <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
                   <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
                   <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
-                  <TableCell className="text-center font-semibold">{totalDaysCalculated}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalDaysCalculated < 0 ? 0 : totalDaysCalculated}</TableCell>
                   <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>
                 </TableRow>
               )})}
@@ -276,7 +269,7 @@ export default function AttendancePage() {
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
-                <TableCell colSpan={daysInMonth + 10} className="font-semibold">{attendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
+                <TableCell colSpan={daysInMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>
