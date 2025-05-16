@@ -98,7 +98,6 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     if (editingEmployeeId) {
-      // Edit existing employee
       const updatedEmployees = employees.map(emp => 
         emp.id === editingEmployeeId ? { ...emp, ...values, id: editingEmployeeId } : emp
       );
@@ -106,7 +105,6 @@ export default function EmployeeMasterPage() {
       saveEmployeesToLocalStorage(updatedEmployees);
       toast({ title: "Employee Updated", description: `${values.name}'s details have been updated.` });
     } else {
-      // Add new employee - Check for duplicate code
       const existingEmployee = employees.find(emp => emp.code === values.code);
       if (existingEmployee) {
         toast({
@@ -141,7 +139,6 @@ export default function EmployeeMasterPage() {
     const employeeToEdit = employees.find(emp => emp.id === employeeId);
     if (employeeToEdit) {
       setEditingEmployeeId(employeeId);
-      // Ensure DOJ is in YYYY-MM-DD for the form
       const formValues = {
         ...employeeToEdit,
         doj: employeeToEdit.doj && isValid(parseISO(employeeToEdit.doj)) ? format(parseISO(employeeToEdit.doj), 'yyyy-MM-dd') : ''
@@ -183,7 +180,7 @@ export default function EmployeeMasterPage() {
         const dataRows = lines.slice(1); 
         const expectedColumns = 8; 
         const uploadedEmployees: EmployeeDetail[] = [];
-        const existingCodes = new Set(employees.map(emp => emp.code));
+        const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
         let skippedForDuplicateInCsv = 0;
         let skippedForExistingInDb = 0;
@@ -219,7 +216,7 @@ export default function EmployeeMasterPage() {
             skippedForDuplicateInCsv++;
             return;
           }
-          if (existingCodes.has(code)) {
+          if (currentEmployeesMap.has(code)) {
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) as code already exists in master list.`);
             skippedForExistingInDb++;
             return;
@@ -292,13 +289,21 @@ export default function EmployeeMasterPage() {
     toast({ title: "Template Downloaded", description: "employee_master_template.csv downloaded." });
   };
 
-  const filteredEmployees = employees.filter(employee => {
-    const searchTerm = filterTerm.toLowerCase();
-    return (
-      employee.code.toLowerCase().includes(searchTerm) ||
-      employee.name.toLowerCase().includes(searchTerm)
-    );
-  });
+  const filteredEmployees = React.useMemo(() => {
+    return employees.filter(employee => {
+        const searchTerm = filterTerm.toLowerCase();
+        return (
+          employee.code.toLowerCase().includes(searchTerm) ||
+          employee.name.toLowerCase().includes(searchTerm)
+        );
+      });
+  }, [employees, filterTerm]);
+
+  const employeeCounts = React.useMemo(() => {
+    const activeCount = employees.filter(emp => emp.status === "Active").length;
+    const leftCount = employees.filter(emp => emp.status === "Left").length;
+    return { activeCount, leftCount };
+  }, [employees]);
 
   if (isLoadingData) {
     return (
@@ -389,7 +394,7 @@ export default function EmployeeMasterPage() {
             onFileUpload={handleUploadEmployees}
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
-            title="Upload employee data from a CSV file. Replaces existing data."
+            title="Upload employee data from a CSV file"
             icon={<Upload className="mr-2 h-4 w-4" />}
         />
         <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
@@ -403,7 +408,8 @@ export default function EmployeeMasterPage() {
             <div>
               <CardTitle>Employee List</CardTitle>
               <CardDescription>
-                Displaying {filteredEmployees.length} of {employees.length} total employees.
+                Displaying {filteredEmployees.length} of {employees.length} total employees
+                ({employeeCounts.activeCount} Active, {employeeCounts.leftCount} Left).
               </CardDescription>
             </div>
             <div className="relative w-full sm:w-64">
@@ -452,23 +458,18 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) { 
-                            // Attempt to re-parse if it might be in a different common format (e.g. DD/MM/YYYY or MM/DD/YYYY)
-                            // This is a basic attempt; a more robust library might be needed for complex date parsing.
                             const parts = employee.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                // Try YYYY-MM-DD (already handled by parseISO if strict)
-                                // Try DD-MM-YYYY -> YYYY-MM-DD
                                 if (parseInt(parts[2]) > 1000) reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                                // Try MM-DD-YYYY -> YYYY-MM-DD
                                 else if (parseInt(parts[0]) <=12 && parseInt(parts[1]) <=31) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return employee.doj; // Return original if parsing still fails
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return employee.doj; // Return original on error
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -499,6 +500,8 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+    
+
     
 
     
