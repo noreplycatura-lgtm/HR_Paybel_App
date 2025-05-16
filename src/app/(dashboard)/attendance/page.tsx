@@ -147,36 +147,64 @@ export default function AttendancePage() {
                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
                   <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
                 ))}
-                 <TableHead className="text-center min-w-[60px]">Total P</TableHead>
-                 <TableHead className="text-center min-w-[60px]">Total A</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Working Days (P)</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Absent-1 (A)</TableHead>
+                 <TableHead className="text-center min-w-[110px]">Absent-2 (A+HD)</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Weekoff (W)</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Total CL (Used)</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Total PL (Used)</TableHead>
+                 <TableHead className="text-center min-w-[100px]">Total SL (Used)</TableHead>
+                 <TableHead className="text-center min-w-[110px]">Paid Holiday (PH)</TableHead>
+                 <TableHead className="text-center min-w-[130px]">Total Days</TableHead>
+                 <TableHead className="text-center min-w-[120px]">Paid Days</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {attendanceData.map((emp) => {
-                const totalP = emp.attendance.slice(0, daysInMonth).filter(s => s === 'P').length;
-                const totalA = emp.attendance.slice(0, daysInMonth).filter(s => s === 'A').length;
+                const relevantAttendance = emp.attendance.slice(0, daysInMonth);
+                const workingDaysP = relevantAttendance.filter(s => s === 'P').length;
+                const absent1A = relevantAttendance.filter(s => s === 'A').length;
+                const halfDays = relevantAttendance.filter(s => s === 'HD').length;
+                const absent2AHd = absent1A + (halfDays / 2);
+                const weekOffsW = relevantAttendance.filter(s => s === 'W').length;
+                const totalCLUsed = relevantAttendance.filter(s => s === 'CL').length;
+                const totalPLUsed = relevantAttendance.filter(s => s === 'PL').length;
+                const totalSLUsed = relevantAttendance.filter(s => s === 'SL').length;
+                const paidHolidaysPH = relevantAttendance.filter(s => s === 'PH').length;
+
+                const totalDaysCalculated = workingDaysP + weekOffsW + absent2AHd + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
+                const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
+                
                 return (
                 <TableRow key={emp.id}>
                   <TableCell>{emp.code}</TableCell>
                   <TableCell>{emp.name}</TableCell>
                   <TableCell>{emp.designation}</TableCell>
                   <TableCell>{emp.doj}</TableCell>
-                  {emp.attendance.slice(0, daysInMonth).map((status, index) => (
+                  {relevantAttendance.map((status, index) => (
                     <TableCell key={index} className="text-center">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${ATTENDANCE_STATUS_COLORS[status] || 'bg-gray-200 text-gray-800'}`}>
                         {status}
                       </span>
                     </TableCell>
                   ))}
-                  <TableCell className="text-center font-semibold">{totalP}</TableCell>
-                  <TableCell className="text-center font-semibold">{totalA}</TableCell>
+                  <TableCell className="text-center font-semibold">{workingDaysP}</TableCell>
+                  <TableCell className="text-center font-semibold">{absent1A}</TableCell>
+                  <TableCell className="text-center font-semibold">{absent2AHd.toFixed(1)}</TableCell>
+                  <TableCell className="text-center font-semibold">{weekOffsW}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalCLUsed}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
+                  <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
+                  <TableCell className="text-center font-semibold">{totalDaysCalculated.toFixed(1)}</TableCell>
+                  <TableCell className="text-center font-semibold">{paidDaysCalculated}</TableCell>
                 </TableRow>
               )})}
             </TableBody>
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
-                <TableCell colSpan={daysInMonth + 2} className="font-semibold">{attendanceData.length}</TableCell>
+                <TableCell colSpan={daysInMonth + 10} className="font-semibold">{attendanceData.length}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>
