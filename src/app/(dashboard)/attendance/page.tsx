@@ -18,13 +18,14 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleLeaveHistory } from "@/lib/hr-data";
+import { sampleLeaveHistory, sampleEmployees } from "@/lib/hr-data"; // sampleEmployees might be used as fallback
 import { getLeaveBalancesAtStartOfMonth, PL_ELIGIBILITY_MONTHS, calculateMonthsOfService } from "@/lib/hr-calculations";
 import { startOfDay, parseISO, isBefore, isEqual, format } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[];
   processedAttendance?: string[];
+  isMissingInMaster?: boolean;
 }
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -32,6 +33,7 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 
 
 export default function AttendancePage() {
@@ -39,6 +41,7 @@ export default function AttendancePage() {
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [filteredAttendanceData, setFilteredAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
+  const [employeeMasterList, setEmployeeMasterList] = React.useState<EmployeeDetail[]>([]);
   
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
@@ -84,6 +87,26 @@ export default function AttendancePage() {
     
     setIsLoadingState(false); 
   }, []);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedMaster = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedMaster) {
+          setEmployeeMasterList(JSON.parse(storedMaster));
+        } else {
+           setEmployeeMasterList(sampleEmployees); // Fallback to sample if nothing in local storage
+        }
+      } catch (error) {
+        console.error("Error loading employee master for attendance cross-check:", error);
+        toast({
+          title: "Master Data Load Error",
+          description: "Could not load employee master list. Highlighting of missing employees may be inaccurate.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [toast]);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
@@ -134,16 +157,18 @@ export default function AttendancePage() {
         setProcessedAttendanceData([]);
         return;
     }
+    const masterEmployeeCodes = new Set(employeeMasterList.map(emp => emp.code));
     
     const processedData = rawAttendanceData.map(emp => {
+      const isMissingInMaster = !masterEmployeeCodes.has(emp.code);
       if (!emp.doj) {
-        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A') };
+        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('A'), isMissingInMaster };
       }
       const employeeStartDate = parseISO(emp.doj);
       const startOfSelectedMonth = startOfDay(new Date(selectedYear, monthIndex, 1));
 
       if (isBefore(startOfSelectedMonth, startOfDay(employeeStartDate)) && !isEqual(startOfSelectedMonth, startOfDay(employeeStartDate))) {
-         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-') };
+         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
 
       const employeeForLeaveCalc: EmployeeDetail = {
@@ -152,8 +177,8 @@ export default function AttendancePage() {
         name: emp.name,
         designation: emp.designation,
         doj: emp.doj,
-        status: emp.status,
-        division: emp.division,
+        status: emp.status || "Active", // Default to Active if status is missing
+        division: emp.division || "N/A", // Default to N/A if division is missing
         hq: emp.hq || "N/A",
         grossMonthlySalary: emp.grossMonthlySalary || 0,
       };
@@ -189,10 +214,10 @@ export default function AttendancePage() {
         }
         return currentDayStatus;
       });
-      return { ...emp, processedAttendance: newProcessedAttendance };
+      return { ...emp, processedAttendance: newProcessedAttendance, isMissingInMaster };
     });
     setProcessedAttendanceData(processedData);
-  }, [selectedMonth, selectedYear, rawAttendanceData]);
+  }, [selectedMonth, selectedYear, rawAttendanceData, employeeMasterList]);
 
   React.useEffect(() => {
     if (!searchTerm) {
@@ -745,6 +770,7 @@ export default function AttendancePage() {
                 Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
                 <br/> If CL/SL/PL is taken without sufficient balance, it is marked as 'A' (Absent).
                 <br/> '-' indicates the employee had not joined by the selected month/day. Blank or '-' cells in uploaded file are treated as 'A'.
+                <br/>Rows highlighted in light red indicate employee codes present in attendance but not found in the Employee Master.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -827,7 +853,7 @@ export default function AttendancePage() {
                           const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
                           return (
-                          <TableRow key={emp.id}>
+                          <TableRow key={emp.id} className={emp.isMissingInMaster ? "bg-red-100 dark:bg-red-900/20" : ""}>
                             <TableCell>
                                 <Button variant="ghost" size="icon" onClick={() => handleOpenEditAttendanceDialog(emp.code)} title={`Edit attendance for ${emp.name}`}>
                                     <Edit className="h-4 w-4" />
@@ -957,3 +983,4 @@ export default function AttendancePage() {
     </>
   );
 }
+
