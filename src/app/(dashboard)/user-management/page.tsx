@@ -76,21 +76,30 @@ export default function UserManagementPage() {
   React.useEffect(() => {
     setIsLoading(true);
     if (typeof window !== 'undefined') {
+      let usersToSet: SimulatedUser[] = [];
       try {
         const storedUsers = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
         if (storedUsers) {
-          setSimulatedUsers(JSON.parse(storedUsers));
-        } else {
-          setSimulatedUsers([]); // Initialize with empty if nothing in storage
+          const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
+          // Filter out "Novita"
+          const filteredUsers = parsedUsers.filter(user => user.username !== "Novita");
+          usersToSet = filteredUsers;
+          
+          // If Novita was filtered out, save the modified list back to localStorage
+          if (filteredUsers.length < parsedUsers.length) {
+            localStorage.setItem(SIMULATED_USERS_STORAGE_KEY, JSON.stringify(filteredUsers));
+            // Consider if a toast message is desired here, e.g.:
+            // toast({ title: "User 'Novita' Cleared", description: "The co-admin account 'Novita' has been removed as per request." });
+          }
         }
       } catch (error) {
-        console.error("Error loading simulated users from localStorage:", error);
+        console.error("Error loading/processing simulated users from localStorage:", error);
         toast({ title: "Data Load Error", description: "Could not load user list. Stored data might be corrupted.", variant: "destructive" });
-        setSimulatedUsers([]);
       }
+      setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, [toast]);
+  }, []); // Changed dependency array to [] for mount-only effect
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -364,6 +373,3 @@ export default function UserManagementPage() {
     </>
   );
 }
-
-
-    
