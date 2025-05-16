@@ -81,9 +81,15 @@ export default function AttendancePage() {
             setUploadYear(parsedContext.year);
           } catch (error) {
             console.error("Error parsing attendance data from localStorage:", error);
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY); // Do not delete on parse error
+            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
+            // localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+            toast({
+                title: "Data Load Error",
+                description: "Could not load previously saved attendance data. It might be corrupted. Please clear data manually if needed.",
+                variant: "destructive",
+                duration: 7000,
+            });
             
             setSelectedMonth(defaultMonthName);
             setSelectedYear(defaultYear);
@@ -209,8 +215,8 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(status => {
-            const trimmedUpperStatus = status.trim().toUpperCase();
+          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusValue => {
+            const trimmedUpperStatus = statusValue.trim().toUpperCase();
             if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
               return 'A'; 
             }
@@ -267,7 +273,8 @@ export default function AttendancePage() {
           viewTabTrigger.click();
         }
 
-      } catch (error) {
+      } catch (error)
+      {
         console.error("Error parsing CSV:", error);
         toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive" });
         setRawAttendanceData([]);
