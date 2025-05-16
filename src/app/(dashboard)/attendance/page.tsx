@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -19,12 +20,14 @@ const sampleAttendanceData = [
 ];
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const currentMonth = months[new Date().getMonth()];
+const currentYear = new Date().getFullYear();
+const currentMonthName = months[new Date().getMonth()];
 
 export default function AttendancePage() {
   const { toast } = useToast();
   const [attendanceData, setAttendanceData] = React.useState(sampleAttendanceData);
-  const [selectedMonth, setSelectedMonth] = React.useState(currentMonth);
+  const [selectedMonth, setSelectedMonth] = React.useState(currentMonthName);
+  const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
 
   const handleFileUpload = (file: File) => {
     // Simulate file processing
@@ -35,7 +38,8 @@ export default function AttendancePage() {
     // Here you would parse the Excel and update attendanceData
   };
   
-  const daysInMonth = new Date(new Date().getFullYear(), months.indexOf(selectedMonth) + 1, 0).getDate();
+  const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
+  const availableYears = [currentYear, currentYear - 1, currentYear - 2, currentYear -3, currentYear -4];
 
 
   return (
@@ -51,15 +55,23 @@ export default function AttendancePage() {
       <Card className="mb-6 shadow-md">
         <CardHeader>
           <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter attendance records by month, employee, or division.</CardDescription>
+          <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-4">
+        <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select Month" />
             </SelectTrigger>
             <SelectContent>
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+            <SelectTrigger className="w-full sm:w-[120px]">
+              <SelectValue placeholder="Select Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
           <Input placeholder="Filter by Employee Name/Code..." className="w-full sm:w-[250px]" />
@@ -81,7 +93,7 @@ export default function AttendancePage() {
 
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle>Attendance Records for {selectedMonth}</CardTitle>
+          <CardTitle>Attendance Records for {selectedMonth} {selectedYear}</CardTitle>
           <CardDescription>
             Color codes: P (Present), A (Absent), HD (Half-Day), W (Week Off), PH (Public Holiday), CL/SL/PL (Leaves).
             <br/> Format Info: Excel should contain Code, Name, Designation, DOJ, and daily status columns (1 to {daysInMonth}).
