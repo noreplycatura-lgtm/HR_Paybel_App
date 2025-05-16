@@ -28,12 +28,21 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
+  
+  // For View & Filter Tab
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
+
+  // For Upload Tab
+  const [uploadMonth, setUploadMonth] = React.useState<string>('');
+  const [uploadYear, setUploadYear] = React.useState<number>(0);
+
   const [isLoading, setIsLoading] = React.useState(true);
   const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null);
+  const [uploadContext, setUploadContext] = React.useState<{month: string, year: number} | null>(null);
+
 
   React.useEffect(() => {
     const now = new Date();
@@ -42,10 +51,21 @@ export default function AttendancePage() {
 
     setCurrentYear(year);
     setCurrentMonthName(monthName);
+
+    // Set defaults for view tab
     setSelectedYear(year);
     setSelectedMonth(monthName);
+    
+    // Set defaults for upload tab
+    setUploadYear(year);
+    setUploadMonth(monthName);
 
-    if (uploadedFileName) {
+
+    if (uploadedFileName && uploadContext) {
+      // If a file was "uploaded", we stick to that context for display
+      // until a new selection is made in the view tab
+      setSelectedMonth(uploadContext.month);
+      setSelectedYear(uploadContext.year);
       setIsLoading(false);
       return;
     }
@@ -56,7 +76,7 @@ export default function AttendancePage() {
     }));
     setRawAttendanceData(initialAttendanceData);
     setIsLoading(false);
-  }, [uploadedFileName]);
+  }, [uploadedFileName, uploadContext]);
 
   React.useEffect(() => {
     if (isLoading || rawAttendanceData.length === 0 || !selectedYear || !selectedMonth) {
@@ -114,15 +134,25 @@ export default function AttendancePage() {
 
 
   const handleFileUpload = (file: File) => {
+    if (!uploadMonth || !uploadYear) {
+      toast({
+        title: "Selection Missing",
+        description: "Please select the month and year for the attendance data before uploading.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({
-      title: "File Received for Upload",
+      title: `File Received for ${uploadMonth} ${uploadYear}`,
       description: `${file.name} has been received. Simulating data processing. (Actual Excel parsing and data update from the file are not implemented in this prototype).`,
     });
     setUploadedFileName(file.name);
+    setUploadContext({month: uploadMonth, year: uploadYear});
     // Clear existing raw data to simulate it's being replaced by upload
     setRawAttendanceData([]); 
-    // Could potentially trigger a re-process here if actual parsing was implemented
-    // For now, the useEffect for processedAttendanceData will handle the empty rawData
+    // Switch view to the uploaded month/year
+    setSelectedMonth(uploadMonth);
+    setSelectedYear(uploadYear);
   };
 
   const handleDownloadReport = () => {
@@ -138,7 +168,6 @@ export default function AttendancePage() {
     const daysInCurrentMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
     const csvRows: string[][] = [];
 
-    // Headers
     const headers = [
       "Code", "Name", "Designation", "DOJ",
       ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
@@ -148,7 +177,6 @@ export default function AttendancePage() {
     ];
     csvRows.push(headers);
 
-    // Data rows
     processedAttendanceData.forEach(emp => {
       if (!emp.processedAttendance) return;
       const finalAttendanceToUse = emp.processedAttendance;
@@ -164,7 +192,7 @@ export default function AttendancePage() {
       const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
       const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
       
-      const totalDaysCalculated = daysInCurrentMonth - notJoinedDays; // Show days in month excluding not-joined days
+      const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays; 
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
       const row = [
@@ -181,7 +209,7 @@ export default function AttendancePage() {
         totalPLUsed.toString(),
         totalSLUsed.toString(),
         paidHolidaysPH.toString(),
-        (totalDaysCalculated < 0 ? 0 : totalDaysCalculated).toString(),
+        (totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc).toString(),
         paidDaysCalculated.toFixed(1)
       ];
       csvRows.push(row);
@@ -192,7 +220,7 @@ export default function AttendancePage() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    const formattedDate = format(new Date(), 'yyyy-MM'); // Keep simple date for file name consistency
+    const formattedDate = format(new Date(), 'yyyy-MM-dd'); 
     link.setAttribute("download", `attendance_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -207,20 +235,24 @@ export default function AttendancePage() {
   };
 
   const handleDownloadSampleTemplate = () => {
+    const daysForTemplate = (uploadYear && uploadMonth) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: 31 }, (_, i) => (i + 1).toString())];
+    const headers = ["Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
-    // Add a couple of sample data rows
-    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(31).fill("P")];
-    sampleRow1[5] = "W"; // Example Weekoff
-    sampleRow1[6] = "W";
-    sampleRow1[10] = "CL"; // Example CL
+    const sampleRow1 = ["E001", "John Doe", "Software Engineer", "2023-01-15", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 7) {
+      sampleRow1[5+3] = "W"; 
+      sampleRow1[6+3] = "W";
+    }
+    if (daysForTemplate >= 11) sampleRow1[10+3] = "CL"; 
     csvRows.push(sampleRow1);
 
-    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(31).fill("P")];
-    sampleRow2[13] = "A"; // Example Absent
-    sampleRow2[14] = "HD"; // Example Half-Day
+    const sampleRow2 = ["E002", "Jane Smith", "Project Manager", "2024-03-20", ...Array(daysForTemplate).fill("P")];
+    if (daysForTemplate >= 15) {
+      sampleRow2[13+3] = "A"; 
+      sampleRow2[14+3] = "HD";
+    }
     csvRows.push(sampleRow2);
     
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
@@ -228,7 +260,8 @@ export default function AttendancePage() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "attendance_template_sample.csv");
+    const monthYearForFilename = (uploadMonth && uploadYear) ? `${uploadMonth}_${uploadYear}` : "sample";
+    link.setAttribute("download", `attendance_template_${monthYearForFilename}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -237,17 +270,19 @@ export default function AttendancePage() {
 
     toast({
       title: "Sample Template Downloaded",
-      description: "attendance_template_sample.csv has been downloaded.",
+      description: `attendance_template_${monthYearForFilename}.csv has been downloaded.`,
     });
   };
   
-  const daysInMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
+  const daysInSelectedViewMonth = selectedYear && selectedMonth ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
+  const daysInSelectedUploadMonth = uploadYear && uploadMonth ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
+
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
 
   return (
     <>
       <PageHeader title="Attendance Dashboard" description="Manage and view employee attendance.">
-        <Button variant="outline" onClick={handleDownloadReport}>
+        <Button variant="outline" onClick={handleDownloadReport} disabled={rawAttendanceData.length === 0 && !!uploadedFileName}>
             <Download className="mr-2 h-4 w-4" />
             Download Report (CSV)
         </Button>
@@ -265,7 +300,6 @@ export default function AttendancePage() {
               <CardDescription>Filter attendance records by month, year, employee, or division.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-              {/* Month Selector */}
               {isLoading && !selectedMonth ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
@@ -278,7 +312,6 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              {/* Year Selector */}
               {isLoading && selectedYear === 0 ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
@@ -319,11 +352,11 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (uploadedFileName && rawAttendanceData.length === 0 && !isLoading) {
+                if (uploadedFileName && rawAttendanceData.length === 0 && !isLoading && uploadContext) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
-                      Attempting to process attendance from '{uploadedFileName}'.<br />
-                      (Full Excel parsing and display from file is not yet implemented in this prototype.)
+                      Displaying context for uploaded file: '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}.<br />
+                      (Full Excel parsing and display from file is not yet implemented in this prototype. Random data generation is paused.)
                     </div>
                   );
                 }
@@ -334,13 +367,10 @@ export default function AttendancePage() {
                     </div>
                   );
                 }
-                // This condition means raw data is present but processing hasn't finished or resulted in no processable employees
-                if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
-                    // Special check for uploaded file with no raw data yet
+                if ((rawAttendanceData.length > 0 && processedAttendanceData.length === 0 && daysInSelectedViewMonth > 0) || (rawAttendanceData.length === 0 && !uploadedFileName)) {
                     return <div className="text-center py-8 text-muted-foreground">Processing attendance data...</div>;
                 }
-                // This condition checks if there's processed data and at least one employee has their processed attendance array.
-                if (processedAttendanceData.length > 0 && daysInMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
+                if (processedAttendanceData.length > 0 && daysInSelectedViewMonth > 0 && processedAttendanceData[0]?.processedAttendance) {
                   return (
                     <Table>
                       <TableHeader>
@@ -349,7 +379,7 @@ export default function AttendancePage() {
                           <TableHead className="min-w-[150px]">Name</TableHead>
                           <TableHead className="min-w-[150px]">Designation</TableHead>
                           <TableHead className="min-w-[100px]">DOJ</TableHead>
-                          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+                          {Array.from({ length: daysInSelectedViewMonth }, (_, i) => i + 1).map(day => (
                             <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
                           ))}
                           <TableHead className="text-center min-w-[100px]">Working Days (P)</TableHead>
@@ -366,11 +396,10 @@ export default function AttendancePage() {
                       </TableHeader>
                       <TableBody>
                         {processedAttendanceData.map((emp) => {
-                          // If processedAttendance is undefined, it means it's still being worked on or failed for this emp
                           if (!emp.processedAttendance) { 
-                            return <TableRow key={emp.id}><TableCell colSpan={daysInMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
+                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 14}>Processing data for {emp.name}...</TableCell></TableRow>;
                           }
-                          const finalAttendanceToUse = emp.processedAttendance; // Already processed
+                          const finalAttendanceToUse = emp.processedAttendance; 
 
                           const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
                           const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
@@ -383,7 +412,7 @@ export default function AttendancePage() {
                           const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
                           const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
 
-                          const totalDaysCalculated = daysInMonth - notJoinedDays; 
+                          const totalDaysInMonthForCalc = daysInSelectedViewMonth - notJoinedDays; 
                           const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
                           
                           return (
@@ -407,7 +436,7 @@ export default function AttendancePage() {
                             <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
                             <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
                             <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
-                            <TableCell className="text-center font-semibold">{totalDaysCalculated < 0 ? 0 : totalDaysCalculated}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc}</TableCell>
                             <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>
                           </TableRow>
                         )})}
@@ -415,13 +444,12 @@ export default function AttendancePage() {
                       <TableFooter>
                         <TableRow>
                           <TableCell colSpan={4} className="font-semibold text-right">Total Employees:</TableCell>
-                          <TableCell colSpan={daysInMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
+                          <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
                   );
                 }
-                // Fallback if no processed data for the month, or no days in month (e.g. year not set)
                 return (
                   <div className="text-center py-8 text-muted-foreground">
                     No attendance data available for the selected month and year.
@@ -436,20 +464,47 @@ export default function AttendancePage() {
             <CardHeader>
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>
-                Upload an Excel file with employee attendance.
-                <br/>Expected columns: Code, Name, Designation, DOJ, and daily status columns (e.g., 1 to {daysInMonth > 0 ? daysInMonth : '31'}).
+                Select the month and year, then upload an Excel/CSV file with employee attendance.
+                <br/>Expected columns: Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Select value={uploadMonth} onValueChange={setUploadMonth}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Select Upload Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={uploadYear.toString()} onValueChange={(value) => setUploadYear(parseInt(value))}>
+                  <SelectTrigger className="w-full sm:w-[120px]">
+                    <SelectValue placeholder="Select Upload Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center gap-4">
-                <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Attendance Excel" />
-                <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto">
-                  <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
+                <FileUploadButton 
+                  onFileUpload={handleFileUpload} 
+                  buttonText="Upload Attendance Excel/CSV" 
+                  disabled={!uploadMonth || !uploadYear}
+                />
+                <Button 
+                  variant="link" 
+                  onClick={handleDownloadSampleTemplate} 
+                  className="p-0 h-auto"
+                  disabled={!uploadMonth || !uploadYear}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV for {uploadMonth ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
               </div>
-               {uploadedFileName && (
+               {uploadedFileName && uploadContext && (
                 <p className="text-sm text-muted-foreground">
-                  Last uploaded: {uploadedFileName}. (Data processing is simulated in prototype)
+                  Last upload attempt: {uploadedFileName} for {uploadContext.month} {uploadContext.year}. (Data processing is simulated in prototype)
                 </p>
               )}
             </CardContent>
@@ -459,9 +514,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-    
-
-    
-
-      
