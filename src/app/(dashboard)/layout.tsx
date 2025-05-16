@@ -27,14 +27,13 @@ export default function DashboardLayout({
 }) {
   return (
     <SidebarProvider defaultOpen={false}>
-      <div className="flex min-h-screen w-full flex-col bg-muted/40">
-        <AppSidebar />
-        <div className="flex flex-col sm:gap-4 sm:py-4 print:sm:pl-0">
-          <TopNavbar />
-          <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
-            {children}
-          </main>
-        </div>
+      <AppSidebar />
+      {/* Main content area wrapper, sibling to AppSidebar */}
+      <div className="flex flex-1 flex-col sm:gap-4 sm:py-4">
+        <TopNavbar />
+        <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
+          {children}
+        </main>
       </div>
     </SidebarProvider>
   );
@@ -90,3 +89,4 @@ function AppSidebar() {
     </Sidebar>
   );
 }
+
