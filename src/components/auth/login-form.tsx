@@ -31,6 +31,16 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
+// Define the structure for simulated users stored in localStorage
+interface SimulatedUser {
+  id: string;
+  username: string;
+  isLocked: boolean;
+}
+const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
+const MAIN_ADMIN_USERNAME = "asingh0402";
+const MAIN_ADMIN_PASSWORD = "123456";
+
 export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -49,22 +59,52 @@ export function LoginForm() {
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
     setIsLoading(false);
 
-    // Simplified: Original editor check removed as per request to revert.
-    // This form will now "succeed" with any credentials for prototype purposes,
-    // but won't set any special editor mode.
-    if (values.username && values.password) {
+    if (values.username === MAIN_ADMIN_USERNAME && values.password === MAIN_ADMIN_PASSWORD) {
       toast({
-        title: "Login Attempted (Prototype)",
-        description: "Login functionality is for demonstration. No permissions changed.",
+        title: "Admin Login Successful",
+        description: "Welcome, Main Admin!",
       });
       router.push("/dashboard");
-    } else {
+    } else if (values.username === MAIN_ADMIN_USERNAME) {
       toast({
         variant: "destructive",
-        title: "Login Failed",
-        description: "Please enter username and password.",
+        title: "Admin Login Failed",
+        description: "Incorrect password for Main Admin.",
       });
-      form.setError("password", { type: "manual", message: "Please check your credentials."})
+      form.setError("password", { type: "manual", message: "Incorrect password for Main Admin." });
+    } else {
+      // Check for co-admin
+      let isValidCoAdmin = false;
+      if (typeof window !== 'undefined') {
+        try {
+          const storedUsersStr = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
+          if (storedUsersStr) {
+            const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
+            const coAdminUser = simulatedUsers.find(user => user.username === values.username);
+            if (coAdminUser && !coAdminUser.isLocked) {
+              isValidCoAdmin = true;
+            }
+          }
+        } catch (error) {
+          console.error("Error reading co-admin users from localStorage:", error);
+          // Proceed to fail login if localStorage is corrupted or inaccessible
+        }
+      }
+
+      if (isValidCoAdmin) {
+        toast({
+          title: "Co-Admin Login Successful (Prototype)",
+          description: `Welcome, ${values.username}! Proceeding to dashboard.`,
+        });
+        router.push("/dashboard");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "Invalid username or password, or account is locked.",
+        });
+        form.setError("username", { type: "manual", message: "Invalid credentials or account locked." });
+      }
     }
   }
 
