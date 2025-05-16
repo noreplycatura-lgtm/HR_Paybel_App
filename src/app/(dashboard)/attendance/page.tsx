@@ -254,6 +254,7 @@ export default function AttendancePage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url); // Ensure href is set
     const monthYearForFilename = (uploadMonth && uploadYear) ? `${uploadMonth}_${uploadYear}` : "sample";
     link.setAttribute("download", `attendance_template_${monthYearForFilename}.csv`);
     link.style.visibility = 'hidden';
@@ -550,3 +551,5 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    
