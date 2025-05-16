@@ -71,7 +71,7 @@ export default function EmployeeMasterPage() {
       }
     }
     setIsLoadingData(false);
-  }, []); 
+  }, [toast]); 
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -110,7 +110,7 @@ export default function EmployeeMasterPage() {
       ["E006", "Sarah Lee", "Marketing Specialist", "2024-01-10", "Active", "Marketing", "62000"],
       ["E007", "Tom Brown", "IT Support", "2023-11-05", "Left", "IT", "55000"],
     ];
-    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\\n');
+    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
