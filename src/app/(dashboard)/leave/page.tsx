@@ -16,13 +16,14 @@ import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-reac
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
+import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
 import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_"; // For reading attendance
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -36,6 +37,21 @@ interface LeaveDisplayData extends EmployeeDetail {
   balancePLAtMonthEnd: number;
   isPLEligibleThisMonth: boolean;
 }
+
+// Simplified interface for parsing attendance data within LeavePage
+interface MonthlyEmployeeAttendance {
+  code: string;
+  attendance: string[]; // Raw daily statuses "P", "A", "CL" etc.
+}
+
+
+const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
+  if (!month || year === 0) return { rawDataKey: null };
+  return {
+    rawDataKey: `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`,
+  };
+};
+
 
 export default function LeavePage() {
   const { toast } = useToast();
@@ -120,10 +136,62 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
       .map(emp => {
-        const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(emp, selectedYear, monthIndex, leaveApplications, openingBalances);
+        // Calculate total accrued leaves up to the end of the selected month,
+        // considering opening balances and monthly accruals, as if no leaves from 'leaveApplications' were taken in the current month.
+        const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
+          emp, 
+          selectedYear, 
+          monthIndex, 
+          [], // Pass empty array for leaveApplications for this specific calculation
+          openingBalances
+        );
+
+        let usedCLFromAttendance = 0;
+        let usedSLFromAttendance = 0;
+        let usedPLFromAttendance = 0;
+
+        if (typeof window !== 'undefined') {
+          const { rawDataKey } = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
+          if (rawDataKey) {
+            const storedRawAttendance = localStorage.getItem(rawDataKey);
+            if (storedRawAttendance) {
+              try {
+                const monthAttendanceForAllEmployees: MonthlyEmployeeAttendance[] = JSON.parse(storedRawAttendance);
+                const empAttendanceRecord = monthAttendanceForAllEmployees.find(attEmp => attEmp.code === emp.code);
+                
+                if (empAttendanceRecord && empAttendanceRecord.attendance) {
+                  const daysInSelectedMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
+                  const dailyStatuses = empAttendanceRecord.attendance.slice(0, daysInSelectedMonth);
+
+                  dailyStatuses.forEach(status => {
+                    if (status === 'CL') usedCLFromAttendance += 1;
+                    else if (status === 'SL') usedSLFromAttendance += 1;
+                    else if (status === 'PL') usedPLFromAttendance += 1;
+                    // Note: HD (Half-Day) from attendance sheet is not automatically deducted from leave balances here.
+                    // If HD should consume 0.5 of a leave type, that logic would need to be added
+                    // both here and potentially in how 'HD' is recorded or processed.
+                  });
+                }
+              } catch (e) {
+                console.error(`Error parsing attendance data for ${emp.code} in ${selectedMonth} ${selectedYear} on Leave Page:`, e);
+              }
+            }
+          }
+        }
+
+        const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
+        const finalBalanceSL = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
+        const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
+        
         return {
           ...emp,
-          ...leaveDetails,
+          usedCLInMonth: usedCLFromAttendance,
+          usedSLInMonth: usedSLFromAttendance,
+          usedPLInMonth: usedPLFromAttendance,
+          balanceCLAtMonthEnd: finalBalanceCL,
+          balanceSLAtMonthEnd: finalBalanceSL,
+          balancePLAtMonthEnd: finalBalancePL,
+          isPLEligibleThisMonth: accruedDetails.isPLEligibleThisMonth,
         };
     });
     setDisplayData(newDisplayData);
@@ -154,6 +222,7 @@ export default function LeavePage() {
   
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
+    // Financial year starts in April. If selected month is Jan-Mar, FY started previous year.
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
@@ -166,6 +235,9 @@ export default function LeavePage() {
       setEditableOB_SL(existingOB.openingSL);
       setEditableOB_PL(existingOB.openingPL);
     } else {
+      // If no OB for this specific FY, but there might be for a previous one.
+      // However, the dialog should allow setting for the *current* FY.
+      // Default to 0 if no specific OB for *this* FY.
       setEditableOB_CL(0);
       setEditableOB_SL(0);
       setEditableOB_PL(0);
@@ -418,7 +490,7 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances. CL/SL (0.6/month after 5 months service) reset Apr-Mar; PL (1.2/month after 5 months service) carries forward. Opening balances can be uploaded or edited per employee."
+        description="View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after 5 months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month are sourced from attendance data; balances can go negative."
       >
         <FileUploadButton
             onFileUpload={handleOpeningBalanceUpload}
@@ -504,8 +576,8 @@ export default function LeavePage() {
         <CardHeader>
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
-            Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
-            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service.
+            Balances are calculated at the end of the selected month. Used leaves (CL/SL/PL) for the month are sourced from attendance data for that month.
+            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service. Balances can go negative.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -570,11 +642,12 @@ export default function LeavePage() {
                             const parts = emp.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
-                                } else if (parseInt(parts[0]) > 1000) { 
-                                     reparsedDate = parseISO(emp.doj); 
+                                // Attempt common non-ISO formats like DD-MM-YYYY or MM-DD-YYYY
+                                if (parseInt(parts[2]) > 1000) { // YYYY is likely at the end
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // try YYYY-MM-DD
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // try YYYY-DD-MM
+                                } else if (parseInt(parts[0]) > 1000) { // YYYY is likely at the start
+                                     reparsedDate = parseISO(emp.doj); // try as is, might be YYYY-MM-DD
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
@@ -611,3 +684,6 @@ export default function LeavePage() {
     </>
   );
 }
+
+
+    
