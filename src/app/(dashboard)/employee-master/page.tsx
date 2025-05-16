@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
@@ -63,17 +63,17 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees);
+          setEmployees(sampleEmployees); // Fallback to sample if nothing in LS
           saveEmployeesToLocalStorage(sampleEmployees);
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees);
+        setEmployees(sampleEmployees); // Fallback to sample on error
         toast({ title: "Data Load Error", description: "Could not load employee data from local storage. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, []); // Corrected dependency array
+  }, []); // Empty dependency array ensures this runs once on mount
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -88,7 +88,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     const newEmployee: EmployeeDetail = {
-      id: `E${Date.now().toString().slice(-4)}`,
+      id: values.code, // Use employee code as ID, ensure it's unique if possible
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -100,10 +100,82 @@ export default function EmployeeMasterPage() {
   };
 
   const handleUploadEmployees = (file: File) => {
-    toast({
-      title: "File Received",
-      description: `${file.name} received. (Prototype: Full CSV parsing for Employee Master not yet implemented). Expected columns: Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary.`,
-    });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) {
+        toast({ title: "Error Reading File", description: "Could not read the file content.", variant: "destructive" });
+        return;
+      }
+      try {
+        const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
+        if (lines.length < 2) { // Header + at least one data row
+          toast({ title: "Invalid File", description: "File is empty or has no data rows. Header + at least one data row expected.", variant: "destructive" });
+          return;
+        }
+
+        const dataRows = lines.slice(1); // Skip header row
+        const expectedColumns = 8; // Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary
+
+        const newEmployees: EmployeeDetail[] = dataRows.map((row, rowIndex) => {
+          const values = row.split(',').map(v => v.trim());
+          if (values.length < expectedColumns) {
+            console.warn(`Skipping row ${rowIndex + 1} due to insufficient columns. Expected ${expectedColumns}, got ${values.length}`);
+            return null;
+          }
+          
+          const status = values[0] as "Active" | "Left";
+          const division = values[1];
+          const code = values[2];
+          const name = values[3];
+          const designation = values[4];
+          const hq = values[5];
+          const doj = values[6]; // Assuming YYYY-MM-DD or similar string format
+          const grossMonthlySalary = parseFloat(values[7]);
+
+          if (!code || !name || !status || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
+            console.warn(`Skipping row ${rowIndex + 1} due to invalid critical data (code, name, status, or salary).`);
+            return null;
+          }
+          if (status !== "Active" && status !== "Left") {
+            console.warn(`Skipping row ${rowIndex + 1} due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
+            return null;
+          }
+
+          return {
+            id: code, // Using code as ID
+            status,
+            division,
+            code,
+            name,
+            designation,
+            hq,
+            doj,
+            grossMonthlySalary,
+          };
+        }).filter(item => item !== null) as EmployeeDetail[];
+
+        if (newEmployees.length === 0) {
+          toast({ title: "No Data Processed", description: "No valid employee data found in the file. Check column count, format, and required fields.", variant: "destructive"});
+          return;
+        }
+
+        setEmployees(newEmployees); // Replace existing employees with uploaded ones
+        saveEmployeesToLocalStorage(newEmployees);
+        toast({
+          title: "Employees Uploaded",
+          description: `${newEmployees.length} employee records processed from ${file.name}.`,
+        });
+
+      } catch (error) {
+        console.error("Error parsing CSV for employees:", error);
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive" });
+      }
+    };
+    reader.onerror = () => {
+      toast({ title: "File Read Error", description: "An error occurred while trying to read the file.", variant: "destructive" });
+    };
+    reader.readAsText(file);
   };
 
   const handleDownloadSampleTemplate = () => {
@@ -270,7 +342,7 @@ export default function EmployeeMasterPage() {
                   <TableCell>{employee.name}</TableCell>
                   <TableCell>{employee.designation}</TableCell>
                   <TableCell>{employee.hq || "N/A"}</TableCell>
-                  <TableCell>{employee.doj ? format(new Date(employee.doj), "dd MMM yyyy") : 'N/A'}</TableCell>
+                  <TableCell>{employee.doj ? format(parseISO(employee.doj), "dd MMM yyyy") : 'N/A'}</TableCell>
                   <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
@@ -296,3 +368,5 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+
+    
