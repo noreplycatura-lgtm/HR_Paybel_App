@@ -29,7 +29,7 @@ export default function DashboardLayout({
     <SidebarProvider defaultOpen={false}>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <AppSidebar />
-        <div className="flex flex-col sm:gap-4 sm:py-4 print:sm:pl-0"> {/* Removed sm:pl-14 */}
+        <div className="flex flex-col sm:gap-4 sm:py-4 print:sm:pl-0">
           <TopNavbar />
           <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
             {children}
@@ -41,12 +41,22 @@ export default function DashboardLayout({
 }
 
 function AppSidebar() {
-  const { state } = useSidebar(); // Get sidebar state
+  const { state: sidebarContextState } = useSidebar();
+  const [isClient, setIsClient] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // For SSR and initial client render, use a state consistent with defaultOpen={false} ("collapsed").
+  // After client mounts (isClient is true), use the actual context state.
+  const renderState = isClient ? sidebarContextState : "collapsed";
+
   return (
-    <Sidebar collapsible="icon" className="print:hidden"> {/* Add print:hidden here */}
+    <Sidebar collapsible="icon" className="print:hidden">
       <SidebarHeader className="flex items-center justify-between p-4">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold"> {/* Updated href */}
-            {state === 'expanded' && (
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+            {renderState === 'expanded' && (
                <Image 
                 src="https://placehold.co/120x40.png?text=Novita"
                 alt={`${COMPANY_NAME} Logo`}
@@ -55,7 +65,7 @@ function AppSidebar() {
                 data-ai-hint="company logo"
               />
             )}
-            {state === 'collapsed' && (
+            {renderState === 'collapsed' && (
               <Image 
                 src="https://placehold.co/32x32.png?text=N"
                 alt={`${COMPANY_NAME} Icon`}
@@ -65,7 +75,7 @@ function AppSidebar() {
               />
             )}
           </Link>
-        {state === 'expanded' && <SidebarTrigger asChild>
+        {renderState === 'expanded' && <SidebarTrigger asChild>
           <Button variant="ghost" size="icon">
             <PanelLeft className="h-5 w-5" />
           </Button>
@@ -75,7 +85,7 @@ function AppSidebar() {
         <SidebarNav items={NAV_ITEMS} />
       </SidebarContent>
       {/* <SidebarFooter className="p-2">
-        {state === 'expanded' && <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} {COMPANY_NAME}</p>}
+        {renderState === 'expanded' && <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} {COMPANY_NAME}</p>}
       </SidebarFooter> */}
     </Sidebar>
   );
