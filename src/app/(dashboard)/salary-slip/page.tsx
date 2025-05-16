@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, Loader2 } from "lucide-react";
 import { COMPANY_NAME } from "@/lib/constants";
 import Image from "next/image";
+import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
 
 const sampleEmployees = [
   { id: "E001", name: "John Doe" },
@@ -20,7 +21,6 @@ const sampleEmployees = [
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const currentYear = new Date().getFullYear();
 
-// Extend Date interface to safely add getMonthName
 interface DateWithMonthName extends Date {
   getMonthName(): string;
 }
@@ -31,23 +31,26 @@ interface DateWithMonthName extends Date {
 
 
 export default function SalarySlipPage() {
+  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [selectedMonth, setSelectedMonth] = React.useState<string | undefined>( (new Date() as DateWithMonthName).getMonthName());
   const [selectedYear, setSelectedYear] = React.useState<string | undefined>(currentYear.toString());
   const [selectedEmployee, setSelectedEmployee] = React.useState<string | undefined>();
   const [showSlip, setShowSlip] = React.useState(false);
 
   const handleGenerateSlip = () => {
+    if (!isEditor) {
+      alert("Please login as editor to generate salary slips.");
+      return;
+    }
     if (selectedMonth && selectedYear && selectedEmployee) {
       setShowSlip(true);
     } else {
-      // Basic validation feedback
       alert("Please select month, year, and employee.");
     }
   };
 
   const employeeDetails = sampleEmployees.find(e => e.id === selectedEmployee);
 
-  // Sample fixed values for salary slip, in a real app this would be fetched
   const salaryDetails = {
     employeeId: "E001",
     name: "John Doe",
@@ -78,6 +81,14 @@ export default function SalarySlipPage() {
   const attendanceSummary = { present: 22, absent: 0, leaves: 2, weekOffs: 6 };
   const leaveBalance = { cl: 5, sl: 3, pl: 10 };
 
+  if (isLoadingAuth) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees." />
@@ -85,9 +96,10 @@ export default function SalarySlipPage() {
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
         <CardHeader>
           <CardTitle>Select Criteria</CardTitle>
+          <CardDescription>{!isEditor && "Login as editor to generate slips."}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={!isEditor}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select Month" />
             </SelectTrigger>
@@ -95,7 +107,7 @@ export default function SalarySlipPage() {
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
+          <Select value={selectedYear} onValueChange={setSelectedYear} disabled={!isEditor}>
              <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
             </SelectTrigger>
@@ -103,7 +115,7 @@ export default function SalarySlipPage() {
                 {[currentYear, currentYear-1, currentYear-2].map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+          <Select value={selectedEmployee} onValueChange={setSelectedEmployee} disabled={!isEditor}>
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select Employee" />
             </SelectTrigger>
@@ -111,13 +123,17 @@ export default function SalarySlipPage() {
               {sampleEmployees.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button onClick={handleGenerateSlip} disabled={!selectedMonth || !selectedEmployee || !selectedYear}>
+          <Button 
+            onClick={handleGenerateSlip} 
+            disabled={!selectedMonth || !selectedEmployee || !selectedYear || !isEditor}
+            title={!isEditor ? "Login as editor to generate" : ""}
+          >
             <Eye className="mr-2 h-4 w-4" /> Generate Slip
           </Button>
         </CardContent>
       </Card>
 
-      {showSlip && employeeDetails && (
+      {showSlip && employeeDetails && isEditor && (
         <Card className="shadow-xl" id="salary-slip-preview">
           <CardHeader className="bg-muted/30 p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
@@ -204,16 +220,16 @@ export default function SalarySlipPage() {
             <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
           </CardContent>
           <CardFooter className="p-6 border-t print:hidden">
-            <Button onClick={() => window.print()} className="ml-auto">
+            <Button onClick={() => window.print()} className="ml-auto" disabled={!isEditor}>
               <Download className="mr-2 h-4 w-4" /> Download PDF
             </Button>
           </CardFooter>
         </Card>
       )}
-       {!showSlip && (
+       {(!showSlip || !isEditor) && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
-            <p>Please select month, year, and employee to generate the salary slip.</p>
+            <p>Please select month, year, and employee to generate the salary slip. Login as editor to enable generation.</p>
           </CardContent>
         </Card>
       )}
@@ -221,8 +237,6 @@ export default function SalarySlipPage() {
   );
 }
 
-
-// Helper function to convert number to words (Simplified version)
 function convertToWords(num: number): string {
   const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
@@ -232,7 +246,7 @@ function convertToWords(num: number): string {
 
   function inWords (num: number): string {
       if ((num = num.toString()).length > 9) return 'overflow';
-      const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+      const n = ('000000000' + num).substr(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
       if (!n) return ''; 
       let str = '';
       str += (parseInt(n[1]) != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';

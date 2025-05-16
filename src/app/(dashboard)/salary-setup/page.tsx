@@ -15,13 +15,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Download, Edit, Save, Trash2 } from "lucide-react";
+import { Download, Edit, Save, Trash2, Loader2 } from "lucide-react";
+import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
 
 const manualSalarySchema = z.object({
   code: z.string().min(1, "Employee code is required"),
   name: z.string().min(1, "Employee name is required"),
   designation: z.string().min(1, "Designation is required"),
-  doj: z.string().min(1, "Date of Joining is required"), // Consider using a date picker
+  doj: z.string().min(1, "Date of Joining is required"), 
   grossMonthlySalary: z.coerce.number().positive("Gross salary must be positive"),
 });
 
@@ -34,7 +35,7 @@ interface SalaryStructure extends ManualSalaryFormValues {
   ca: number;
   medical: number;
   otherAllowance: number;
-  totalGross: number; // Should match grossMonthlySalary
+  totalGross: number; 
 }
 
 const sampleSavedSalaries: SalaryStructure[] = [
@@ -44,6 +45,7 @@ const sampleSavedSalaries: SalaryStructure[] = [
 
 export default function SalarySetupPage() {
   const { toast } = useToast();
+  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [savedSalaries, setSavedSalaries] = React.useState<SalaryStructure[]>(sampleSavedSalaries);
   const [editingSalary, setEditingSalary] = React.useState<SalaryStructure | null>(null);
 
@@ -80,11 +82,15 @@ export default function SalarySetupPage() {
     const hra = remainingAmount * 0.50;
     const ca = remainingAmount * 0.20;
     const medical = remainingAmount * 0.15;
-    const otherAllowance = remainingAmount * 0.15; // Ensures sum is 100% of remaining
+    const otherAllowance = remainingAmount * 0.15; 
     return { basic, hra, ca, medical, otherAllowance, totalGross: grossMonthlySalary };
   };
 
   function onSubmit(values: ManualSalaryFormValues) {
+    if (!isEditor) {
+        toast({ title: "Permission Denied", description: "Login as editor to save salaries.", variant: "destructive"});
+        return;
+    }
     const components = calculateSalaryComponents(values.grossMonthlySalary);
     const newSalary: SalaryStructure = {
       id: editingSalary ? editingSalary.id : `S${Date.now().toString().slice(-4)}`,
@@ -104,13 +110,20 @@ export default function SalarySetupPage() {
   }
 
   const handleEdit = (salary: SalaryStructure) => {
+     if (!isEditor) {
+        toast({ title: "Permission Denied", description: "Login as editor to edit salaries.", variant: "destructive"});
+        return;
+    }
     setEditingSalary(salary);
-    // Switch to manual entry tab if not already there
     const manualTabTrigger = document.querySelector('[data-state="inactive"][role="tab"][value="manual"]');
     if (manualTabTrigger) (manualTabTrigger as HTMLElement).click();
   };
 
   const handleDelete = (salaryId: string) => {
+     if (!isEditor) {
+        toast({ title: "Permission Denied", description: "Login as editor to delete salaries.", variant: "destructive"});
+        return;
+    }
     setSavedSalaries(prev => prev.filter(s => s.id !== salaryId));
     toast({ title: "Deleted", description: "Salary structure removed." });
   };
@@ -123,6 +136,13 @@ export default function SalarySetupPage() {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
   }, [grossSalary]);
 
+  if (isLoadingAuth) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -138,11 +158,17 @@ export default function SalarySetupPage() {
             <CardHeader>
               <CardTitle>Upload Salary Data</CardTitle>
               <CardDescription>Upload an Excel file with employee salary details.
-                Columns: Code, Name, Designation, DOJ, GrossSalary.
+                Columns: Code, Name, Designation, DOJ, GrossSalary. (Editor access required)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <FileUploadButton onFileUpload={handleFileUpload} buttonText="Upload Salary Excel" acceptedFileTypes=".xlsx,.xls,.csv"/>
+              <FileUploadButton 
+                onFileUpload={handleFileUpload} 
+                buttonText="Upload Salary Excel" 
+                acceptedFileTypes=".xlsx,.xls,.csv"
+                disabled={!isEditor}
+                title={!isEditor ? "Login as editor to upload" : ""}
+              />
               <Button variant="link" className="p-0 h-auto" onClick={() => toast({title: "Prototype Info", description: "Sample Excel template download not yet implemented."})}>
                 <Download className="mr-2 h-4 w-4" /> Download Sample Excel Template
               </Button>
@@ -153,28 +179,30 @@ export default function SalarySetupPage() {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>{editingSalary ? "Edit Salary Structure" : "Enter Salary Details Manually"}</CardTitle>
-              <CardDescription>Fill in the form to add or update an employee's salary.</CardDescription>
+              <CardDescription>Fill in the form to add or update an employee's salary. (Editor access required)</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="code" render={({ field }) => (
-                      <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="designation" render={({ field }) => (
-                      <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="doj" render={({ field }) => (
-                      <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                      <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
+                  <fieldset disabled={!isEditor} title={!isEditor ? "Login as editor to make changes" : ""}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="code" render={({ field }) => (
+                        <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="designation" render={({ field }) => (
+                        <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="doj" render={({ field }) => (
+                        <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
+                        <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                  </fieldset>
                   
                   {grossSalary > 0 && (
                     <Card className="mt-4 bg-muted/50">
@@ -191,8 +219,8 @@ export default function SalarySetupPage() {
                   )}
 
                   <div className="flex justify-end gap-2">
-                    {editingSalary && <Button type="button" variant="outline" onClick={() => { setEditingSalary(null); form.reset(); }}>Cancel Edit</Button>}
-                    <Button type="submit">
+                    {editingSalary && <Button type="button" variant="outline" onClick={() => { setEditingSalary(null); form.reset(); }} disabled={!isEditor}>Cancel Edit</Button>}
+                    <Button type="submit" disabled={!isEditor} title={!isEditor ? "Login as editor to save" : ""}>
                       <Save className="mr-2 h-4 w-4" /> {editingSalary ? "Update Salary" : "Save Salary"}
                     </Button>
                   </div>
@@ -230,8 +258,8 @@ export default function SalarySetupPage() {
                   <TableCell className="text-right">{salary.basic.toFixed(2)}</TableCell>
                   <TableCell className="text-right">{salary.hra.toFixed(2)}</TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(salary)}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(salary.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(salary)} disabled={!isEditor} title={!isEditor ? "Login as editor to edit" : ""}><Edit className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(salary.id)} className="text-destructive hover:text-destructive/80" disabled={!isEditor} title={!isEditor ? "Login as editor to delete" : ""}><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
