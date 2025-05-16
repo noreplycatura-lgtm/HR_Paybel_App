@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import type { LeaveApplication } from "@/lib/hr-types";
@@ -34,7 +34,7 @@ export default function LeavePage() {
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
   
-  const [currentYear, setCurrentYear] = React.useState(0);
+  const [currentYearState, setCurrentYearState] = React.useState(0); // Renamed to avoid conflict
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
   
@@ -43,7 +43,7 @@ export default function LeavePage() {
 
   React.useEffect(() => {
     const now = new Date();
-    setCurrentYear(now.getFullYear());
+    setCurrentYearState(now.getFullYear());
     setSelectedMonth(months[now.getMonth()]);
     setSelectedYear(now.getFullYear());
   }, []);
@@ -56,7 +56,6 @@ export default function LeavePage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          // Fallback to empty or sample if needed, for now empty if master isn't set up.
           setEmployees([]); 
           toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive" });
         }
@@ -65,7 +64,7 @@ export default function LeavePage() {
         if (storedLeaveApplications) {
           setLeaveApplications(JSON.parse(storedLeaveApplications));
         } else {
-          setLeaveApplications([]); // No prior leave applications
+          setLeaveApplications([]); 
         }
       } catch (error) {
         console.error("Error loading data from localStorage:", error);
@@ -74,15 +73,18 @@ export default function LeavePage() {
         setLeaveApplications([]);
       }
     }
-    setIsLoading(false);
-  }, []);
+    setIsLoading(false); // Set to false after initial load attempt
+  }, [toast]);
 
   React.useEffect(() => {
-    if (isLoading || !selectedMonth || !selectedYear || employees.length === 0) {
+    // Prevent calculation if initial state isn't ready or employees not loaded
+    if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0 || isLoading) {
       setDisplayData([]);
+      if (!isLoading && employees.length > 0) setIsLoading(false); // Ensure loading is false if we bail early but have employees
       return;
     }
-    setIsLoading(true);
+    
+    setIsLoading(true); // Set loading true at the start of this effect
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
       setDisplayData([]);
@@ -90,20 +92,14 @@ export default function LeavePage() {
       return;
     }
 
-    const newDisplayData = employees.map(emp => {
-      if (emp.status === "Left") { // Optionally skip "Left" employees or handle differently
+    const newDisplayData = employees
+      .filter(emp => emp.status === "Active") // Process only Active employees
+      .map(emp => {
+        const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(emp, selectedYear, monthIndex, leaveApplications);
         return {
           ...emp,
-          usedCLInMonth: 0, usedSLInMonth: 0, usedPLInMonth: 0,
-          balanceCLAtMonthEnd: 0, balanceSLAtMonthEnd: 0, balancePLAtMonthEnd: 0,
-          isPLEligibleThisMonth: false,
+          ...leaveDetails,
         };
-      }
-      const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(emp, selectedYear, monthIndex, leaveApplications);
-      return {
-        ...emp,
-        ...leaveDetails,
-      };
     });
     setDisplayData(newDisplayData);
     setIsLoading(false);
@@ -134,25 +130,39 @@ export default function LeavePage() {
     csvRows.push(headers);
 
     displayData.forEach(emp => {
+      let formattedDoj = 'N/A';
+      if (emp.doj) {
+        try {
+          const parsed = parseISO(emp.doj);
+          if (isValid(parsed)) {
+            formattedDoj = format(parsed, 'dd-MMM-yyyy');
+          } else {
+            formattedDoj = emp.doj; // Show original if not parsable by ISO
+          }
+        } catch {
+          formattedDoj = emp.doj; // Show original on any parsing error
+        }
+      }
+
       const row = [
-        emp.division,
+        emp.division || "N/A",
         emp.code,
         emp.name,
         emp.designation,
-        emp.hq,
-        emp.doj ? format(parseISO(emp.doj), 'dd-MMM-yyyy') : 'N/A',
+        emp.hq || "N/A",
+        formattedDoj,
         emp.usedCLInMonth.toFixed(1),
         emp.usedSLInMonth.toFixed(1),
         emp.usedPLInMonth.toFixed(1),
         emp.balanceCLAtMonthEnd.toFixed(1),
         emp.balanceSLAtMonthEnd.toFixed(1),
-        emp.balancePLAtMonthEnd.toFixed(1),
+        emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "0.0",
         emp.isPLEligibleThisMonth ? 'Yes' : 'No'
       ];
       csvRows.push(row);
     });
 
-    const csvContent = csvRows.map(row => row.join(',')).join('\\n');
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -171,9 +181,9 @@ export default function LeavePage() {
     });
   };
   
-  const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
+  const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
 
-  if (isLoading && displayData.length === 0 && employees.length > 0) { // Initial load or recalculation in progress
+  if (isLoading && employees.length === 0) { // Initial page load state
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -185,7 +195,7 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances based on accruals, usage, and financial year policies. CL/SL reset annually (Apr-Mar); PL carries forward."
+        description="View employee leave balances based on accruals, usage, and financial year policies. CL/SL (0.6/month) reset annually (Apr-Mar); PL (1.2/month) carries forward after 6 months eligibility."
       >
          <Button onClick={handleDownloadReport} variant="outline" disabled={displayData.length === 0}>
             <Download className="mr-2 h-4 w-4" />
@@ -222,7 +232,8 @@ export default function LeavePage() {
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves are for the selected month only.
-            (Note: Leave application functionality is not yet part of this prototype, so 'Used' leaves will be 0).
+            (Note: Leave application functionality is not yet part of this prototype, so 'Used' leaves will be 0 unless applications are manually added to localStorage).
+            <br/>Only 'Active' employees are shown.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -245,26 +256,62 @@ export default function LeavePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayData.length > 0 ? displayData.map((emp) => (
-                <TableRow key={emp.id} className={emp.status === "Left" ? "opacity-60" : ""}>
-                  <TableCell>{emp.division}</TableCell>
+              {isLoading && displayData.length === 0 && employees.length > 0 ? ( // Recalculation in progress
+                <TableRow>
+                  <TableCell colSpan={13} className="text-center py-8">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    Calculating leave balances...
+                  </TableCell>
+                </TableRow>
+              ) : displayData.length > 0 ? displayData.map((emp) => (
+                <TableRow key={emp.id}>
+                  <TableCell>{emp.division || "N/A"}</TableCell>
                   <TableCell>{emp.code}</TableCell>
-                  <TableCell>{emp.name} {emp.status === "Left" ? "(Left)" : ""}</TableCell>
+                  <TableCell>{emp.name}</TableCell>
                   <TableCell>{emp.designation}</TableCell>
-                  <TableCell>{emp.hq}</TableCell>
-                  <TableCell>{emp.doj ? format(parseISO(emp.doj), 'dd MMM yyyy') : 'N/A'}</TableCell>
+                  <TableCell>{emp.hq || "N/A"}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      if (emp.doj && typeof emp.doj === 'string' && emp.doj.trim() !== '') {
+                        try {
+                          const parsedDate = parseISO(emp.doj);
+                          if (!isValid(parsedDate)) { // Check if parseISO resulted in a valid date
+                            // Attempt to parse common formats if ISO fails
+                            const parts = emp.doj.split(/[-/]/);
+                            let reparsedDate = null;
+                            if (parts.length === 3) {
+                                // Try DD-MM-YYYY or MM-DD-YYYY (assuming year is last part)
+                                // This is a basic attempt and might need refinement for more formats
+                                if (parseInt(parts[2]) > 1000) { // year is likely last
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try YYYY-MM-DD from DD-MM-YYYY
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try YYYY-DD-MM from MM-DD-YYYY
+                                }
+                            }
+                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
+                            return emp.doj; // Show original if still not valid
+                          }
+                          return format(parsedDate, "dd MMM yyyy");
+                        } catch (e) {
+                          return emp.doj; // Show original if any error during parsing
+                        }
+                      }
+                      return 'N/A';
+                    })()}
+                  </TableCell>
                   <TableCell className="text-center">{emp.usedCLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center">{emp.usedSLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center">{emp.usedPLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceCLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceSLAtMonthEnd.toFixed(1)}</TableCell>
-                  <TableCell className="text-center font-semibold">{emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "N/A"}</TableCell>
+                  <TableCell className="text-center font-semibold">{emp.isPLEligibleThisMonth ? emp.balancePLAtMonthEnd.toFixed(1) : "0.0"}</TableCell>
                   <TableCell className="text-center">{emp.isPLEligibleThisMonth ? 'Yes' : 'No'}</TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
                   <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
-                    {employees.length === 0 && !isLoading ? "No employees found in Employee Master." : "No data to display for the selected period or employees."}
+                    {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." : 
+                     selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
+                     "Please select month and year to view leave summary."}
                   </TableCell>
                 </TableRow>
               )}
@@ -275,3 +322,5 @@ export default function LeavePage() {
     </>
   );
 }
+
+
