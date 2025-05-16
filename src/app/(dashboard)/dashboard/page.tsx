@@ -5,12 +5,12 @@ import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserCheck, CalendarCheck, History, DollarSign, HardDrive } from "lucide-react";
-import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; // Keep sampleEmployees for fallback
+import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail } from "@/lib/hr-data"; 
 
-// localStorage keys
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3";
-const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v3";
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1"; // Key from Employee Master
+// localStorage keys - ensure these match attendance page v4 and employee master v1
+const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 
 interface StoredEmployeeAttendanceData {
   code: string;
@@ -37,77 +37,78 @@ export default function DashboardPage() {
     let activeEmployeesCount = 0;
     let overallAttendanceValue = "N/A";
     let attendanceDescription = "From last uploaded file";
-    const totalLeaveRecords = sampleLeaveHistory.length; // Static for now
+    const totalLeaveRecords = sampleLeaveHistory.length;
 
     if (typeof window !== 'undefined') {
-      // Calculate Total Active Employees from localStorage or fallback to sampleEmployees
+      // Calculate Total Active Employees
       try {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        let employeesToUseForCount: EmployeeDetail[] = sampleEmployees; // Default to sample if nothing in LS or error
+        let employeesToUseForCount: EmployeeDetail[] = sampleEmployees; 
 
-        if (storedEmployeesStr !== null) { // If there IS something in localStorage for employees
+        if (storedEmployeesStr !== null) {
           try {
             const parsedEmployees = JSON.parse(storedEmployeesStr) as EmployeeDetail[];
             if (Array.isArray(parsedEmployees)) {
-              // Use the parsed data, even if it's an empty array (meaning all employees were deleted)
               employeesToUseForCount = parsedEmployees;
             } else {
-              console.error("Employee master data in localStorage is not an array. Using sample data.");
-              // employeesToUseForCount remains sampleEmployees
+              console.error("Employee master data in localStorage is not an array. Using sample data for count.");
             }
           } catch (parseError) {
-            console.error("Error parsing employee master data from localStorage for dashboard. Using sample data.", parseError);
-            // employeesToUseForCount remains sampleEmployees
+            console.error("Error parsing employee master data from localStorage for dashboard. Using sample data for count.", parseError);
           }
         }
-        // Now employeesToUseForCount holds either parsed data (possibly empty) or sampleEmployees
         activeEmployeesCount = employeesToUseForCount.filter(emp => emp.status === "Active").length;
       } catch (error) {
-        console.error("Error accessing or processing employee master data for dashboard:", error);
-        // Fallback to sampleEmployees in case of any other error
+        console.error("Error accessing or processing employee master data for dashboard count:", error);
         activeEmployeesCount = sampleEmployees.filter(emp => emp.status === "Active").length;
       }
 
-      // Calculate Overall Attendance from localStorage
+      // Calculate Overall Attendance from last upload context
       try {
-        const storedRawContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
-        const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
+        const storedLastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+        if (storedLastUploadContextStr) {
+          const lastUploadContext = JSON.parse(storedLastUploadContextStr) as StoredUploadContext;
+          const rawDataKey = `${LOCAL_STORAGE_RAW_DATA_PREFIX}${lastUploadContext.month}_${lastUploadContext.year}`;
+          const storedRawDataForContext = localStorage.getItem(rawDataKey);
 
-        if (storedRawContext && storedRawData) {
-          const context = JSON.parse(storedRawContext) as StoredUploadContext;
-          const rawData = JSON.parse(storedRawData) as StoredEmployeeAttendanceData[];
+          if (storedRawDataForContext) {
+            const rawData = JSON.parse(storedRawDataForContext) as StoredEmployeeAttendanceData[];
+            if (rawData.length > 0) {
+              let presentCount = 0;
+              let relevantEntriesCount = 0;
 
-          if (rawData.length > 0 && context) {
-            let presentCount = 0;
-            let relevantEntriesCount = 0;
+              rawData.forEach(emp => {
+                const hasMeaningfulAttendance = emp.attendance.some(status => status !== '-');
+                if (hasMeaningfulAttendance) {
+                  emp.attendance.forEach(status => {
+                    if (status === "P") {
+                      presentCount++;
+                      relevantEntriesCount++;
+                    } else if (status === "A" || status === "HD") {
+                      relevantEntriesCount++;
+                    }
+                  });
+                }
+              });
 
-            rawData.forEach(emp => {
-              const hasMeaningfulAttendance = emp.attendance.some(status => status !== '-');
-              if (hasMeaningfulAttendance) {
-                emp.attendance.forEach(status => {
-                  if (status === "P") {
-                    presentCount++;
-                    relevantEntriesCount++;
-                  } else if (status === "A" || status === "HD") {
-                    relevantEntriesCount++;
-                  }
-                });
+              if (relevantEntriesCount > 0) {
+                const percentage = (presentCount / relevantEntriesCount) * 100;
+                overallAttendanceValue = `${percentage.toFixed(1)}% P`;
+              } else {
+                overallAttendanceValue = "No P/A/HD data";
               }
-            });
-
-            if (relevantEntriesCount > 0) {
-              const percentage = (presentCount / relevantEntriesCount) * 100;
-              overallAttendanceValue = `${percentage.toFixed(1)}% P`;
-            } else {
-              overallAttendanceValue = "No P/A/HD data";
+              attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
             }
-            attendanceDescription = `Based on ${context.month} ${context.year} upload`;
+          } else {
+             attendanceDescription = `No attendance data found for last upload context (${lastUploadContext.month} ${lastUploadContext.year})`;
           }
+        } else {
+            attendanceDescription = "No attendance data uploaded yet.";
         }
       } catch (error) {
         console.error("Error processing attendance data for dashboard:", error);
         overallAttendanceValue = "Error";
-        attendanceDescription = "Error loading data";
+        attendanceDescription = "Error loading attendance data";
       }
     }
 
@@ -126,10 +127,7 @@ export default function DashboardPage() {
     setIsLoading(false);
   }, []); 
 
-  // To handle potential hydration issues with dynamic data, consider a simple loader
   if (isLoading) {
-    // You can replace this with a more sophisticated skeleton loader
-    // For simplicity, returning a basic loading text or null.
     return (
       <>
         <PageHeader title="Dashboard" description="Overview of HR activities." />

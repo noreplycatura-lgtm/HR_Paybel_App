@@ -26,17 +26,19 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const LOCAL_STORAGE_ATTENDANCE_RAW_KEY = "novita_attendance_raw_data_v3";
-const LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY = "novita_attendance_filename_v3";
-const LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY = "novita_attendance_context_v3";
+const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
+
 
 export default function AttendancePage() {
   const { toast } = useToast();
   const [rawAttendanceData, setRawAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
   const [processedAttendanceData, setProcessedAttendanceData] = React.useState<EmployeeAttendanceData[]>([]);
-
+  
   const [currentMonthName, setCurrentMonthName] = React.useState('');
   const [currentYear, setCurrentYear] = React.useState(0);
+  
   const [selectedMonth, setSelectedMonth] = React.useState('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
 
@@ -45,81 +47,83 @@ export default function AttendancePage() {
 
   const [isLoadingState, setIsLoadingState] = React.useState(true);
   const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null);
-  const [uploadContext, setUploadContext] = React.useState<{month: string, year: number} | null>(null);
-
+  
   const [showDeleteConfirmation, setShowDeleteConfirmation] = React.useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = React.useState('');
 
+  const getDynamicLocalStorageKeys = (month: string, year: number) => {
+    if (!month || year === 0) return { rawDataKey: null, fileNameKey: null };
+    return {
+      rawDataKey: `${LOCAL_STORAGE_RAW_DATA_PREFIX}${month}_${year}`,
+      fileNameKey: `${LOCAL_STORAGE_FILENAME_PREFIX}${month}_${year}`,
+    };
+  };
+
+  // Effect for initializing default month/year and loading initial data for that period
   React.useEffect(() => {
     setIsLoadingState(true);
+    const now = new Date();
+    const defaultYear = now.getFullYear();
+    const defaultMonthName = months[now.getMonth()];
 
-    if (typeof window !== 'undefined') {
-        const storedRawData = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
-        const storedFileName = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
-        const storedContext = localStorage.getItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+    setCurrentYear(defaultYear);
+    setCurrentMonthName(defaultMonthName);
+    setSelectedYear(defaultYear);
+    setSelectedMonth(defaultMonthName);
+    setUploadMonth(defaultMonthName);
+    setUploadYear(defaultYear);
+    
+    // This effect will trigger the data loading effect below once selectedMonth/Year are set
+    setIsLoadingState(false); 
+  }, []);
 
-        const now = new Date();
-        const defaultYear = now.getFullYear();
-        const defaultMonthName = months[now.getMonth()];
-        setCurrentYear(defaultYear);
-        setCurrentMonthName(defaultMonthName);
+  // Effect for loading data when selectedMonth or selectedYear changes
+  React.useEffect(() => {
+    if (!selectedMonth || !selectedYear || selectedYear === 0) {
+      setRawAttendanceData([]);
+      setUploadedFileName(null);
+      return;
+    }
+    setIsLoadingState(true);
+    const { rawDataKey, fileNameKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
 
-        if (storedRawData && storedFileName && storedContext) {
-          try {
-            const parsedRawData = JSON.parse(storedRawData) as EmployeeAttendanceData[];
-            const parsedContext = JSON.parse(storedContext) as { month: string; year: number };
+    if (rawDataKey && fileNameKey && typeof window !== 'undefined') {
+      const storedRawData = localStorage.getItem(rawDataKey);
+      const storedFileName = localStorage.getItem(fileNameKey);
 
-            setRawAttendanceData(parsedRawData);
-            setUploadedFileName(storedFileName);
-            setUploadContext(parsedContext);
-
-            setSelectedMonth(parsedContext.month);
-            setSelectedYear(parsedContext.year);
-            setUploadMonth(parsedContext.month);
-            setUploadYear(parsedContext.year);
-          } catch (error) {
-            console.error("Error parsing attendance data from localStorage:", error);
-            toast({
-                title: "Data Load Error",
-                description: "Could not load previously saved attendance data. It might be corrupted. Please clear data or re-upload.",
-                variant: "destructive",
-                duration: 7000,
-            });
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
-            localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
-            setSelectedMonth(defaultMonthName);
-            setSelectedYear(defaultYear);
-            setUploadMonth(defaultMonthName);
-            setUploadYear(defaultYear);
-          }
-        } else {
-          setSelectedMonth(defaultMonthName);
-          setSelectedYear(defaultYear);
-          setUploadMonth(defaultMonthName);
-          setUploadYear(defaultYear);
+      if (storedRawData && storedFileName) {
+        try {
+          const parsedRawData = JSON.parse(storedRawData) as EmployeeAttendanceData[];
+          setRawAttendanceData(parsedRawData);
+          setUploadedFileName(storedFileName);
+        } catch (error) {
+          console.error(`Error parsing attendance data from localStorage for ${selectedMonth} ${selectedYear}:`, error);
+          toast({
+            title: "Data Load Error",
+            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. It might be corrupted.`,
+            variant: "destructive",
+            duration: 7000,
+          });
+          setRawAttendanceData([]);
+          setUploadedFileName(null);
+          localStorage.removeItem(rawDataKey); // Remove corrupted data
+          localStorage.removeItem(fileNameKey);
         }
+      } else {
+        setRawAttendanceData([]); // No data for this period
+        setUploadedFileName(null);
+      }
     }
     setIsLoadingState(false);
-  }, [toast]);
+  }, [selectedMonth, selectedYear, toast]);
+
 
   React.useEffect(() => {
     if (rawAttendanceData.length === 0 || !selectedYear || !selectedMonth || selectedYear === 0) {
       setProcessedAttendanceData([]);
       return;
     }
-
-    if (uploadContext && (uploadContext.month !== selectedMonth || uploadContext.year !== selectedYear)) {
-        setProcessedAttendanceData([]);
-        return;
-    }
     
-    if (!uploadContext && rawAttendanceData.length > 0) {
-        setProcessedAttendanceData([]);
-        return;
-    }
-
-
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
         setProcessedAttendanceData([]);
@@ -145,7 +149,7 @@ export default function AttendancePage() {
         doj: emp.doj,
         status: emp.status,
         division: emp.division,
-        hq: emp.hq || "",
+        hq: emp.hq || "", // Ensure hq is present
         grossMonthlySalary: emp.grossMonthlySalary || 0,
       };
       let balances = getLeaveBalancesAtStartOfMonth(employeeForLeaveCalc, selectedYear, monthIndex, sampleLeaveHistory);
@@ -183,7 +187,7 @@ export default function AttendancePage() {
       return { ...emp, processedAttendance: newProcessedAttendance };
     });
     setProcessedAttendanceData(processedData);
-  }, [selectedMonth, selectedYear, rawAttendanceData, uploadContext]);
+  }, [selectedMonth, selectedYear, rawAttendanceData]);
 
 
   const handleFileUpload = (file: File) => {
@@ -213,7 +217,7 @@ export default function AttendancePage() {
 
         const dataRows = lines.slice(1);
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
-        const expectedBaseColumns = 7; // Status, Division, Code, Name, Designation, HQ, DOJ
+        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ (HQ removed from direct attendance upload, salary from master)
 
         const newAttendanceData: EmployeeAttendanceData[] = dataRows.map((row, rowIndex) => {
           const values = row.split(',');
@@ -226,10 +230,10 @@ export default function AttendancePage() {
           const code = values[2]?.trim() || `TEMP_ID_${rowIndex}`;
           const name = values[3]?.trim() || "N/A";
           const designation = values[4]?.trim() || "N/A";
-          const hq = values[5]?.trim() || "N/A";
-          const doj = values[6]?.trim() || new Date().toISOString().split('T')[0];
+          const doj = values[5]?.trim() || new Date().toISOString().split('T')[0];
           
-          // Gross Monthly Salary is not expected in attendance upload, set to 0 or fetch from master later.
+          // HQ and Gross Monthly Salary are not expected in attendance upload, set to default or fetch from master later.
+          const hq = "N/A"; 
           const grossMonthlySalary = 0; 
 
 
@@ -259,27 +263,24 @@ export default function AttendancePage() {
             toast({ title: "No Data Processed", description: "No valid employee attendance data found in the file. Check column count and format.", variant: "destructive", duration: 7000});
             return;
         }
-
-        setRawAttendanceData([]);
-        setProcessedAttendanceData([]);
-
-        setRawAttendanceData(newAttendanceData);
-        setUploadedFileName(file.name);
-        const newUploadContext = { month: uploadMonth, year: uploadYear };
-        setUploadContext(newUploadContext);
-
-        if (typeof window !== 'undefined') {
+        
+        // Save to localStorage with dynamic keys
+        const { rawDataKey, fileNameKey } = getDynamicLocalStorageKeys(uploadMonth, uploadYear);
+        if (rawDataKey && fileNameKey && typeof window !== 'undefined') {
             try {
-              localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY, JSON.stringify(newAttendanceData));
-              localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY, file.name);
-              localStorage.setItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY, JSON.stringify(newUploadContext));
+              localStorage.setItem(rawDataKey, JSON.stringify(newAttendanceData));
+              localStorage.setItem(fileNameKey, file.name);
+              localStorage.setItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY, JSON.stringify({month: uploadMonth, year: uploadYear}));
             } catch (storageError) {
                 console.error("Error saving attendance data to localStorage:", storageError);
-                toast({ title: "Storage Error", description: "Could not save attendance data locally. It will be lost on refresh.", variant: "destructive" });
+                toast({ title: "Storage Error", description: "Could not save attendance data locally.", variant: "destructive" });
             }
         }
 
-        setSelectedMonth(uploadMonth);
+        // Update state to reflect newly uploaded data
+        setRawAttendanceData(newAttendanceData);
+        setUploadedFileName(file.name);
+        setSelectedMonth(uploadMonth); // Switch view to the uploaded month/year
         setSelectedYear(uploadYear);
 
         toast({
@@ -296,10 +297,6 @@ export default function AttendancePage() {
       {
         console.error("Error parsing CSV:", error);
         toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive", duration: 7000 });
-        setRawAttendanceData([]);
-        setProcessedAttendanceData([]);
-        setUploadedFileName(null);
-        setUploadContext(null);
       }
     };
 
@@ -311,10 +308,10 @@ export default function AttendancePage() {
   };
 
   const handleDownloadReport = () => {
-    if (processedAttendanceData.length === 0 || !selectedMonth || !selectedYear) {
+    if (processedAttendanceData.length === 0 || !selectedMonth || !selectedYear || selectedYear === 0) {
       toast({
         title: "No Data",
-        description: "No attendance data available to download for the selected period. Please upload a file first.",
+        description: "No attendance data available to download for the selected period. Please upload or select a period with data.",
         variant: "destructive",
       });
       return;
@@ -324,7 +321,7 @@ export default function AttendancePage() {
     const csvRows: string[][] = [];
 
     const headers = [
-      "Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
+      "Status", "Division", "Code", "Name", "Designation", "DOJ", // Removed HQ from report as not in basic upload
       ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
       "Working Days (P)", "Absent-1 (A)", "Absent-2 (A+HD)", "Weekoff (W)",
       "Total CL (Used)", "Total PL (Used)", "Total SL (Used)", "Paid Holiday (PH)",
@@ -356,7 +353,6 @@ export default function AttendancePage() {
         emp.code,
         emp.name,
         emp.designation,
-        emp.hq || "N/A",
         emp.doj,
         ...finalAttendanceToUse,
         workingDaysP.toString(),
@@ -395,13 +391,13 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
+    const headers = ["Status", "Division", "Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    if (link.href) URL.revokeObjectURL(link.href);
+    if (link.href) URL.revokeObjectURL(link.href); // Revoke old URL if exists
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const monthYearForFilename = (uploadMonth && uploadYear && uploadYear > 0) ? `${uploadMonth}_${uploadYear}` : "sample";
@@ -410,7 +406,7 @@ export default function AttendancePage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    // URL.revokeObjectURL(url); 
+    // URL.revokeObjectURL(url); // Moved to after click to ensure download completes in some browsers
 
     toast({
       title: "Sample Template Downloaded",
@@ -424,28 +420,30 @@ export default function AttendancePage() {
     } else {
         toast({
             title: "No Data to Clear",
-            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} to clear, or data might not match current view.`,
+            description: `No specific uploaded data found for ${selectedMonth} ${selectedYear} to clear.`,
             variant: "destructive"
         });
     }
   };
 
   const confirmAndDeleteData = () => {
-    if (deleteConfirmationText === "DELETE") {
-        setRawAttendanceData([]);
-        setProcessedAttendanceData([]);
-        setUploadedFileName(null);
-        setUploadContext(null);
-
-        if (typeof window !== 'undefined') {
+    if (deleteConfirmationText === "DELETE" && selectedMonth && selectedYear > 0) {
+        const { rawDataKey, fileNameKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
+        if (rawDataKey && fileNameKey && typeof window !== 'undefined') {
             try {
-              localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_RAW_KEY);
-              localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_FILENAME_KEY);
-              localStorage.removeItem(LOCAL_STORAGE_ATTENDANCE_CONTEXT_KEY);
+              localStorage.removeItem(rawDataKey);
+              localStorage.removeItem(fileNameKey);
+              // Optionally, if this was the "last uploaded context", clear it too.
+              // For simplicity, we are not clearing LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY here,
+              // as it might point to another valid month. User can re-upload to set it.
             } catch (error) {
                 console.error("Error clearing attendance data from localStorage:", error);
             }
         }
+        // Clear current state for the cleared month
+        setRawAttendanceData([]);
+        setProcessedAttendanceData([]);
+        setUploadedFileName(null);
 
         toast({
             title: "Data Cleared",
@@ -453,8 +451,8 @@ export default function AttendancePage() {
         });
     } else {
          toast({
-            title: "Incorrect Confirmation",
-            description: "The text you entered did not match 'DELETE'. Data has not been cleared.",
+            title: "Incorrect Confirmation or Missing Selection",
+            description: "The text you entered did not match 'DELETE' or month/year not selected. Data has not been cleared.",
             variant: "destructive",
         });
     }
@@ -466,9 +464,9 @@ export default function AttendancePage() {
   const daysInSelectedUploadMonth = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
-  const canDeleteCurrentData = !!(uploadedFileName && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear && rawAttendanceData.length > 0);
+  const canDeleteCurrentData = !!(uploadedFileName && selectedMonth && selectedYear > 0 && rawAttendanceData.length > 0);
 
-  if (isLoadingState) {
+  if (isLoadingState && !selectedMonth) { // Initial page load before defaults are set
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -503,7 +501,7 @@ export default function AttendancePage() {
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the uploaded attendance data for
-              <strong> {selectedMonth} {selectedYear}</strong>.
+              <strong> {selectedMonth} {selectedYear}</strong> from this browser's storage.
               <br />
               Please type <strong>DELETE</strong> in the box below to confirm.
             </AlertDialogDescription>
@@ -539,7 +537,7 @@ export default function AttendancePage() {
               <CardDescription>Filter attendance records by month and year. (More filters like employee/division are illustrative).</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-              {isLoadingState && !selectedMonth ? (
+              {(isLoadingState && !selectedMonth) ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -551,7 +549,7 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              {isLoadingState && selectedYear === 0 ? (
+              {(isLoadingState && selectedYear === 0) ? (
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
                 <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))}>
@@ -589,8 +587,8 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="overflow-x-auto">
             {(() => {
-                if (isLoadingState) {
-                    return <div className="text-center py-8 text-muted-foreground">Initializing attendance data...</div>;
+                if (isLoadingState && processedAttendanceData.length === 0) { // Show loading only if data is actually being fetched/processed
+                    return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}...</div>;
                 }
                  if (!selectedMonth || !selectedYear || selectedYear === 0) {
                   return (
@@ -600,32 +598,24 @@ export default function AttendancePage() {
                   );
                 }
                 
-                if (uploadedFileName && uploadContext && (uploadContext.month !== selectedMonth || uploadContext.year !== selectedYear) && processedAttendanceData.length === 0) {
-                    return (
+                if (!uploadedFileName && rawAttendanceData.length === 0 && !isLoadingState) { // No file ever uploaded for current view and not loading
+                     return (
                         <div className="text-center py-8 text-muted-foreground">
                             No attendance data uploaded for {selectedMonth} {selectedYear}.<br />
-                            Last upload was '{uploadedFileName}' for {uploadContext.month} {uploadContext.year}. Switch view or upload data for this period.
+                            Please upload a file via the 'Upload Attendance Data' tab.
                         </div>
                     );
                 }
 
-                if (uploadedFileName && rawAttendanceData.length === 0 && uploadContext && uploadContext.month === selectedMonth && uploadContext.year === selectedYear) {
+                if (uploadedFileName && rawAttendanceData.length === 0 && !isLoadingState) { // File was associated, but no actual data (e.g. after clear or bad parse)
                   return (
                     <div className="text-center py-8 text-muted-foreground">
-                      Data source '{uploadedFileName}' for {uploadContext.month} {uploadContext.year} resulted in no processable records.<br />
-                      The file might be empty, have an incorrect format/columns, or no valid data rows. Check console for errors or upload again.
+                      No data found for {selectedMonth} {selectedYear}. <br />
+                      (Last file for this period: '{uploadedFileName}', but data is empty or was cleared).
                     </div>
                   );
                 }
                 
-                if (!uploadedFileName && processedAttendanceData.length === 0) {
-                     return (
-                        <div className="text-center py-8 text-muted-foreground">
-                            No attendance data available. Please upload a file via the 'Upload Attendance Data' tab.
-                        </div>
-                    );
-                }
-
                 if (processedAttendanceData.length > 0 && daysInSelectedViewMonth > 0) {
                   return (
                     <Table>
@@ -636,7 +626,6 @@ export default function AttendancePage() {
                           <TableHead className="min-w-[80px]">Code</TableHead>
                           <TableHead className="min-w-[150px]">Name</TableHead>
                           <TableHead className="min-w-[150px]">Designation</TableHead>
-                          <TableHead className="min-w-[120px]">HQ</TableHead>
                           <TableHead className="min-w-[100px]">DOJ</TableHead>
                           {Array.from({ length: daysInSelectedViewMonth }, (_, i) => i + 1).map(day => (
                             <TableHead key={day} className="text-center min-w-[50px]">{day}</TableHead>
@@ -656,7 +645,7 @@ export default function AttendancePage() {
                       <TableBody>
                         {processedAttendanceData.map((emp) => {
                           if (!emp.processedAttendance) {
-                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 17}>Loading data for {emp.name}...</TableCell></TableRow>;
+                            return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 16}>Loading data for {emp.name}...</TableCell></TableRow>;
                           }
                           const finalAttendanceToUse = emp.processedAttendance;
 
@@ -681,7 +670,6 @@ export default function AttendancePage() {
                             <TableCell>{emp.code}</TableCell>
                             <TableCell>{emp.name}</TableCell>
                             <TableCell>{emp.designation}</TableCell>
-                            <TableCell>{emp.hq || "N/A"}</TableCell>
                             <TableCell>{emp.doj}</TableCell>
                             {finalAttendanceToUse.map((status, index) => (
                               <TableCell key={index} className="text-center">
@@ -705,17 +693,17 @@ export default function AttendancePage() {
                       </TableBody>
                       <TableFooter>
                         <TableRow>
-                          <TableCell colSpan={7} className="font-semibold text-right">Total Employees Displayed:</TableCell>
+                          <TableCell colSpan={6} className="font-semibold text-right">Total Employees Displayed:</TableCell>
                           <TableCell colSpan={daysInSelectedViewMonth + 10} className="font-semibold">{processedAttendanceData.filter(e => e.processedAttendance && e.processedAttendance.some(s => s!=='-')).length}</TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
                   );
                 }
-                return (
+                return ( // Fallback for cases where data is expected but not processed, or loading finished with no data
                   <div className="text-center py-8 text-muted-foreground">
-                     No attendance data to display for {selectedMonth} {selectedYear}.
-                     {uploadedFileName ? ` Ensure the uploaded file ('${uploadedFileName}') contains data for this period.` : ` Please upload an attendance file.`}
+                     No attendance data available to display for {selectedMonth} {selectedYear}.
+                     {uploadedFileName ? ` Ensure the uploaded file ('${uploadedFileName}') contained data for this period or re-upload.` : ` Please upload an attendance file.`}
                   </div>
                 );
               })()}
@@ -728,7 +716,7 @@ export default function AttendancePage() {
               <CardTitle>Upload Attendance Data</CardTitle>
               <CardDescription>
                 Select the month and year, then upload a CSV file with employee attendance.
-                <br/>Expected columns: Status, Division, Code, Name, Designation, HQ, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
+                <br/>Expected columns: Status, Division, Code, Name, Designation, DOJ, and daily status columns (1 to {daysInSelectedUploadMonth}).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -767,11 +755,23 @@ export default function AttendancePage() {
                   <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
               </div>
-               {uploadedFileName && uploadContext && (
-                <p className="text-sm text-muted-foreground">
-                  Last successful upload: {uploadedFileName} for {uploadContext.month} {uploadContext.year}.
-                </p>
-              )}
+               {/* Display last globally uploaded file context */}
+               {(() => {
+                  if (typeof window !== 'undefined') {
+                    const lastContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+                    if (lastContextStr) {
+                      try {
+                        const lastContext = JSON.parse(lastContextStr);
+                        return (
+                          <p className="text-sm text-muted-foreground">
+                            Note: The system's last recorded upload was for {lastContext.month} {lastContext.year}.
+                          </p>
+                        );
+                      } catch { /* ignore parse error */ }
+                    }
+                  }
+                  return null;
+                })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -779,7 +779,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-    
-
-    
