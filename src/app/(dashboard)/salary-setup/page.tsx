@@ -16,13 +16,12 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Download, Edit, Save, Trash2, Loader2 } from "lucide-react";
-import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
 
 const manualSalarySchema = z.object({
   code: z.string().min(1, "Employee code is required"),
   name: z.string().min(1, "Employee name is required"),
   designation: z.string().min(1, "Designation is required"),
-  doj: z.string().min(1, "Date of Joining is required"), 
+  doj: z.string().min(1, "Date of Joining is required"),
   grossMonthlySalary: z.coerce.number().positive("Gross salary must be positive"),
 });
 
@@ -35,7 +34,7 @@ interface SalaryStructure extends ManualSalaryFormValues {
   ca: number;
   medical: number;
   otherAllowance: number;
-  totalGross: number; 
+  totalGross: number;
 }
 
 const sampleSavedSalaries: SalaryStructure[] = [
@@ -45,9 +44,9 @@ const sampleSavedSalaries: SalaryStructure[] = [
 
 export default function SalarySetupPage() {
   const { toast } = useToast();
-  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [savedSalaries, setSavedSalaries] = React.useState<SalaryStructure[]>(sampleSavedSalaries);
   const [editingSalary, setEditingSalary] = React.useState<SalaryStructure | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false); // General loading state
 
   const form = useForm<ManualSalaryFormValues>({
     resolver: zodResolver(manualSalarySchema),
@@ -59,7 +58,7 @@ export default function SalarySetupPage() {
       grossMonthlySalary: 0,
     },
   });
-  
+
   React.useEffect(() => {
     if (editingSalary) {
       form.reset(editingSalary);
@@ -82,15 +81,12 @@ export default function SalarySetupPage() {
     const hra = remainingAmount * 0.50;
     const ca = remainingAmount * 0.20;
     const medical = remainingAmount * 0.15;
-    const otherAllowance = remainingAmount * 0.15; 
+    const otherAllowance = remainingAmount * 0.15;
     return { basic, hra, ca, medical, otherAllowance, totalGross: grossMonthlySalary };
   };
 
   function onSubmit(values: ManualSalaryFormValues) {
-    if (!isEditor) {
-        toast({ title: "Permission Denied", description: "Login as editor to save salaries.", variant: "destructive"});
-        return;
-    }
+    setIsLoading(true);
     const components = calculateSalaryComponents(values.grossMonthlySalary);
     const newSalary: SalaryStructure = {
       id: editingSalary ? editingSalary.id : `S${Date.now().toString().slice(-4)}`,
@@ -107,23 +103,16 @@ export default function SalarySetupPage() {
     }
     setEditingSalary(null);
     form.reset();
+    setIsLoading(false);
   }
 
   const handleEdit = (salary: SalaryStructure) => {
-     if (!isEditor) {
-        toast({ title: "Permission Denied", description: "Login as editor to edit salaries.", variant: "destructive"});
-        return;
-    }
     setEditingSalary(salary);
     const manualTabTrigger = document.querySelector('[data-state="inactive"][role="tab"][value="manual"]');
     if (manualTabTrigger) (manualTabTrigger as HTMLElement).click();
   };
 
   const handleDelete = (salaryId: string) => {
-     if (!isEditor) {
-        toast({ title: "Permission Denied", description: "Login as editor to delete salaries.", variant: "destructive"});
-        return;
-    }
     setSavedSalaries(prev => prev.filter(s => s.id !== salaryId));
     toast({ title: "Deleted", description: "Salary structure removed." });
   };
@@ -136,7 +125,7 @@ export default function SalarySetupPage() {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
   }, [grossSalary]);
 
-  if (isLoadingAuth) {
+  if (isLoading && editingSalary === null) { // General loading for the page, not during form edits
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -158,16 +147,14 @@ export default function SalarySetupPage() {
             <CardHeader>
               <CardTitle>Upload Salary Data</CardTitle>
               <CardDescription>Upload an Excel file with employee salary details.
-                Columns: Code, Name, Designation, DOJ, GrossSalary. (Editor access required)
+                Columns: Code, Name, Designation, DOJ, GrossSalary.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <FileUploadButton 
-                onFileUpload={handleFileUpload} 
-                buttonText="Upload Salary Excel" 
+              <FileUploadButton
+                onFileUpload={handleFileUpload}
+                buttonText="Upload Salary Excel"
                 acceptedFileTypes=".xlsx,.xls,.csv"
-                disabled={!isEditor}
-                title={!isEditor ? "Login as editor to upload" : ""}
               />
               <Button variant="link" className="p-0 h-auto" onClick={() => toast({title: "Prototype Info", description: "Sample Excel template download not yet implemented."})}>
                 <Download className="mr-2 h-4 w-4" /> Download Sample Excel Template
@@ -179,12 +166,12 @@ export default function SalarySetupPage() {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>{editingSalary ? "Edit Salary Structure" : "Enter Salary Details Manually"}</CardTitle>
-              <CardDescription>Fill in the form to add or update an employee's salary. (Editor access required)</CardDescription>
+              <CardDescription>Fill in the form to add or update an employee's salary.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <fieldset disabled={!isEditor} title={!isEditor ? "Login as editor to make changes" : ""}>
+                  <fieldset>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="code" render={({ field }) => (
                         <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -203,7 +190,7 @@ export default function SalarySetupPage() {
                       )} />
                     </div>
                   </fieldset>
-                  
+
                   {grossSalary > 0 && (
                     <Card className="mt-4 bg-muted/50">
                       <CardHeader><CardTitle className="text-lg">Calculated Components</CardTitle></CardHeader>
@@ -219,9 +206,10 @@ export default function SalarySetupPage() {
                   )}
 
                   <div className="flex justify-end gap-2">
-                    {editingSalary && <Button type="button" variant="outline" onClick={() => { setEditingSalary(null); form.reset(); }} disabled={!isEditor}>Cancel Edit</Button>}
-                    <Button type="submit" disabled={!isEditor} title={!isEditor ? "Login as editor to save" : ""}>
-                      <Save className="mr-2 h-4 w-4" /> {editingSalary ? "Update Salary" : "Save Salary"}
+                    {editingSalary && <Button type="button" variant="outline" onClick={() => { setEditingSalary(null); form.reset(); }}>Cancel Edit</Button>}
+                    <Button type="submit" disabled={isLoading && !!editingSalary}> {/* Disable only if loading during form submission */}
+                      {isLoading && !!editingSalary ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      {editingSalary ? "Update Salary" : "Save Salary"}
                     </Button>
                   </div>
                 </form>
@@ -258,8 +246,8 @@ export default function SalarySetupPage() {
                   <TableCell className="text-right">{salary.basic.toFixed(2)}</TableCell>
                   <TableCell className="text-right">{salary.hra.toFixed(2)}</TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(salary)} disabled={!isEditor} title={!isEditor ? "Login as editor to edit" : ""}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(salary.id)} className="text-destructive hover:text-destructive/80" disabled={!isEditor} title={!isEditor ? "Login as editor to delete" : ""}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(salary)}><Edit className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(salary.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}

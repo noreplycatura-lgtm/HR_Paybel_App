@@ -10,7 +10,6 @@ import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2 } from "lucide-react";
 import { COMPANY_NAME } from "@/lib/constants";
 import Image from "next/image";
-import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
 
 const sampleEmployees = [
   { id: "E001", name: "John Doe" },
@@ -31,36 +30,38 @@ interface DateWithMonthName extends Date {
 
 
 export default function SalarySlipPage() {
-  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [selectedMonth, setSelectedMonth] = React.useState<string | undefined>( (new Date() as DateWithMonthName).getMonthName());
   const [selectedYear, setSelectedYear] = React.useState<string | undefined>(currentYear.toString());
   const [selectedEmployee, setSelectedEmployee] = React.useState<string | undefined>();
   const [showSlip, setShowSlip] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false); // For button click
 
   const handleGenerateSlip = () => {
-    if (!isEditor) {
-      alert("Please login as editor to generate salary slips.");
-      return;
-    }
+    setIsLoading(true);
     if (selectedMonth && selectedYear && selectedEmployee) {
-      setShowSlip(true);
+      // Simulate generation delay
+      setTimeout(() => {
+        setShowSlip(true);
+        setIsLoading(false);
+      }, 500);
     } else {
       alert("Please select month, year, and employee.");
+      setIsLoading(false);
     }
   };
 
   const employeeDetails = sampleEmployees.find(e => e.id === selectedEmployee);
 
   const salaryDetails = {
-    employeeId: "E001",
-    name: "John Doe",
-    designation: "Software Engineer",
-    department: "Technology",
-    joinDate: "15 Jan 2022",
-    bankAccount: "XXXXXX1234",
-    pan: "ABCDE1234F",
-    payDays: 30,
-    lopDays: 0,
+    employeeId: employeeDetails?.id || "N/A",
+    name: employeeDetails?.name || "N/A",
+    designation: "Software Engineer", // Placeholder
+    department: "Technology", // Placeholder
+    joinDate: "15 Jan 2022", // Placeholder
+    bankAccount: "XXXXXX1234", // Placeholder
+    pan: "ABCDE1234F", // Placeholder
+    payDays: 30, // Placeholder
+    lopDays: 0, // Placeholder
     earnings: [
       { component: "Basic Salary", amount: 15010 },
       { component: "House Rent Allowance (HRA)", amount: 22495 },
@@ -81,13 +82,6 @@ export default function SalarySlipPage() {
   const attendanceSummary = { present: 22, absent: 0, leaves: 2, weekOffs: 6 };
   const leaveBalance = { cl: 5, sl: 3, pl: 10 };
 
-  if (isLoadingAuth) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <>
@@ -96,10 +90,9 @@ export default function SalarySlipPage() {
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
         <CardHeader>
           <CardTitle>Select Criteria</CardTitle>
-          <CardDescription>{!isEditor && "Login as editor to generate slips."}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={!isEditor}>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth} >
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select Month" />
             </SelectTrigger>
@@ -107,7 +100,7 @@ export default function SalarySlipPage() {
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedYear} onValueChange={setSelectedYear} disabled={!isEditor}>
+          <Select value={selectedYear} onValueChange={setSelectedYear} >
              <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
             </SelectTrigger>
@@ -115,7 +108,7 @@ export default function SalarySlipPage() {
                 {[currentYear, currentYear-1, currentYear-2].map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee} disabled={!isEditor}>
+          <Select value={selectedEmployee} onValueChange={setSelectedEmployee} >
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select Employee" />
             </SelectTrigger>
@@ -123,22 +116,22 @@ export default function SalarySlipPage() {
               {sampleEmployees.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button 
-            onClick={handleGenerateSlip} 
-            disabled={!selectedMonth || !selectedEmployee || !selectedYear || !isEditor}
-            title={!isEditor ? "Login as editor to generate" : ""}
+          <Button
+            onClick={handleGenerateSlip}
+            disabled={!selectedMonth || !selectedEmployee || !selectedYear || isLoading}
           >
-            <Eye className="mr-2 h-4 w-4" /> Generate Slip
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+             Generate Slip
           </Button>
         </CardContent>
       </Card>
 
-      {showSlip && employeeDetails && isEditor && (
+      {showSlip && employeeDetails && (
         <Card className="shadow-xl" id="salary-slip-preview">
           <CardHeader className="bg-muted/30 p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
               <div>
-                <Image 
+                <Image
                   src="https://placehold.co/150x50.png?text=Novita"
                   alt={`${COMPANY_NAME} Logo`}
                   width={150}
@@ -209,27 +202,27 @@ export default function SalarySlipPage() {
                 </div>
               </div>
             </div>
-            
+
             <Separator className="my-6" />
-            
+
             <div className="text-right">
               <p className="text-lg font-bold">Net Salary: ₹{netSalary.toFixed(2)}</p>
               <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(netSalary)} Rupees Only</p>
             </div>
-            
+
             <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
           </CardContent>
           <CardFooter className="p-6 border-t print:hidden">
-            <Button onClick={() => window.print()} className="ml-auto" disabled={!isEditor}>
+            <Button onClick={() => window.print()} className="ml-auto">
               <Download className="mr-2 h-4 w-4" /> Download PDF
             </Button>
           </CardFooter>
         </Card>
       )}
-       {(!showSlip || !isEditor) && (
+       {!showSlip && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
-            <p>Please select month, year, and employee to generate the salary slip. Login as editor to enable generation.</p>
+            <p>Please select month, year, and employee to generate the salary slip.</p>
           </CardContent>
         </Card>
       )}
@@ -240,14 +233,12 @@ export default function SalarySlipPage() {
 function convertToWords(num: number): string {
   const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
-  const n = num.toFixed(2).split('.');
-  const wholePart = parseInt(n[0]);
-  const decimalPart = parseInt(n[1]);
 
-  function inWords (num: number): string {
-      if ((num = num.toString()).length > 9) return 'overflow';
-      const n = ('000000000' + num).substr(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
-      if (!n) return ''; 
+  function inWords (numToConvert: number): string {
+      let numStr = numToConvert.toString();
+      if (numStr.length > 9) return 'overflow'; // Check for overflow
+      const n = ('000000000' + numStr).substr(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
+      if (!n) return '';
       let str = '';
       str += (parseInt(n[1]) != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
       str += (parseInt(n[2]) != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
@@ -256,9 +247,14 @@ function convertToWords(num: number): string {
       str += (parseInt(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
       return str;
   }
+
+  const [wholePartStr, decimalPartStr] = num.toFixed(2).split('.');
+  const wholePart = parseInt(wholePartStr);
+  const decimalPart = parseInt(decimalPartStr);
+
   let words = inWords(wholePart);
   if (decimalPart > 0) {
     words += 'and ' + inWords(decimalPart) + 'Paise ';
   }
-  return words.trim();
+  return words.trim() || 'Zero'; // Handle case for 0
 }

@@ -17,7 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
-import { useEditorAuth } from "@/hooks/useEditorAuth";
 import { format } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
@@ -37,7 +36,6 @@ type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
-  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [isLoadingData, setIsLoadingData] = React.useState(true);
@@ -63,16 +61,16 @@ export default function EmployeeMasterPage() {
         if (storedEmployees) {
           setEmployees(JSON.parse(storedEmployees));
         } else {
-          setEmployees(sampleEmployees); 
+          setEmployees(sampleEmployees);
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        setEmployees(sampleEmployees); 
+        setEmployees(sampleEmployees);
         toast({ title: "Data Load Error", description: "Could not load employee data. Using defaults.", variant: "destructive" });
       }
     }
     setIsLoadingData(false);
-  }, []); 
+  }, []); // Corrected dependency array
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -86,12 +84,8 @@ export default function EmployeeMasterPage() {
   };
 
   const onSubmit = (values: EmployeeFormValues) => {
-    if (!isEditor) {
-        toast({ title: "Permission Denied", description: "Login as editor to add employees.", variant: "destructive"});
-        return;
-    }
     const newEmployee: EmployeeDetail = {
-      id: `E${Date.now().toString().slice(-4)}`, 
+      id: `E${Date.now().toString().slice(-4)}`,
       ...values,
     };
     const updatedEmployees = [...employees, newEmployee];
@@ -103,16 +97,12 @@ export default function EmployeeMasterPage() {
   };
 
   const handleUploadEmployees = (file: File) => {
-    if (!isEditor) {
-      toast({ title: "Permission Denied", description: "Login as editor to upload employees.", variant: "destructive" });
-      return;
-    }
     toast({
       title: "File Received",
       description: `${file.name} received. (Prototype: Full CSV parsing not yet implemented for Employee Master).`,
     });
   };
-  
+
   const handleDownloadSampleTemplate = () => {
     const headers = ["Code", "Name", "Designation", "DOJ", "Status", "Division", "GrossMonthlySalary"];
     const sampleData = [
@@ -120,7 +110,7 @@ export default function EmployeeMasterPage() {
       ["E007", "Tom Brown", "IT Support", "2023-11-05", "Left", "IT", "55000"],
     ];
     const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -135,10 +125,6 @@ export default function EmployeeMasterPage() {
 
 
   const handleEditEmployee = (employeeId: string) => {
-    if (!isEditor) {
-      toast({ title: "Permission Denied", description: "Login as editor to edit employees.", variant: "destructive" });
-      return;
-    }
     toast({
       title: "Prototype Action",
       description: `Editing employee ${employeeId} is not yet implemented.`,
@@ -146,10 +132,6 @@ export default function EmployeeMasterPage() {
   };
 
   const handleDeleteEmployee = (employeeId: string) => {
-    if (!isEditor) {
-      toast({ title: "Permission Denied", description: "Login as editor to delete employees.", variant: "destructive" });
-      return;
-    }
     toast({
       title: "Prototype Action",
       description: `Deleting employee ${employeeId} is not yet implemented. (Data is from localStorage/sample)`,
@@ -157,7 +139,7 @@ export default function EmployeeMasterPage() {
     });
   };
 
-  if (isLoadingAuth || isLoadingData) {
+  if (isLoadingData) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -167,13 +149,13 @@ export default function EmployeeMasterPage() {
 
   return (
     <>
-      <PageHeader 
-        title="Employee Master" 
+      <PageHeader
+        title="Employee Master"
         description="View, add, or bulk upload employee master data. Includes status, division, and gross salary."
       >
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" disabled={isLoadingAuth || !isEditor} title={!isEditor ? "Login as editor to add new employee" : "Add a new employee to the master list"}>
+            <Button variant="outline" title="Add a new employee to the master list">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
             </Button>
           </DialogTrigger>
@@ -186,7 +168,7 @@ export default function EmployeeMasterPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                 <fieldset disabled={isLoadingAuth || !isEditor} className="space-y-4" title={!isEditor ? "Login as editor to make changes" : ""}>
+                 <fieldset className="space-y-4">
                     <FormField control={form.control} name="code" render={({ field }) => (
                     <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -224,19 +206,18 @@ export default function EmployeeMasterPage() {
                  </fieldset>
                 <DialogFooter>
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit" disabled={isLoadingAuth || !isEditor} title={!isEditor ? "Login as editor to save employee" : "Save this new employee"}>Save Employee</Button>
+                  <Button type="submit" title="Save this new employee">Save Employee</Button>
                 </DialogFooter>
               </form>
             </Form>
           </DialogContent>
         </Dialog>
-        
+
         <FileUploadButton
             onFileUpload={handleUploadEmployees}
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
-            disabled={isLoadingAuth || !isEditor}
-            title={!isEditor ? "Login as editor to upload" : "Upload employee data from a CSV file"}
+            title="Upload employee data from a CSV file"
             icon={<Upload className="mr-2 h-4 w-4" />}
         />
         <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
@@ -280,10 +261,10 @@ export default function EmployeeMasterPage() {
                   <TableCell>{employee.division || "N/A"}</TableCell>
                   <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} disabled={isLoadingAuth || !isEditor} title={!isEditor ? "Login as editor to edit" : "Edit this employee's details"}>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)} className="text-destructive hover:text-destructive/80" disabled={isLoadingAuth || !isEditor} title={!isEditor ? "Login as editor to delete" : "Delete this employee"}>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)} className="text-destructive hover:text-destructive/80" title="Delete this employee">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -303,5 +284,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-
-  

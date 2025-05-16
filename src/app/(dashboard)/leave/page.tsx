@@ -14,28 +14,28 @@ import { format, parseISO } from 'date-fns';
 import { sampleEmployees, sampleLeaveHistory, type EmployeeDetail, type LeaveHistoryEntry } from "@/lib/hr-data";
 import { calculateMonthsOfService, calculateAllLeaveBalancesForEmployee } from "@/lib/hr-calculations";
 import type { LeaveBalanceItem } from "@/lib/hr-types";
-import { useEditorAuth } from "@/hooks/useEditorAuth"; // Import editor auth hook
 
 
 export default function LeavePage() {
   const { toast } = useToast();
-  const { isEditor, isLoadingAuth } = useEditorAuth();
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | undefined>();
   const [calculatedLeaveBalances, setCalculatedLeaveBalances] = React.useState<LeaveBalanceItem[]>([]);
   const [filteredLeaveHistory, setFilteredLeaveHistory] = React.useState<LeaveHistoryEntry[]>([]);
   const [currentEmployee, setCurrentEmployee] = React.useState<EmployeeDetail | undefined>();
   const [monthsCompleted, setMonthsCompleted] = React.useState(0);
+  const [isLoading, setIsLoading] = React.useState(false);
 
 
   React.useEffect(() => {
     if (selectedEmployeeId) {
+      setIsLoading(true);
       const employee = sampleEmployees.find(emp => emp.id === selectedEmployeeId);
       setCurrentEmployee(employee);
 
       if (employee) {
         const today = new Date();
         setMonthsCompleted(calculateMonthsOfService(employee.doj, today));
-        
+
         const balances = calculateAllLeaveBalancesForEmployee(employee, sampleLeaveHistory, today);
 
         setCalculatedLeaveBalances([balances.CL, balances.SL, balances.PL]);
@@ -45,6 +45,7 @@ export default function LeavePage() {
         setFilteredLeaveHistory([]);
         setMonthsCompleted(0);
       }
+      setIsLoading(false);
     } else {
       setCurrentEmployee(undefined);
       setCalculatedLeaveBalances([]);
@@ -80,7 +81,7 @@ export default function LeavePage() {
     } else {
       csvRows.push(["No leave history found for this period."]);
     }
-    csvRows.push([""]); 
+    csvRows.push([""]);
     csvRows.push(["Current Leave Balances Summary as of " + format(new Date(), 'yyyy-MM-dd')]);
     csvRows.push(["Leave Type", "Total Accrued", "Total Used", "Current Balance", "PL Eligible"]);
     calculatedLeaveBalances.forEach(lb => {
@@ -112,7 +113,7 @@ export default function LeavePage() {
     });
   };
 
-  if (isLoadingAuth) {
+  if (isLoading && !currentEmployee) { // Show loader only when actively fetching for a selected ID
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -122,15 +123,14 @@ export default function LeavePage() {
 
   return (
     <>
-      <PageHeader 
-        title="Leave Management" 
+      <PageHeader
+        title="Leave Management"
         description="View and manage individual employee leave balances and history. Leaves are automatically calculated based on service tenure and usage. PL is applicable after 6 months of service."
       >
-        <Button 
-            variant="outline" 
-            onClick={handleDownloadLeaveBalance} 
-            disabled={!selectedEmployeeId || !isEditor}
-            title={!isEditor ? "Login as editor to download" : ""}
+        <Button
+            variant="outline"
+            onClick={handleDownloadLeaveBalance}
+            disabled={!selectedEmployeeId}
         >
           <Download className="mr-2 h-4 w-4" />
           Download Leave Report (CSV)
@@ -155,7 +155,14 @@ export default function LeavePage() {
         </CardContent>
       </Card>
 
-      {selectedEmployeeId && currentEmployee ? (
+      {isLoading && currentEmployee && ( // Show loader when employee is selected and data is loading
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+
+
+      {!isLoading && selectedEmployeeId && currentEmployee ? (
         <>
           <div className="mb-4 text-lg font-semibold">
             Leave Balances for: {currentEmployee.name} (DOJ: {currentEmployee.doj ? format(parseISO(currentEmployee.doj), 'dd MMM yyyy') : 'N/A'})
@@ -202,7 +209,7 @@ export default function LeavePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLeaveHistory.slice().sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((entry) => ( 
+                  {filteredLeaveHistory.slice().sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell>
                         <Badge variant="secondary">{entry.leaveType}</Badge>
@@ -222,7 +229,7 @@ export default function LeavePage() {
             </CardContent>
           </Card>
         </>
-      ) : (
+      ) : !isLoading && ( // Only show this if not loading and no employee selected
         <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardContent className="pt-6 text-center text-muted-foreground">
                 <User className="mx-auto h-12 w-12 mb-4" />
