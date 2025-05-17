@@ -14,7 +14,7 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import type { OpeningLeaveBalance } from "@/lib/hr-types";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
-import { format, parseISO, isValid, getDaysInMonth, getMonth, getYear, startOfMonth, addMonths, isBefore, isEqual, endOfMonth } from "date-fns";
+import { format, parseISO, isValid, getDaysInMonth, getMonth, getYear, startOfMonth, addMonths, isBefore, isEqual, endOfMonth, differenceInCalendarMonths } from "date-fns";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
@@ -63,8 +63,11 @@ export default function ReportsPage() {
   const [selectedEmpLeave, setSelectedEmpLeave] = React.useState<string>("");
 
   // States for Salary Ledger
-  const [selectedMonthLedger, setSelectedMonthLedger] = React.useState<string>(months[new Date().getMonth()]);
-  const [selectedYearLedger, setSelectedYearLedger] = React.useState<number>(new Date().getFullYear());
+  const [fromMonthLedger, setFromMonthLedger] = React.useState<string>(months[new Date().getMonth()]);
+  const [fromYearLedger, setFromYearLedger] = React.useState<number>(new Date().getFullYear());
+  const [toMonthLedger, setToMonthLedger] = React.useState<string>(months[new Date().getMonth()]);
+  const [toYearLedger, setToYearLedger] = React.useState<number>(new Date().getFullYear());
+
 
   const availableYears = React.useMemo(() => {
     const currentYr = new Date().getFullYear();
@@ -151,20 +154,14 @@ export default function ReportsPage() {
                 }
             }
             
-            // Note: `calculateEmployeeLeaveDetailsForPeriod` gets balance *at end of month*, including that month's accrual.
-            // The 'used' leaves from attendance are then conceptually subtracted for the final balance.
-            // For this report, we are showing the used leaves from attendance and the *calculated* end-of-month balance
-            // which already factors in accruals.
             const leaveDetails = calculateEmployeeLeaveDetailsForPeriod(
                 employee,
                 currentReportYear,
                 getMonth(currentDate),
-                [], // We're deriving "used" from attendance, not formal applications for this report
+                [], 
                 openingBalances
             );
             
-            // The balance from `calculateEmployeeLeaveDetailsForPeriod` is already net of accruals for the month.
-            // Now subtract the actual used amounts from attendance for that month.
             const finalCLBalance = leaveDetails.balanceCLAtMonthEnd - usedCLInMonth;
             const finalSLBalance = leaveDetails.balanceSLAtMonthEnd - usedSLInMonth;
             const finalPLBalance = leaveDetails.balancePLAtMonthEnd - usedPLInMonth;
@@ -209,100 +206,124 @@ export default function ReportsPage() {
   };
 
   const handleGenerateSalaryLedger = () => {
-    if (!selectedMonthLedger || !selectedYearLedger) {
-      toast({ title: "Selection Missing", description: "Please select month and year for the salary ledger.", variant: "destructive" });
+    if (!fromMonthLedger || !fromYearLedger || !toMonthLedger || !toYearLedger) {
+      toast({ title: "Selection Missing", description: "Please select a valid 'From' and 'To' date range for the salary ledger.", variant: "destructive" });
       return;
     }
+
+    const fromDate = startOfMonth(new Date(fromYearLedger, months.indexOf(fromMonthLedger)));
+    const toDate = endOfMonth(new Date(toYearLedger, months.indexOf(toMonthLedger)));
+
+    if (isBefore(toDate, fromDate)) {
+        toast({ title: "Invalid Date Range", description: "'From' date cannot be after 'To' date.", variant: "destructive"});
+        return;
+    }
+    
     setIsGeneratingReport(true);
 
-    let attendanceForMonth: MonthlyEmployeeAttendance[] = [];
-    let storedEdits: Record<string, EditableSalaryFields> = {};
     let currentEmployeeMaster: EmployeeDetail[] = [];
-
-    if (typeof window !== 'undefined') {
-        const attendanceKey = getDynamicAttendanceStorageKey(selectedMonthLedger, selectedYearLedger);
-        if (attendanceKey) {
-            const storedAttendance = localStorage.getItem(attendanceKey);
-            if (storedAttendance) try { attendanceForMonth = JSON.parse(storedAttendance); } catch (e) { console.error(e); }
-        }
-        const editsKey = getSalaryEditsStorageKey(selectedMonthLedger, selectedYearLedger);
-        if (editsKey) {
-            const storedEditsStr = localStorage.getItem(editsKey);
-            if (storedEditsStr) try { storedEdits = JSON.parse(storedEditsStr); } catch (e) { console.error(e); }
-        }
+     if (typeof window !== 'undefined') {
         const empMasterStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (empMasterStr) try { currentEmployeeMaster = JSON.parse(empMasterStr); } catch(e) { console.error(e); }
     }
-    
     if (currentEmployeeMaster.length === 0) {
         toast({ title: "No Employees", description: "No employees found in master data.", variant: "destructive"});
         setIsGeneratingReport(false);
         return;
     }
-    if (attendanceForMonth.length === 0) {
-        toast({ title: "No Attendance Data", description: `No attendance data found for ${selectedMonthLedger} ${selectedYearLedger}.`, variant: "destructive"});
-        setIsGeneratingReport(false);
-        return;
-    }
 
-    const salarySheetDataForLedger = currentEmployeeMaster
-      .map(emp => {
-        const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-        if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
-            return null; // Skip if no attendance record
+    const allSalarySheetDataForPeriod: any[] = [];
+    let currentLoopDate = fromDate;
+
+    while(isBefore(currentLoopDate, toDate) || isEqual(currentLoopDate, toDate)) {
+        const currentMonth = months[getMonth(currentLoopDate)];
+        const currentYear = getYear(currentLoopDate);
+
+        let attendanceForMonth: MonthlyEmployeeAttendance[] = [];
+        let storedEdits: Record<string, EditableSalaryFields> = {};
+
+        if (typeof window !== 'undefined') {
+            const attendanceKey = getDynamicAttendanceStorageKey(currentMonth, currentYear);
+            if (attendanceKey) {
+                const storedAttendance = localStorage.getItem(attendanceKey);
+                if (storedAttendance) try { attendanceForMonth = JSON.parse(storedAttendance); } catch (e) { console.error(e); }
+            }
+            const editsKey = getSalaryEditsStorageKey(currentMonth, currentYear);
+            if (editsKey) {
+                const storedEditsStr = localStorage.getItem(editsKey);
+                if (storedEditsStr) try { storedEdits = JSON.parse(storedEditsStr); } catch (e) { console.error(e); }
+            }
         }
 
-        const totalDaysInMonth = getDaysInMonth(new Date(selectedYearLedger, months.indexOf(selectedMonthLedger)));
-        const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
+        if (attendanceForMonth.length === 0 && getMonth(currentLoopDate) === getMonth(fromDate) && getYear(currentLoopDate) === getYear(fromDate)) {
+            toast({ title: "No Attendance Data", description: `No attendance data found for the start of the period: ${currentMonth} ${currentYear}. Report may be incomplete.`, variant: "destructive"});
+        }
         
-        let daysPaid = 0, weekOffs = 0, fullAbsentDays = 0, halfDaysTaken = 0;
-        dailyStatuses.forEach(status => {
-          if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaid++;
-          else if (status === 'HD') { daysPaid += 0.5; halfDaysTaken++; }
-          else if (status === 'W') { weekOffs++; daysPaid++; }
-          else if (status === 'A') fullAbsentDays++;
-        });
-        daysPaid = Math.min(daysPaid, totalDaysInMonth);
-        const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
+        currentEmployeeMaster
+          .forEach(emp => {
+            const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+            if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
+                return; // Skip if no attendance record for this employee in this month
+            }
 
-        const monthlyComponents = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
-        const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
-        const actualBasic = monthlyComponents.basic * payFactor;
-        const actualHRA = monthlyComponents.hra * payFactor;
-        const actualCA = monthlyComponents.ca * payFactor;
-        const actualMedical = monthlyComponents.medical * payFactor;
-        const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
+            const totalDaysInMonth = getDaysInMonth(new Date(currentYear, months.indexOf(currentMonth)));
+            const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
+            
+            let daysPaid = 0, weekOffs = 0, fullAbsentDays = 0, halfDaysTaken = 0;
+            dailyStatuses.forEach(status => {
+              if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaid++;
+              else if (status === 'HD') { daysPaid += 0.5; halfDaysTaken++; }
+              else if (status === 'W') { weekOffs++; daysPaid++; }
+              else if (status === 'A') fullAbsentDays++;
+            });
+            daysPaid = Math.min(daysPaid, totalDaysInMonth);
+            const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
+
+            const monthlyComponents = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
+            const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+            const actualBasic = monthlyComponents.basic * payFactor;
+            const actualHRA = monthlyComponents.hra * payFactor;
+            const actualCA = monthlyComponents.ca * payFactor;
+            const actualMedical = monthlyComponents.medical * payFactor;
+            const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
+            
+            const empEdits = storedEdits[emp.id] || {};
+            const arrears = empEdits.arrears ?? 0;
+            const tds = empEdits.tds ?? 0;
+            const loan = empEdits.loan ?? 0;
+            const salaryAdvance = empEdits.salaryAdvance ?? 0;
+            const otherDeduction = empEdits.otherDeduction ?? 0;
+            
+            const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+            const esic = 0, professionalTax = 0, providentFund = 0;
+            const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
+            const netPaid = totalAllowance - totalDeduction;
+
+            allSalarySheetDataForPeriod.push({
+              period: `${currentMonth}-${currentYear}`,
+              ...emp, employeeStatus: emp.status, totalDaysInMonth, daysPaid, weekOffs, daysAbsent: daysAbsentCalculated,
+              monthlyBasic: monthlyComponents.basic, monthlyHRA: monthlyComponents.hra, monthlyCA: monthlyComponents.ca, monthlyOtherAllowance: monthlyComponents.otherAllowance, monthlyMedical: monthlyComponents.medical,
+              actualBasic, actualHRA, actualCA, actualOtherAllowance, actualMedical,
+              arrears, tds, loan, salaryAdvance, otherDeduction,
+              totalAllowance, esic, professionalTax, providentFund, totalDeduction, netPaid,
+            });
+          });
         
-        const empEdits = storedEdits[emp.id] || {};
-        const arrears = empEdits.arrears ?? 0;
-        const tds = empEdits.tds ?? 0;
-        const loan = empEdits.loan ?? 0;
-        const salaryAdvance = empEdits.salaryAdvance ?? 0;
-        const otherDeduction = empEdits.otherDeduction ?? 0;
-        
-        const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0, professionalTax = 0, providentFund = 0;
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
-        const netPaid = totalAllowance - totalDeduction;
+        if (getMonth(currentLoopDate) === getMonth(toDate) && getYear(currentLoopDate) === getYear(toDate)) {
+            break;
+        }
+        currentLoopDate = addMonths(currentLoopDate, 1);
+    }
 
-        return {
-          ...emp, employeeStatus: emp.status, totalDaysInMonth, daysPaid, weekOffs, daysAbsent: daysAbsentCalculated,
-          monthlyBasic: monthlyComponents.basic, monthlyHRA: monthlyComponents.hra, monthlyCA: monthlyComponents.ca, monthlyOtherAllowance: monthlyComponents.otherAllowance, monthlyMedical: monthlyComponents.medical,
-          actualBasic, actualHRA, actualCA, actualOtherAllowance, actualMedical,
-          arrears, tds, loan, salaryAdvance, otherDeduction,
-          totalAllowance, esic, professionalTax, providentFund, totalDeduction, netPaid,
-        };
-      })
-      .filter(emp => emp !== null);
 
-    if (salarySheetDataForLedger.length === 0) {
-      toast({ title: "No Data", description: "No employees had attendance data for the selected period.", variant: "destructive" });
+    if (allSalarySheetDataForPeriod.length === 0) {
+      toast({ title: "No Data", description: "No salary data found for any employee within the selected period.", variant: "destructive" });
       setIsGeneratingReport(false);
       return;
     }
     
     const headers = [
-      "Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
+      "Period", "Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
       "Total Days", "Day Paid", "Week Off", "Day Absent",
       "Monthly Basic", "Monthly HRA", "Monthly CA", "Monthly Other Allowance", "Monthly Medical", "Monthly Gross",
       "Actual Basic", "Actual HRA", "Actual CA", "Actual Other Allowance", "Actual Medical",
@@ -311,43 +332,52 @@ export default function ReportsPage() {
       "Total Deduction", "Net Paid"
     ];
     const csvRows: string[][] = [headers];
-    salarySheetDataForLedger.forEach(emp => {
+    allSalarySheetDataForPeriod.forEach(emp => {
       if (!emp) return;
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const row = [
-        emp.employeeStatus, emp.division || "N/A", emp.code, emp.name, emp.designation, emp.hq || "N/A", dojFormatted,
+        emp.period, emp.employeeStatus, emp.division || "N/A", emp.code, emp.name, emp.designation, emp.hq || "N/A", dojFormatted,
         emp.totalDaysInMonth.toString(), emp.daysPaid.toFixed(1), emp.weekOffs.toString(), emp.daysAbsent.toFixed(1),
         emp.monthlyBasic.toFixed(2), emp.monthlyHRA.toFixed(2), emp.monthlyCA.toFixed(2), emp.monthlyOtherAllowance.toFixed(2), emp.monthlyMedical.toFixed(2), emp.grossMonthlySalary.toFixed(2),
         emp.actualBasic.toFixed(2), emp.actualHRA.toFixed(2), emp.actualCA.toFixed(2), emp.actualOtherAllowance.toFixed(2), emp.actualMedical.toFixed(2),
         emp.arrears.toFixed(2), emp.totalAllowance.toFixed(2),
         emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.otherDeduction.toFixed(2),
         emp.totalDeduction.toFixed(2), emp.netPaid.toFixed(2),
-      ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`); // Escape quotes within values
       csvRows.push(row);
     });
     
-    // Add Totals Row for Salary Ledger
     const totals = {
-        monthlyBasic: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.monthlyBasic || 0), 0),
-        monthlyHRA: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.monthlyHRA || 0), 0),
-        // ... (sum all other relevant financial columns)
-        grossMonthlySalary: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.grossMonthlySalary || 0), 0),
-        actualBasic: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.actualBasic || 0), 0),
-        arrears: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.arrears || 0), 0),
-        totalAllowance: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.totalAllowance || 0), 0),
-        tds: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.tds || 0), 0),
-        loan: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.loan || 0), 0),
-        salaryAdvance: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.salaryAdvance || 0), 0),
-        otherDeduction: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.otherDeduction || 0), 0),
-        totalDeduction: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.totalDeduction || 0), 0),
-        netPaid: salarySheetDataForLedger.reduce((sum, emp) => sum + (emp?.netPaid || 0), 0),
+        monthlyBasic: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.monthlyBasic || 0), 0),
+        monthlyHRA: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.monthlyHRA || 0), 0),
+        monthlyCA: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.monthlyCA || 0), 0),
+        monthlyOtherAllowance: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.monthlyOtherAllowance || 0), 0),
+        monthlyMedical: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.monthlyMedical || 0), 0),
+        grossMonthlySalary: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.grossMonthlySalary || 0), 0),
+        actualBasic: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.actualBasic || 0), 0),
+        actualHRA: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.actualHRA || 0), 0),
+        actualCA: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.actualCA || 0), 0),
+        actualOtherAllowance: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.actualOtherAllowance || 0), 0),
+        actualMedical: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.actualMedical || 0), 0),
+        arrears: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.arrears || 0), 0),
+        totalAllowance: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.totalAllowance || 0), 0),
+        esic: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.esic || 0), 0),
+        professionalTax: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.professionalTax || 0), 0),
+        providentFund: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.providentFund || 0), 0),
+        tds: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.tds || 0), 0),
+        loan: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.loan || 0), 0),
+        salaryAdvance: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.salaryAdvance || 0), 0),
+        otherDeduction: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.otherDeduction || 0), 0),
+        totalDeduction: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.totalDeduction || 0), 0),
+        netPaid: allSalarySheetDataForPeriod.reduce((sum, emp) => sum + (emp?.netPaid || 0), 0),
     };
+
      const totalRow = [
-        "", "", "", "", "", "", "TOTALS:", "", "", "", "",
-        totals.monthlyBasic.toFixed(2), totals.monthlyHRA.toFixed(2), /* CA, Other, Medical */ "", "", "", totals.grossMonthlySalary.toFixed(2),
-        totals.actualBasic.toFixed(2), /* HRA, CA, Other, Medical */ "", "", "", "",
+        "GRAND TOTALS:", "", "", "", "", "", "", "", "", "", "", "",
+        totals.monthlyBasic.toFixed(2), totals.monthlyHRA.toFixed(2), totals.monthlyCA.toFixed(2), totals.monthlyOtherAllowance.toFixed(2), totals.monthlyMedical.toFixed(2), totals.grossMonthlySalary.toFixed(2),
+        totals.actualBasic.toFixed(2), totals.actualHRA.toFixed(2), totals.actualCA.toFixed(2), totals.actualOtherAllowance.toFixed(2), totals.actualMedical.toFixed(2),
         totals.arrears.toFixed(2), totals.totalAllowance.toFixed(2),
-        /* ESIC, PT, PF */ "", "", "", totals.tds.toFixed(2), totals.loan.toFixed(2), totals.salaryAdvance.toFixed(2), totals.otherDeduction.toFixed(2),
+        totals.esic.toFixed(2), totals.professionalTax.toFixed(2), totals.providentFund.toFixed(2), totals.tds.toFixed(2), totals.loan.toFixed(2), totals.salaryAdvance.toFixed(2), totals.otherDeduction.toFixed(2),
         totals.totalDeduction.toFixed(2), totals.netPaid.toFixed(2),
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
     csvRows.push(totalRow);
@@ -358,12 +388,14 @@ export default function ReportsPage() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `salary_ledger_${selectedMonthLedger}_${selectedYearLedger}_${format(new Date(), "yyyyMMdd")}.csv`);
+    const fromDateFormatted = format(fromDate, "MMMyyyy");
+    const toDateFormatted = format(toDate, "MMMyyyy");
+    link.setAttribute("download", `salary_ledger_${fromDateFormatted}_to_${toDateFormatted}_${format(new Date(), "yyyyMMdd")}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "Salary Ledger Generated", description: "CSV download started." });
+    toast({ title: "Salary Ledger Generated", description: `CSV for ${fromDateFormatted} to ${toDateFormatted} download started.` });
 
     setIsGeneratingReport(false);
   };
@@ -434,24 +466,51 @@ export default function ReportsPage() {
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle>Monthly Salary Ledger</CardTitle>
-            <CardDescription>Download a detailed salary ledger for all employees for a selected month.</CardDescription>
+            <CardDescription>Download a detailed salary ledger for all employees for a selected date range.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Select value={selectedMonthLedger} onValueChange={setSelectedMonthLedger}>
-                <SelectTrigger><SelectValue placeholder="Select Month" /></SelectTrigger>
-                <SelectContent>
-                  {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={selectedYearLedger > 0 ? selectedYearLedger.toString() : ""} onValueChange={(value) => setSelectedYearLedger(parseInt(value))}>
-                <SelectTrigger><SelectValue placeholder="Select Year" /></SelectTrigger>
-                <SelectContent>
-                  {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+              <div>
+                <Label htmlFor="fromMonthLedger">From Month</Label>
+                <Select value={fromMonthLedger} onValueChange={setFromMonthLedger}>
+                  <SelectTrigger id="fromMonthLedger"><SelectValue placeholder="Select Month" /></SelectTrigger>
+                  <SelectContent>
+                    {months.map(month => <SelectItem key={"from-"+month} value={month}>{month}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="fromYearLedger">From Year</Label>
+                <Select value={fromYearLedger > 0 ? fromYearLedger.toString() : ""} onValueChange={(value) => setFromYearLedger(parseInt(value))}>
+                  <SelectTrigger id="fromYearLedger"><SelectValue placeholder="Select Year" /></SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map(year => <SelectItem key={"from-"+year} value={year.toString()}>{year}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="toMonthLedger">To Month</Label>
+                <Select value={toMonthLedger} onValueChange={setToMonthLedger}>
+                  <SelectTrigger id="toMonthLedger"><SelectValue placeholder="Select Month" /></SelectTrigger>
+                  <SelectContent>
+                    {months.map(month => <SelectItem key={"to-"+month} value={month}>{month}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="toYearLedger">To Year</Label>
+                <Select value={toYearLedger > 0 ? toYearLedger.toString() : ""} onValueChange={(value) => setToYearLedger(parseInt(value))}>
+                  <SelectTrigger id="toYearLedger"><SelectValue placeholder="Select Year" /></SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map(year => <SelectItem key={"to-"+year} value={year.toString()}>{year}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <Button onClick={handleGenerateSalaryLedger} disabled={isGeneratingReport || !selectedMonthLedger || selectedYearLedger === 0}>
+            <Button 
+              onClick={handleGenerateSalaryLedger} 
+              disabled={isGeneratingReport || !fromMonthLedger || fromYearLedger === 0 || !toMonthLedger || toYearLedger === 0}
+            >
               {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Download Salary Ledger (CSV)
             </Button>
