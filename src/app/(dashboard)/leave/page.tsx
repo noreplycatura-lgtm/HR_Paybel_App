@@ -15,14 +15,13 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
+import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService, getLeaveBalancesAtStartOfMonth } from "@/lib/hr-calculations";
 import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
@@ -30,12 +29,25 @@ const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface LeaveDisplayData extends EmployeeDetail {
+  // Used leaves in selected month (from attendance)
   usedCLInMonth: number;
   usedSLInMonth: number;
   usedPLInMonth: number;
+
+  // Closing balance for selected month
   balanceCLAtMonthEnd: number;
   balanceSLAtMonthEnd: number;
   balancePLAtMonthEnd: number;
+
+  // New: Last Month's Usage
+  usedCLLastMonth: number;
+  usedSLLastMonth: number;
+  usedPLLastMonth: number;
+
+  // New: Next Month's Opening Balance
+  openingCLNextMonth: number;
+  openingSLNextMonth: number;
+  openingPLNextMonth: number;
 }
 
 interface MonthlyEmployeeAttendance {
@@ -82,38 +94,11 @@ export default function LeavePage() {
 
   React.useEffect(() => {
     setIsLoading(true);
-    let didClearOB = false;
-    // let didClearApps = false; // Keep if leave applications might be cleared
-
-    if (typeof window !== 'undefined') {
-        // --- TEMPORARY CODE TO CLEAR LEAVE DATA AS PER USER REQUEST ---
-        const shouldClearData = localStorage.getItem("novita_clear_leave_data_flag_v1"); // Example flag
-        if (shouldClearData === "true") {
-            console.log("LeavePage: Clearing specific leave data from localStorage as per flag...");
-            if (localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY)) {
-                localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-                didClearOB = true;
-                console.log("LeavePage: Opening balances cleared from localStorage.");
-            }
-            // if (localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY)) {
-            //     localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-            //     didClearApps = true;
-            //     console.log("LeavePage: Leave applications cleared from localStorage.");
-            // }
-            localStorage.removeItem("novita_clear_leave_data_flag_v1"); // Remove the flag after clearing
-
-            toast({
-                title: "Leave Data Cleared",
-                description: "Opening leave balances have been cleared as requested. Please re-upload if needed.",
-                duration: 9000,
-            });
-        }
-        // --- END OF TEMPORARY CODE ---
       
-      let loadedEmployees: EmployeeDetail[] = [];
-      let loadedOpeningBalances: OpeningLeaveBalance[] = [];
-      // No need to load leave applications as they are not used in this version's edit logic
-
+    let loadedEmployees: EmployeeDetail[] = [];
+    let loadedOpeningBalances: OpeningLeaveBalance[] = [];
+    
+    if (typeof window !== 'undefined') {
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
@@ -124,6 +109,8 @@ export default function LeavePage() {
              console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
+        } else {
+            toast({ title: "Data Missing", description: "Employee Master data not found. Please add employees first.", variant: "destructive", duration: 7000});
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
@@ -148,7 +135,6 @@ export default function LeavePage() {
       }
       setOpeningBalances(loadedOpeningBalances);
     }
-    // setIsLoading(false); // This will be set by the effect below
   }, [toast]);
 
   React.useEffect(() => {
@@ -165,21 +151,19 @@ export default function LeavePage() {
       setIsLoading(false);
       return;
     }
+    const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
 
     const newDisplayData = employees
       .filter(emp => emp.status === "Active")
       .map(emp => {
-        const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp,
-          selectedYear,
-          monthIndex,
-          [], // Pass empty array for formal leave applications for now
-          openingBalances
+        // --- 1. Calculate current month's used leaves and closing balances ---
+        const currentMonthAccrualDetails = calculateEmployeeLeaveDetailsForPeriod(
+          emp, selectedYear, monthIndex, [], openingBalances
         );
 
-        let usedCLFromAttendance = 0;
-        let usedSLFromAttendance = 0;
-        let usedPLFromAttendance = 0;
+        let usedCLInMonth = 0;
+        let usedSLInMonth = 0;
+        let usedPLInMonth = 0;
 
         if (typeof window !== 'undefined') {
           const { rawDataKey } = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
@@ -189,36 +173,97 @@ export default function LeavePage() {
               try {
                 const monthAttendanceForAllEmployees: MonthlyEmployeeAttendance[] = JSON.parse(storedRawAttendance);
                 const empAttendanceRecord = monthAttendanceForAllEmployees.find(attEmp => attEmp.code === emp.code);
-
                 if (empAttendanceRecord && empAttendanceRecord.attendance) {
                   const daysInSelectedMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
                   const dailyStatuses = empAttendanceRecord.attendance.slice(0, daysInSelectedMonth);
-
                   dailyStatuses.forEach(status => {
-                    if (status === 'CL') usedCLFromAttendance += 1;
-                    else if (status === 'SL') usedSLFromAttendance += 1;
-                    else if (status === 'PL') usedPLFromAttendance += 1;
+                    if (status === 'CL') usedCLInMonth += 1;
+                    else if (status === 'SL') usedSLInMonth += 1;
+                    else if (status === 'PL') usedPLInMonth += 1;
                   });
                 }
-              } catch (e) {
-                console.warn(`Could not parse attendance for ${emp.code} in ${selectedMonth} ${selectedYear} for Leave Page: ${e}`);
-              }
+              } catch (e) { console.warn(`Could not parse attendance for ${emp.code} in ${selectedMonth} ${selectedYear} for Leave Page: ${e}`); }
             }
           }
         }
+        const currentClosingCL = currentMonthAccrualDetails.balanceCLAtMonthEnd - usedCLInMonth;
+        const currentClosingSL = currentMonthAccrualDetails.balanceSLAtMonthEnd - usedSLInMonth;
+        const currentClosingPL = currentMonthAccrualDetails.balancePLAtMonthEnd - usedPLInMonth;
 
-        const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
-        const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
-        const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
+        // --- 2. Calculate last month's used leaves ---
+        let usedCLLastMonth = 0;
+        let usedSLLastMonth = 0;
+        let usedPLLastMonth = 0;
+        const prevMonthDate = addMonths(selectedMonthStartDate, -1);
+        const prevMonthName = months[getMonth(prevMonthDate)];
+        const prevMonthYear = getYear(prevMonthDate);
+
+        if (typeof window !== 'undefined') {
+          const { rawDataKey: prevMonthRawDataKey } = getDynamicAttendanceStorageKeys(prevMonthName, prevMonthYear);
+          if (prevMonthRawDataKey) {
+            const storedPrevMonthAttendance = localStorage.getItem(prevMonthRawDataKey);
+            if (storedPrevMonthAttendance) {
+              try {
+                const prevMonthAttendanceForAll: MonthlyEmployeeAttendance[] = JSON.parse(storedPrevMonthAttendance);
+                const empPrevMonthAttendance = prevMonthAttendanceForAll.find(attEmp => attEmp.code === emp.code);
+                if (empPrevMonthAttendance && empPrevMonthAttendance.attendance) {
+                  const daysInPrevMonth = new Date(prevMonthYear, getMonth(prevMonthDate) + 1, 0).getDate();
+                  const dailyStatuses = empPrevMonthAttendance.attendance.slice(0, daysInPrevMonth);
+                  dailyStatuses.forEach(status => {
+                    if (status === 'CL') usedCLLastMonth += 1;
+                    else if (status === 'SL') usedSLLastMonth += 1;
+                    else if (status === 'PL') usedPLLastMonth += 1;
+                  });
+                }
+              } catch (e) { console.warn(`Could not parse attendance for ${emp.code} in ${prevMonthName} ${prevMonthYear} for Leave Page: ${e}`); }
+            }
+          }
+        }
+        
+        // --- 3. Calculate next month's opening balances ---
+        const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
+        const nextMonthIndex = getMonth(nextMonthDateObject);
+        const nextMonthYear = getYear(nextMonthDateObject);
+        
+        const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
+        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+
+        let accrualCLNextMonth = 0;
+        let accrualSLNextMonth = 0;
+        let accrualPLNextMonth = 0;
+
+        if (isEligibleForAccrualNextMonth) {
+            accrualCLNextMonth = CL_ACCRUAL_RATE;
+            accrualSLNextMonth = SL_ACCRUAL_RATE;
+            accrualPLNextMonth = PL_ACCRUAL_RATE;
+        }
+        
+        let openingCLNextMonth = 0;
+        let openingSLNextMonth = 0;
+        const openingPLNextMonth = currentClosingPL + accrualPLNextMonth; // PL always carries over
+
+        if (nextMonthIndex === 3) { // April - CL/SL reset
+            openingCLNextMonth = 0 + accrualCLNextMonth;
+            openingSLNextMonth = 0 + accrualSLNextMonth;
+        } else {
+            openingCLNextMonth = currentClosingCL + accrualCLNextMonth;
+            openingSLNextMonth = currentClosingSL + accrualSLNextMonth;
+        }
 
         return {
           ...emp,
-          usedCLInMonth: usedCLFromAttendance,
-          usedSLInMonth: usedSLFromAttendance,
-          usedPLInMonth: usedPLFromAttendance,
-          balanceCLAtMonthEnd: finalBalanceCL,
-          balanceSLAtMonthEnd: finalSLBalance,
-          balancePLAtMonthEnd: finalBalancePL,
+          usedCLInMonth,
+          usedSLInMonth,
+          usedPLInMonth,
+          balanceCLAtMonthEnd: currentClosingCL,
+          balanceSLAtMonthEnd: currentClosingSL,
+          balancePLAtMonthEnd: currentClosingPL,
+          usedCLLastMonth,
+          usedSLLastMonth,
+          usedPLLastMonth,
+          openingCLNextMonth,
+          openingSLNextMonth,
+          openingPLNextMonth,
         };
     });
     setDisplayData(newDisplayData);
@@ -333,12 +378,10 @@ export default function LeavePage() {
     const csvRows: string[][] = [];
     const headers = [
       "Division", "Code", "Name", "Designation", "HQ", "DOJ",
-      `Used CL (${selectedMonth} ${selectedYear})`,
-      `Used SL (${selectedMonth} ${selectedYear})`,
-      `Used PL (${selectedMonth} ${selectedYear})`,
-      `Balance CL (End of ${selectedMonth} ${selectedYear})`,
-      `Balance SL (End of ${selectedMonth} ${selectedYear})`,
-      `Balance PL (End of ${selectedMonth} ${selectedYear})`
+      `Used CL (Last Mth)`, `Used SL (Last Mth)`, `Used PL (Last Mth)`,
+      `Used CL (${selectedMonth} ${selectedYear})`, `Used SL (${selectedMonth} ${selectedYear})`, `Used PL (${selectedMonth} ${selectedYear})`,
+      `Balance CL (EOM ${selectedMonth} ${selectedYear})`, `Balance SL (EOM ${selectedMonth} ${selectedYear})`, `Balance PL (EOM ${selectedMonth} ${selectedYear})`,
+      `Opening CL (Next Mth)`, `Opening SL (Next Mth)`, `Opening PL (Next Mth)`
     ];
     csvRows.push(headers);
 
@@ -347,29 +390,17 @@ export default function LeavePage() {
       if (emp.doj) {
         try {
           const parsed = parseISO(emp.doj);
-          if (isValid(parsed)) {
-            formattedDoj = format(parsed, 'dd-MMM-yyyy');
-          } else {
-            formattedDoj = emp.doj;
-          }
-        } catch {
-          formattedDoj = emp.doj;
-        }
+          if (isValid(parsed)) formattedDoj = format(parsed, 'dd-MMM-yyyy');
+          else formattedDoj = emp.doj;
+        } catch { formattedDoj = emp.doj; }
       }
 
       const row = [
-        emp.division || "N/A",
-        emp.code,
-        emp.name,
-        emp.designation,
-        emp.hq || "N/A",
-        formattedDoj,
-        emp.usedCLInMonth.toFixed(1),
-        emp.usedSLInMonth.toFixed(1),
-        emp.usedPLInMonth.toFixed(1),
-        emp.balanceCLAtMonthEnd.toFixed(1),
-        emp.balanceSLAtMonthEnd.toFixed(1),
-        emp.balancePLAtMonthEnd.toFixed(1)
+        emp.division || "N/A", emp.code, emp.name, emp.designation, emp.hq || "N/A", formattedDoj,
+        emp.usedCLLastMonth.toFixed(1), emp.usedSLLastMonth.toFixed(1), emp.usedPLLastMonth.toFixed(1),
+        emp.usedCLInMonth.toFixed(1), emp.usedSLInMonth.toFixed(1), emp.usedPLInMonth.toFixed(1),
+        emp.balanceCLAtMonthEnd.toFixed(1), emp.balanceSLAtMonthEnd.toFixed(1), emp.balancePLAtMonthEnd.toFixed(1),
+        emp.openingCLNextMonth.toFixed(1), emp.openingSLNextMonth.toFixed(1), emp.openingPLNextMonth.toFixed(1)
       ];
       csvRows.push(row);
     });
@@ -380,7 +411,7 @@ export default function LeavePage() {
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const formattedDate = format(new Date(), 'yyyy-MM-dd');
-    link.setAttribute("download", `selected_leave_summary_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
+    link.setAttribute("download", `selected_leave_report_${selectedMonth}_${selectedYear}_${formattedDate}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -389,7 +420,7 @@ export default function LeavePage() {
 
     toast({
       title: "Download Started",
-      description: `Leave summary report for selected employees (${selectedMonth} ${selectedYear}) is being downloaded.`,
+      description: `Leave report for selected employees (${selectedMonth} ${selectedYear}) is being downloaded.`,
     });
   };
 
@@ -706,18 +737,28 @@ export default function LeavePage() {
                 <TableHead className="min-w-[150px]">Designation</TableHead>
                 <TableHead className="min-w-[100px]">HQ</TableHead>
                 <TableHead className="min-w-[100px]">DOJ</TableHead>
-                <TableHead className="text-center min-w-[80px]">Used CL</TableHead>
-                <TableHead className="text-center min-w-[80px]">Used SL</TableHead>
-                <TableHead className="text-center min-w-[80px]">Used PL</TableHead>
-                <TableHead className="text-center min-w-[90px]">Balance CL</TableHead>
-                <TableHead className="text-center min-w-[90px]">Balance SL</TableHead>
-                <TableHead className="text-center min-w-[90px]">Balance PL</TableHead>
+                
+                <TableHead className="text-center min-w-[100px]">Used CL (Last Mth)</TableHead>
+                <TableHead className="text-center min-w-[100px]">Used SL (Last Mth)</TableHead>
+                <TableHead className="text-center min-w-[100px]">Used PL (Last Mth)</TableHead>
+
+                <TableHead className="text-center min-w-[100px]">Used CL (Sel. Mth)</TableHead>
+                <TableHead className="text-center min-w-[100px]">Used SL (Sel. Mth)</TableHead>
+                <TableHead className="text-center min-w-[100px]">Used PL (Sel. Mth)</TableHead>
+
+                <TableHead className="text-center min-w-[110px] font-semibold">Balance CL (EOM)</TableHead>
+                <TableHead className="text-center min-w-[110px] font-semibold">Balance SL (EOM)</TableHead>
+                <TableHead className="text-center min-w-[110px] font-semibold">Balance PL (EOM)</TableHead>
+
+                <TableHead className="text-center min-w-[110px]">Opening CL (Next Mth)</TableHead>
+                <TableHead className="text-center min-w-[110px]">Opening SL (Next Mth)</TableHead>
+                <TableHead className="text-center min-w-[110px]">Opening PL (Next Mth)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && displayData.length === 0 && employees.length > 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8">
+                  <TableCell colSpan={20} className="text-center py-8">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                     Calculating leave balances...
                   </TableCell>
@@ -768,16 +809,25 @@ export default function LeavePage() {
                       return 'N/A';
                     })()}
                   </TableCell>
+                  <TableCell className="text-center">{emp.usedCLLastMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.usedSLLastMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.usedPLLastMonth.toFixed(1)}</TableCell>
+
                   <TableCell className="text-center">{emp.usedCLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center">{emp.usedSLInMonth.toFixed(1)}</TableCell>
                   <TableCell className="text-center">{emp.usedPLInMonth.toFixed(1)}</TableCell>
+
                   <TableCell className="text-center font-semibold">{emp.balanceCLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balanceSLAtMonthEnd.toFixed(1)}</TableCell>
                   <TableCell className="text-center font-semibold">{emp.balancePLAtMonthEnd.toFixed(1)}</TableCell>
+
+                  <TableCell className="text-center">{emp.openingCLNextMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.openingSLNextMonth.toFixed(1)}</TableCell>
+                  <TableCell className="text-center">{emp.openingPLNextMonth.toFixed(1)}</TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={20} className="text-center text-muted-foreground py-8">
                     {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." :
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
                      "Please select month and year to view leave summary."}
@@ -791,5 +841,4 @@ export default function LeavePage() {
     </>
   );
 }
-
     
