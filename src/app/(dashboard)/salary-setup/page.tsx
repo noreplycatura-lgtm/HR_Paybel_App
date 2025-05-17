@@ -16,6 +16,8 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Download, Edit, Save, Trash2, Loader2 } from "lucide-react";
+// Removed import of calculateMonthlySalaryComponents from "@/lib/salary-calculations"
+// as this page uses its own local version for the form display.
 
 const manualSalarySchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -37,9 +39,11 @@ interface SalaryStructure extends ManualSalaryFormValues {
   totalGross: number;
 }
 
+// Sample saved salaries might become inconsistent with new fixed basic if edited.
+// For prototype, if these are edited, the new calculation logic will apply.
 const sampleSavedSalaries: SalaryStructure[] = [
-  { id: "S001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2022-01-15", grossMonthlySalary: 60000, basic: 15010, hra: 22495, ca: 8998, medical: 6748.5, otherAllowance: 6748.5, totalGross: 60000},
-  { id: "S002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2021-05-20", grossMonthlySalary: 80000, basic: 15010, hra: 32495, ca: 12998, medical: 9748.5, otherAllowance: 9748.5, totalGross: 80000 },
+  { id: "S001", code: "E001", name: "John Doe", designation: "Software Engineer", doj: "2022-01-15", grossMonthlySalary: 60000, basic: 24000, hra: 12000, ca: 6000, medical: 6000, otherAllowance: 12000, totalGross: 60000},
+  { id: "S002", code: "E002", name: "Jane Smith", designation: "Project Manager", doj: "2021-05-20", grossMonthlySalary: 80000, basic: 32000, hra: 16000, ca: 8000, medical: 8000, otherAllowance: 16000, totalGross: 80000 },
 ];
 
 export default function SalarySetupPage() {
@@ -75,13 +79,32 @@ export default function SalarySetupPage() {
     });
   };
 
+  // Updated local calculation function to match new rules
   const calculateSalaryComponents = (grossMonthlySalary: number) => {
-    const basic = 15010;
-    const remainingAmount = Math.max(0, grossMonthlySalary - basic);
-    const hra = remainingAmount * 0.50;
-    const ca = remainingAmount * 0.20;
-    const medical = remainingAmount * 0.15;
-    const otherAllowance = remainingAmount * 0.15;
+    if (grossMonthlySalary <= 0) {
+      return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
+    }
+    const fixedBasicAmount = 15010;
+    let basic: number;
+    let hra: number;
+    let ca: number;
+    let medical: number;
+    let otherAllowance: number;
+
+    if (grossMonthlySalary < fixedBasicAmount) {
+      basic = grossMonthlySalary;
+      hra = 0;
+      ca = 0;
+      medical = 0;
+      otherAllowance = 0;
+    } else {
+      basic = fixedBasicAmount;
+      const remainingAmount = grossMonthlySalary - basic;
+      hra = remainingAmount * 0.50;
+      ca = remainingAmount * 0.20;
+      medical = remainingAmount * 0.15;
+      otherAllowance = remainingAmount - hra - ca - medical; // Ensures sum is exact
+    }
     return { basic, hra, ca, medical, otherAllowance, totalGross: grossMonthlySalary };
   };
 
@@ -263,3 +286,4 @@ export default function SalarySetupPage() {
     </>
   );
 }
+

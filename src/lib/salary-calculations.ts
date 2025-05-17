@@ -11,26 +11,43 @@ export interface MonthlySalaryComponents {
 
 /**
  * Calculates monthly salary components based on gross salary.
- * This is a simplified fixed structure for the prototype.
- * In a real application, these rules would likely come from a more complex salary setup.
+ * New Rules:
+ * 1. Basic is fixed at 15010.
+ * 2. If Gross < 15010, Basic = Gross, others = 0.
+ * 3. If Gross >= 15010, Basic = 15010. Remaining (Gross - Basic) is distributed:
+ *    HRA: 50% of remaining
+ *    CA: 20% of remaining
+ *    Medical: 15% of remaining
+ *    Other Allowance: 15% of remaining (or adjusted to ensure sum equals Gross)
  */
 export function calculateMonthlySalaryComponents(grossMonthlySalary: number): MonthlySalaryComponents {
   if (grossMonthlySalary <= 0) {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
   }
 
-  // Example breakdown:
-  // Basic: 40%
-  // HRA: 20%
-  // Conveyance Allowance (CA): 10%
-  // Medical Allowance: 10%
-  // Other Allowance: 20% (to sum up to 100%)
+  const fixedBasicAmount = 15010;
+  let basic: number;
+  let hra: number;
+  let ca: number;
+  let medical: number;
+  let otherAllowance: number;
 
-  const basic = grossMonthlySalary * 0.40;
-  const hra = grossMonthlySalary * 0.20;
-  const ca = grossMonthlySalary * 0.10;
-  const medical = grossMonthlySalary * 0.10;
-  const otherAllowance = grossMonthlySalary - basic - hra - ca - medical; // Ensure total matches gross
+  if (grossMonthlySalary < fixedBasicAmount) {
+    basic = grossMonthlySalary;
+    hra = 0;
+    ca = 0;
+    medical = 0;
+    otherAllowance = 0;
+  } else {
+    basic = fixedBasicAmount;
+    const remainingAmount = grossMonthlySalary - basic;
+    
+    hra = remainingAmount * 0.50;
+    ca = remainingAmount * 0.20;
+    medical = remainingAmount * 0.15;
+    // Calculate Other Allowance as the remainder to ensure the sum is exact
+    otherAllowance = remainingAmount - hra - ca - medical;
+  }
 
   return {
     basic,
@@ -41,3 +58,4 @@ export function calculateMonthlySalaryComponents(grossMonthlySalary: number): Mo
     totalGross: grossMonthlySalary,
   };
 }
+
