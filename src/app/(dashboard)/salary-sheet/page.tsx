@@ -151,7 +151,13 @@ export default function SalarySheetPage() {
             const storedAttendance = localStorage.getItem(rawDataKey);
             if (storedAttendance) {
                 try {
-                    attendanceForMonth = JSON.parse(storedAttendance);
+                    const parsedAttendance = JSON.parse(storedAttendance);
+                    if(Array.isArray(parsedAttendance)) {
+                        attendanceForMonth = parsedAttendance;
+                    } else {
+                        console.warn(`Attendance data for ${selectedMonth} ${selectedYear} is not an array.`);
+                        toast({ title: "Attendance Data Format Issue", description: `Stored attendance for ${selectedMonth} ${selectedYear} is corrupted. Salary sheet calculations may be incomplete.`, variant: "destructive", duration: 7000 });
+                    }
                 } catch (e) {
                     console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
                     toast({ title: "Attendance Data Issue", description: `Could not load attendance for ${selectedMonth} ${selectedYear}. Salary sheet calculations might be incomplete. Please upload attendance.`, variant: "destructive", duration: 7000 });
@@ -175,87 +181,92 @@ export default function SalarySheetPage() {
         }
     }
 
-    const newSalarySheetData = allEmployees.map(emp => {
-      const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-      const dailyStatuses = empAttendanceRecord?.attendance?.slice(0, totalDaysInMonth) || Array(totalDaysInMonth).fill('A'); 
-      
-      let daysPaid = 0;
-      let weekOffs = 0;
-      let fullAbsentDays = 0; 
-      let halfDaysTaken = 0;  
-
-      dailyStatuses.forEach(status => {
-        if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') {
-          daysPaid++;
-        } else if (status === 'HD') {
-          daysPaid += 0.5;
-          halfDaysTaken++; 
-        } else if (status === 'W') {
-          weekOffs++;
-          daysPaid++; 
-        } else if (status === 'A') {
-          fullAbsentDays++;
+    const newSalarySheetData = allEmployees
+      .map(emp => {
+        const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+        // If no attendance record, this employee won't be included later
+        if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
+            return null; 
         }
-        // '-' (not joined) is implicitly an absent day for payment calculation if it falls within the month.
-        // If an employee joins mid-month, their `daysPaid` will be based on their actual presence.
-      });
-      
-      daysPaid = Math.min(daysPaid, totalDaysInMonth); // Cap at total days in month
-      const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
 
-      const monthlyComponents = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
-      const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+        const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth); 
+        
+        let daysPaid = 0;
+        let weekOffs = 0;
+        let fullAbsentDays = 0; 
+        let halfDaysTaken = 0;  
 
-      const actualBasic = monthlyComponents.basic * payFactor;
-      const actualHRA = monthlyComponents.hra * payFactor;
-      const actualCA = monthlyComponents.ca * payFactor;
-      const actualMedical = monthlyComponents.medical * payFactor;
-      const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
-      
-      const empEdits = storedEdits[emp.id] || {};
-      const arrears = empEdits.arrears ?? 0;
-      const tds = empEdits.tds ?? 0;
-      const loan = empEdits.loan ?? 0;
-      const salaryAdvance = empEdits.salaryAdvance ?? 0;
-      const otherDeduction = empEdits.otherDeduction ?? 0;
-      
-      const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-      const esic = 0; 
-      const professionalTax = 0; 
-      const providentFund = 0; 
-      const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
-      const netPaid = totalAllowance - totalDeduction;
+        dailyStatuses.forEach(status => {
+          if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') {
+            daysPaid++;
+          } else if (status === 'HD') {
+            daysPaid += 0.5;
+            halfDaysTaken++; 
+          } else if (status === 'W') {
+            weekOffs++;
+            daysPaid++; 
+          } else if (status === 'A') {
+            fullAbsentDays++;
+          }
+        });
+        
+        daysPaid = Math.min(daysPaid, totalDaysInMonth);
+        const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
 
-      return {
-        ...emp,
-        totalDaysInMonth,
-        daysPaid,
-        weekOffs,
-        daysAbsent: daysAbsentCalculated,
-        monthlyBasic: monthlyComponents.basic,
-        monthlyHRA: monthlyComponents.hra,
-        monthlyCA: monthlyComponents.ca,
-        monthlyOtherAllowance: monthlyComponents.otherAllowance,
-        monthlyMedical: monthlyComponents.medical,
-        actualBasic,
-        actualHRA,
-        actualCA,
-        actualOtherAllowance,
-        actualMedical,
-        arrears,
-        tds,
-        loan,
-        salaryAdvance,
-        otherDeduction,
-        totalAllowance,
-        esic,
-        professionalTax,
-        providentFund,
-        totalDeduction,
-        netPaid,
-        employeeStatus: emp.status as "Active" | "Left",
-      };
-    });
+        const monthlyComponents = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
+        const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+
+        const actualBasic = monthlyComponents.basic * payFactor;
+        const actualHRA = monthlyComponents.hra * payFactor;
+        const actualCA = monthlyComponents.ca * payFactor;
+        const actualMedical = monthlyComponents.medical * payFactor;
+        const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
+        
+        const empEdits = storedEdits[emp.id] || {};
+        const arrears = empEdits.arrears ?? 0;
+        const tds = empEdits.tds ?? 0;
+        const loan = empEdits.loan ?? 0;
+        const salaryAdvance = empEdits.salaryAdvance ?? 0;
+        const otherDeduction = empEdits.otherDeduction ?? 0;
+        
+        const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+        const esic = 0; 
+        const professionalTax = 0; 
+        const providentFund = 0; 
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
+        const netPaid = totalAllowance - totalDeduction;
+
+        return {
+          ...emp,
+          totalDaysInMonth,
+          daysPaid,
+          weekOffs,
+          daysAbsent: daysAbsentCalculated,
+          monthlyBasic: monthlyComponents.basic,
+          monthlyHRA: monthlyComponents.hra,
+          monthlyCA: monthlyComponents.ca,
+          monthlyOtherAllowance: monthlyComponents.otherAllowance,
+          monthlyMedical: monthlyComponents.medical,
+          actualBasic,
+          actualHRA,
+          actualCA,
+          actualOtherAllowance,
+          actualMedical,
+          arrears,
+          tds,
+          loan,
+          salaryAdvance,
+          otherDeduction,
+          totalAllowance,
+          esic,
+          professionalTax,
+          providentFund,
+          totalDeduction,
+          netPaid,
+          employeeStatus: emp.status as "Active" | "Left",
+        };
+      })
+      .filter(emp => emp !== null) as SalarySheetEntry[]; // Filter out nulls (employees without attendance)
 
     setSalarySheetData(newSalarySheetData);
     setIsLoadingCalculations(false);
@@ -300,10 +311,9 @@ export default function SalarySheetPage() {
       return newData;
     });
 
-    // Save edits to localStorage
-    if (selectedMonth && selectedYear > 0) {
+    if (typeof window !== 'undefined' && selectedMonth && selectedYear > 0) {
       const editsKey = getSalaryEditsStorageKey(selectedMonth, selectedYear);
-      if (editsKey && typeof window !== 'undefined') {
+      if (editsKey) {
         let currentEdits: Record<string, EditableSalaryFields> = {};
         try {
             const currentEditsStr = localStorage.getItem(editsKey);
@@ -349,7 +359,8 @@ export default function SalarySheetPage() {
     ];
 
     const csvRows = [headers.join(',')];
-
+    
+    // Use salarySheetData for download to include all employees with attendance
     salarySheetData.forEach(emp => { 
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const row = [
@@ -365,7 +376,6 @@ export default function SalarySheetPage() {
       csvRows.push(row.join(','));
     });
 
-    // Calculate Totals
     const totals = {
         monthlyBasic: salarySheetData.reduce((sum, emp) => sum + emp.monthlyBasic, 0),
         monthlyHRA: salarySheetData.reduce((sum, emp) => sum + emp.monthlyHRA, 0),
@@ -392,8 +402,8 @@ export default function SalarySheetPage() {
     };
 
     const totalRow = [
-        "", "", "", "", "", "", "TOTALS:", // Label for totals, aligning with non-numeric columns
-        "", "", "", "", // Empty cells for Total Days, Day Paid, Week Off, Day Absent
+        "", "", "", "", "", "", "TOTALS:",
+        "", "", "", "", 
         totals.monthlyBasic.toFixed(2),
         totals.monthlyHRA.toFixed(2),
         totals.monthlyCA.toFixed(2),
@@ -490,7 +500,7 @@ export default function SalarySheetPage() {
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
-          <CardDescription>Displaying active employees. Download includes all employees (Active & Left). Ensure attendance for the selected month is uploaded for accurate 'Day Paid' calculations. Arrears, TDS, Loan, Salary Advance, and Other Deductions are editable.</CardDescription>
+          <CardDescription>Displaying active employees with attendance data for the selected month. Download includes all employees (Active & Left) with attendance. Ensure attendance is uploaded for accurate 'Day Paid' calculations. Arrears, TDS, Loan, Salary Advance, and Other Deductions are editable.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {isLoadingCalculations ? (
@@ -636,8 +646,10 @@ export default function SalarySheetPage() {
               {isLoadingCalculations ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /> :
                allEmployees.length === 0 ? "No employees found in Employee Master. Please add employees first." :
                !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet." :
-               searchTerm && salarySheetData.length > 0 && filteredSalarySheetData.length === 0 ? `No active employees found matching "${searchTerm}".` :
-               "No active employees to display for the selected criteria, or attendance data might be missing."}
+               salarySheetData.length === 0 && attendanceForMonth.length === 0 ? "No attendance data found for the selected month. Please upload attendance first." :
+               salarySheetData.length === 0 && attendanceForMonth.length > 0 ? "No employees from master list have attendance data for the selected month." :
+               searchTerm && filteredSalarySheetData.length === 0 ? `No active employees with attendance found matching "${searchTerm}".` :
+               "No active employees with attendance to display for the selected criteria."}
             </div>
           )}
         </CardContent>
