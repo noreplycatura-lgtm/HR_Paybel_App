@@ -68,46 +68,38 @@ export default function EmployeeMasterPage() {
   React.useEffect(() => {
     setIsLoadingData(true);
     if (typeof window !== 'undefined') {
-      let loadedEmployees: EmployeeDetail[] | null = null;
+      let loadedEmployees: EmployeeDetail[] = [];
       try {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployeesStr) {
           const parsedData = JSON.parse(storedEmployeesStr);
-          if (Array.isArray(parsedData)) { // Ensure it's an array (even empty)
+          if (Array.isArray(parsedData)) {
+            // If localStorage has data (even an empty array from deleting all), use it.
+            // sampleEmployees is only a fallback if the key *never existed* or data is corrupted.
             loadedEmployees = parsedData;
           } else {
-            // Data is present but not an array - consider it corrupted
-            console.error("Employee master data in localStorage is corrupted (not an array).");
-            toast({ 
-                title: "Data Load Error", 
-                description: "Stored employee master data is corrupted. Using default sample data and resetting storage.", 
-                variant: "destructive",
-                duration: 7000,
-            });
-            loadedEmployees = sampleEmployees; // Fallback
-            saveEmployeesToLocalStorage(sampleEmployees); // Overwrite corrupted with samples
+            console.error("Employee master data in localStorage is corrupted (not an array). Using default sample data and resetting storage.");
+            toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using default samples and resetting storage.", variant: "destructive", duration: 7000 });
+            loadedEmployees = [...sampleEmployees]; // Fallback
+            saveEmployeesToLocalStorage([...sampleEmployees]); // Overwrite corrupted with samples
           }
         } else {
           // Key doesn't exist, so this is likely the first load or storage was cleared.
           // Use samples and save them for next time.
-          loadedEmployees = sampleEmployees;
-          saveEmployeesToLocalStorage(sampleEmployees);
+          loadedEmployees = [...sampleEmployees];
+          saveEmployeesToLocalStorage([...sampleEmployees]);
+          toast({ title: "Using Sample Data", description: "No existing employee data found. Loaded sample employees.", duration: 5000 });
         }
       } catch (error) {
         console.error("Error loading or parsing employees from localStorage:", error);
-        toast({ 
-            title: "Data Load Error", 
-            description: "Could not load employee master data from local storage. It might be corrupted. Using default sample data and resetting storage.", 
-            variant: "destructive",
-            duration: 7000,
-        });
-        loadedEmployees = sampleEmployees; // Fallback on any error
-        saveEmployeesToLocalStorage(sampleEmployees); // Overwrite with samples
+        toast({ title: "Data Load Error", description: "Could not load employee master data from local storage. It might be corrupted. Using default samples and resetting storage.", variant: "destructive", duration: 7000 });
+        loadedEmployees = [...sampleEmployees]; // Fallback on any error
+        saveEmployeesToLocalStorage([...sampleEmployees]); // Overwrite with samples
       }
-      setEmployees(loadedEmployees || []); // Ensure employees is always an array
+      setEmployees(loadedEmployees);
     }
     setIsLoadingData(false);
-  }, [toast]);
+  }, [toast]); 
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -122,7 +114,7 @@ export default function EmployeeMasterPage() {
 
   const onSubmit = (values: EmployeeFormValues) => {
     if (editingEmployeeId) {
-      const updatedEmployees = employees.map(emp => 
+      const updatedEmployees = employees.map(emp =>
         emp.id === editingEmployeeId ? { ...emp, ...values, id: editingEmployeeId } : emp
       );
       setEmployees(updatedEmployees);
@@ -137,10 +129,10 @@ export default function EmployeeMasterPage() {
           variant: "destructive",
         });
         form.setError("code", { type: "manual", message: "This employee code already exists." });
-        return; 
+        return;
       }
       const newEmployee: EmployeeDetail = {
-        id: values.code, 
+        id: values.code,
         ...values,
       };
       const updatedEmployees = [...employees, newEmployee];
@@ -150,11 +142,11 @@ export default function EmployeeMasterPage() {
     }
     setIsEmployeeFormOpen(false);
     setEditingEmployeeId(null);
-    form.reset(); 
+    form.reset();
   };
 
   const handleAddNewEmployee = () => {
-    setEditingEmployeeId(null); 
+    setEditingEmployeeId(null);
     form.reset({
       code: "",
       name: "",
@@ -164,7 +156,7 @@ export default function EmployeeMasterPage() {
       division: "",
       hq: "",
       grossMonthlySalary: 0,
-    }); 
+    });
     setIsEmployeeFormOpen(true);
   };
 
@@ -181,7 +173,7 @@ export default function EmployeeMasterPage() {
     }
   };
 
-  const handleDeleteEmployee = (employeeId: string) => {
+ const handleDeleteEmployee = (employeeId: string) => {
     const employeeToDelete = employees.find(emp => emp.id === employeeId);
     if (confirm(`Are you sure you want to delete ${employeeToDelete?.name || `Employee ID ${employeeId}`}? This action cannot be undone.`)) {
         const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
@@ -205,13 +197,31 @@ export default function EmployeeMasterPage() {
       }
       try {
         const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
-        if (lines.length < 2) { 
+        if (lines.length < 2) {
           toast({ title: "Invalid File", description: "File is empty or has no data rows. Header + at least one data row expected.", variant: "destructive" });
           return;
         }
 
-        const dataRows = lines.slice(1); 
-        const expectedColumns = 8; 
+        const expectedHeaders = ["status", "division", "code", "name", "designation", "hq", "doj", "grossmonthlysalary"];
+        const headerLine = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/\s+/g, ''));
+        
+        const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
+        if (missingHeaders.length > 0) {
+             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}. Expected: Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary. Please check spelling and ensure all are present.`, variant: "destructive", duration: 9000 });
+             return;
+        }
+        
+        const getIndex = (headerName: string) => headerLine.indexOf(headerName);
+        const idxStatus = getIndex("status");
+        const idxDivision = getIndex("division");
+        const idxCode = getIndex("code");
+        const idxName = getIndex("name");
+        const idxDesignation = getIndex("designation");
+        const idxHq = getIndex("hq");
+        const idxDoj = getIndex("doj");
+        const idxGrossSalary = getIndex("grossmonthlysalary");
+
+        const dataRows = lines.slice(1);
         const uploadedEmployees: EmployeeDetail[] = [];
         const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
@@ -221,62 +231,63 @@ export default function EmployeeMasterPage() {
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
-          if (values.length < expectedColumns) {
-            console.warn(`Skipping row ${rowIndex + 1} in Employee Master CSV: insufficient columns. Expected ${expectedColumns}, got ${values.length}`);
-            malformedRows++;
-            return;
-          }
           
-          const status = values[0] as "Active" | "Left";
-          const division = values[1];
-          const code = values[2];
-          const name = values[3];
-          const designation = values[4];
-          const hq = values[5];
-          const doj = values[6]; 
-          const grossMonthlySalaryStr = values[7];
+          if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxGrossSalary)) {
+             console.warn(`Skipping row ${rowIndex + 2} in Employee Master CSV: insufficient columns.`);
+             malformedRows++;
+             return;
+          }
+
+          const status = values[idxStatus] as "Active" | "Left";
+          const division = values[idxDivision];
+          const code = values[idxCode];
+          const name = values[idxName];
+          const designation = values[idxDesignation];
+          const hq = values[idxHq];
+          const doj = values[idxDoj];
+          const grossMonthlySalaryStr = values[idxGrossSalary];
           
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
 
           if (!code || !name || !status || !division || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 1} in Employee Master CSV (Code: ${code}): missing or invalid critical data.`);
+            console.warn(`Skipping row ${rowIndex + 2} in Employee Master CSV (Code: ${code}): missing or invalid critical data. Ensure all fields are present and Gross Salary is a positive number.`);
             malformedRows++;
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to invalid status: ${status}. Must be 'Active' or 'Left'.`);
             malformedRows++;
             return;
           }
           if (codesInCsv.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) due to duplicate code within this CSV file.`);
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to duplicate code within this CSV file.`);
             skippedForDuplicateInCsv++;
             return;
           }
           if (currentEmployeesMap.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) as this employee code already exists in the master list.`);
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as this employee code already exists in the master list.`);
             skippedForExistingInDb++;
             return;
           }
           codesInCsv.add(code);
 
           let formattedDoj = doj;
-          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { 
              try {
-                const d = new Date(doj); 
+                const d = new Date(doj.replace(/[-/]/g, '/')); 
                 if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd');
-             } catch { /* ignore date parse error, keep original */ }
+             } catch { /* ignore date parse error */ }
           }
 
           uploadedEmployees.push({
             id: code, status, division, code, name, designation, hq, doj: formattedDoj, grossMonthlySalary,
           });
         });
-        
+
         let message = "";
         if (uploadedEmployees.length > 0) {
-            const combinedEmployees = [...employees, ...uploadedEmployees];
-            setEmployees(combinedEmployees); 
+            const combinedEmployees = [...employees.filter(emp => !codesInCsv.has(emp.code)), ...uploadedEmployees];
+            setEmployees(combinedEmployees);
             saveEmployeesToLocalStorage(combinedEmployees);
             message += `${uploadedEmployees.length} new employee(s) added from ${file.name}. `;
         } else {
@@ -286,7 +297,7 @@ export default function EmployeeMasterPage() {
         if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
         if (skippedForExistingInDb > 0) message += `${skippedForExistingInDb} row(s) skipped as codes already exist in master. `;
         if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to missing or invalid data. `;
-        
+
         toast({
           title: "Employee Upload Processed",
           description: message.trim(),
@@ -296,7 +307,7 @@ export default function EmployeeMasterPage() {
 
       } catch (error) {
         console.error("Error parsing CSV for employees:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure all expected columns are present.", variant: "destructive", duration: 7000 });
       }
     };
     reader.onerror = () => {
@@ -312,7 +323,6 @@ export default function EmployeeMasterPage() {
       ["Left", "IT", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "55000"],
     ];
     const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -363,9 +373,9 @@ export default function EmployeeMasterPage() {
       >
         <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
             setIsEmployeeFormOpen(isOpen);
-            if (!isOpen) { 
-                setEditingEmployeeId(null); 
-                form.reset(); 
+            if (!isOpen) {
+                setEditingEmployeeId(null);
+                form.reset();
             }
         }}>
           <DialogTrigger asChild>
@@ -499,13 +509,13 @@ export default function EmployeeMasterPage() {
                       if (employee.doj && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.doj);
-                          if (!isValid(parsedDate)) { 
+                          if (!isValid(parsedDate)) {
                             const parts = employee.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
                                 if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(\`\${parts[2]}-\${parts[1]}-\${parts[0]}\`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(\`\${parts[2]}-\${parts[0]}-\${parts[1]}\`);
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
                                 } else if (parseInt(parts[0]) > 1000) { 
                                      reparsedDate = parseISO(employee.doj);
                                 }
