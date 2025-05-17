@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
 import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-types";
@@ -42,7 +42,7 @@ interface LeaveDisplayData extends EmployeeDetail {
   openingPLNextMonth: number;
 }
 
-interface MonthlyEmployeeAttendance {
+interface MonthlyEmployeeAttendance { // Simplified for parsing attendance for "used" leaves
   code: string;
   attendance: string[];
 }
@@ -100,7 +100,7 @@ export default function LeavePage() {
             loadedEmployees = parsedEmployees;
           } else {
             console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
-            toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+            toast({ title: "Data Format Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         }
       } catch (error) {
@@ -142,7 +142,6 @@ export default function LeavePage() {
       }
       setLeaveApplications(loadedLeaveApplications); 
     }
-    // setIsLoading(false); // Moved to the end of the next useEffect
   }, []); 
 
   React.useEffect(() => {
@@ -159,16 +158,19 @@ export default function LeavePage() {
       setIsLoading(false);
       return;
     }
+    
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
 
     const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
       .map(emp => {
-        
+        // Calculate accrued balances up to the END of the selected month,
+        // using empty array for leave applications as we'll get used leaves from attendance.
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, leaveApplications, openingBalances 
+          emp, selectedYear, monthIndex, [], openingBalances 
         );
 
+        // Get leaves used in the selected month from ATTENDANCE data
         let usedCLFromAttendance = 0;
         let usedSLFromAttendance = 0;
         let usedPLFromAttendance = 0;
@@ -195,10 +197,12 @@ export default function LeavePage() {
           }
         }
         
-        const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
-        const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
-        const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
+        // Calculate final EOM balances by subtracting attendance-derived usage from accrued EOM balances
+        const finalBalanceCLAtMonthEnd = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
+        const finalBalanceSLAtMonthEnd = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
+        const finalBalancePLAtMonthEnd = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
 
+        // Get leaves used in the LAST month from ATTENDANCE data
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
         let usedPLLastMonth = 0;
@@ -228,12 +232,13 @@ export default function LeavePage() {
           }
         }
         
+        // Calculate NEXT month's opening balances
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndex = getMonth(nextMonthDateObject);
         const nextMonthYear = getYear(nextMonthDateObject);
         
         const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
-        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
         let accrualCLNextMonth = 0;
         let accrualSLNextMonth = 0;
@@ -247,14 +252,17 @@ export default function LeavePage() {
         
         let openingCLNextMonth = 0;
         let openingSLNextMonth = 0;
-        const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; 
+        const openingPLNextMonth = finalBalancePLAtMonthEnd + accrualPLNextMonth; // PL carries forward its EOM balance
 
-        if (nextMonthIndex === 3) { 
-            openingCLNextMonth = 0 + accrualCLNextMonth; 
-            openingSLNextMonth = 0 + accrualSLNextMonth; 
+        if (nextMonthIndex === 3) { // If next month is April, CL/SL reset
+            const obForNextFY = openingBalances.find(
+              (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthYear
+            );
+            openingCLNextMonth = (obForNextFY?.openingCL || 0) + accrualCLNextMonth; 
+            openingSLNextMonth = (obForNextFY?.openingSL || 0) + accrualSLNextMonth; 
         } else {
-            openingCLNextMonth = finalBalanceCL + accrualCLNextMonth;
-            openingSLNextMonth = finalSLBalance + accrualSLNextMonth;
+            openingCLNextMonth = finalBalanceCLAtMonthEnd + accrualCLNextMonth;
+            openingSLNextMonth = finalBalanceSLAtMonthEnd + accrualSLNextMonth;
         }
 
         return {
@@ -262,9 +270,9 @@ export default function LeavePage() {
           usedCLInMonth: usedCLFromAttendance,
           usedSLInMonth: usedSLFromAttendance,
           usedPLInMonth: usedPLFromAttendance,
-          balanceCLAtMonthEnd: finalBalanceCL,
-          balanceSLAtMonthEnd: finalSLBalance,
-          balancePLAtMonthEnd: finalBalancePL,
+          balanceCLAtMonthEnd: finalBalanceCLAtMonthEnd,
+          balanceSLAtMonthEnd: finalBalanceSLAtMonthEnd,
+          balancePLAtMonthEnd: finalBalancePLAtMonthEnd,
           usedCLLastMonth,
           usedSLLastMonth,
           usedPLLastMonth,
@@ -274,7 +282,7 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set());
+    setSelectedEmployeeIds(new Set()); // Reset selection when data reloads
     setIsLoading(false);
   }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
@@ -321,8 +329,8 @@ export default function LeavePage() {
   };
 
   const handleSaveOpeningBalances = () => {
-    if (!editingEmployeeForOB || editingOBYear === 0) {
-      toast({ title: "Error", description: "No employee or financial year selected for editing opening balances.", variant: "destructive"});
+    if (!editingEmployeeForOB || editingOBYear <= 0) { // ensure editingOBYear is valid
+      toast({ title: "Error", description: "No employee or invalid financial year selected for editing opening balances.", variant: "destructive"});
       return;
     }
 
@@ -358,6 +366,7 @@ export default function LeavePage() {
     toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved.`});
     setIsEditOpeningBalanceDialogOpen(false);
     setEditingEmployeeForOB(null);
+    // editableOB_CL, SL, PL, and editingOBYear are reset in the onOpenChange of the Dialog
   };
 
 
@@ -663,25 +672,25 @@ export default function LeavePage() {
           <DialogHeader>
             <DialogTitle>Edit Opening Balances for {editingEmployeeForOB?.name}</DialogTitle>
             <DialogDescription>
-              Set opening leave balances for the financial year starting April {editingOBYear}.
+              Set opening leave balances for the financial year starting April {editingOBYear > 0 ? editingOBYear : '(Select Year)'}.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="space-y-1">
                 <Label htmlFor="ob-fy-year">Financial Year Start (e.g., 2024 for Apr 2024 - Mar 2025)</Label>
-                <Input id="ob-fy-year" type="number" value={editingOBYear > 0 ? editingOBYear : ""} onChange={(e) => setEditingOBYear(parseInt(e.target.value))} placeholder="Enter year" />
+                <Input id="ob-fy-year" type="number" value={editingOBYear > 0 ? editingOBYear : ""} onChange={(e) => setEditingOBYear(parseInt(e.target.value) || 0)} placeholder="Enter year" />
             </div>
             <div className="space-y-1">
                 <Label htmlFor="ob-cl">Opening CL</Label>
-                <Input id="ob-cl" type="number" value={editableOB_CL} onChange={(e) => setEditableOB_CL(parseFloat(e.target.value))} step="0.1" />
+                <Input id="ob-cl" type="number" value={editableOB_CL} onChange={(e) => setEditableOB_CL(parseFloat(e.target.value) || 0)} step="0.1" />
             </div>
             <div className="space-y-1">
                 <Label htmlFor="ob-sl">Opening SL</Label>
-                <Input id="ob-sl" type="number" value={editableOB_SL} onChange={(e) => setEditableOB_SL(parseFloat(e.target.value))} step="0.1" />
+                <Input id="ob-sl" type="number" value={editableOB_SL} onChange={(e) => setEditableOB_SL(parseFloat(e.target.value) || 0)} step="0.1" />
             </div>
              <div className="space-y-1">
                 <Label htmlFor="ob-pl">Opening PL</Label>
-                <Input id="ob-pl" type="number" value={editableOB_PL} onChange={(e) => setEditableOB_PL(parseFloat(e.target.value))} step="0.1" />
+                <Input id="ob-pl" type="number" value={editableOB_PL} onChange={(e) => setEditableOB_PL(parseFloat(e.target.value) || 0)} step="0.1" />
             </div>
           </div>
           <DialogFooter>
@@ -707,7 +716,7 @@ export default function LeavePage() {
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                 </SelectContent>
             </Select>
-            <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value))}>
+            <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => setSelectedYear(parseInt(value) || 0)}>
                 <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Year" />
                 </SelectTrigger>
@@ -799,11 +808,16 @@ export default function LeavePage() {
                             const parts = emp.doj.split(/[-/.]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
-                                } else if (parseInt(parts[0]) > 1000) { 
-                                     reparsedDate = parseISO(emp.doj); 
+                                const part1 = parseInt(parts[0]);
+                                const part2 = parseInt(parts[1]);
+                                const part3 = parseInt(parts[2]);
+                                // Try YYYY-MM-DD (already handled by parseISO), DD-MM-YYYY, MM-DD-YYYY
+                                if (part3 > 1000) { // YYYY at end
+                                   if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); // DD-MM-YYYY
+                                   else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); // MM-DD-YYYY
+                                } else if (part1 > 1000) { // YYYY at start
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); // YYYY-DD-MM (unlikely but possible)
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); // YYYY-MM-DD
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
@@ -850,4 +864,4 @@ export default function LeavePage() {
   );
 }
 
-
+    
