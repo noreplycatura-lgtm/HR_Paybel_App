@@ -198,7 +198,6 @@ export default function SalarySheetPage() {
         }
         // '-' (not joined) is implicitly an absent day for payment calculation if it falls within the month.
         // If an employee joins mid-month, their `daysPaid` will be based on their actual presence.
-        
       });
       
       daysPaid = Math.min(daysPaid, totalDaysInMonth); // Cap at total days in month
@@ -244,14 +243,14 @@ export default function SalarySheetPage() {
         actualOtherAllowance,
         actualMedical,
         arrears,
-        totalAllowance,
-        esic,
-        professionalTax,
-        providentFund,
         tds,
         loan,
         salaryAdvance,
         otherDeduction,
+        totalAllowance,
+        esic,
+        professionalTax,
+        providentFund,
         totalDeduction,
         netPaid,
         employeeStatus: emp.status as "Active" | "Left",
@@ -333,7 +332,7 @@ export default function SalarySheetPage() {
 
 
   const handleDownloadSheet = () => {
-    if (salarySheetData.length === 0) { // Check against all processed data, not just filtered
+    if (salarySheetData.length === 0) { 
       toast({ title: "No Data", description: "No salary data to download for the selected period. Ensure employees and attendance are available.", variant: "destructive" });
       return;
     }
@@ -351,7 +350,6 @@ export default function SalarySheetPage() {
 
     const csvRows = [headers.join(',')];
 
-    // Use salarySheetData for export, which contains all employees (Active & Left) processed
     salarySheetData.forEach(emp => { 
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const row = [
@@ -363,9 +361,64 @@ export default function SalarySheetPage() {
         emp.arrears.toFixed(2), emp.totalAllowance.toFixed(2),
         emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.otherDeduction.toFixed(2),
         emp.totalDeduction.toFixed(2), emp.netPaid.toFixed(2),
-      ].map(val => `"${String(val).replace(/"/g, '""')}"`); // Escape quotes and enclose in quotes
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`); 
       csvRows.push(row.join(','));
     });
+
+    // Calculate Totals
+    const totals = {
+        monthlyBasic: salarySheetData.reduce((sum, emp) => sum + emp.monthlyBasic, 0),
+        monthlyHRA: salarySheetData.reduce((sum, emp) => sum + emp.monthlyHRA, 0),
+        monthlyCA: salarySheetData.reduce((sum, emp) => sum + emp.monthlyCA, 0),
+        monthlyOtherAllowance: salarySheetData.reduce((sum, emp) => sum + emp.monthlyOtherAllowance, 0),
+        monthlyMedical: salarySheetData.reduce((sum, emp) => sum + emp.monthlyMedical, 0),
+        grossMonthlySalary: salarySheetData.reduce((sum, emp) => sum + emp.grossMonthlySalary, 0),
+        actualBasic: salarySheetData.reduce((sum, emp) => sum + emp.actualBasic, 0),
+        actualHRA: salarySheetData.reduce((sum, emp) => sum + emp.actualHRA, 0),
+        actualCA: salarySheetData.reduce((sum, emp) => sum + emp.actualCA, 0),
+        actualOtherAllowance: salarySheetData.reduce((sum, emp) => sum + emp.actualOtherAllowance, 0),
+        actualMedical: salarySheetData.reduce((sum, emp) => sum + emp.actualMedical, 0),
+        arrears: salarySheetData.reduce((sum, emp) => sum + emp.arrears, 0),
+        totalAllowance: salarySheetData.reduce((sum, emp) => sum + emp.totalAllowance, 0),
+        esic: salarySheetData.reduce((sum, emp) => sum + emp.esic, 0),
+        professionalTax: salarySheetData.reduce((sum, emp) => sum + emp.professionalTax, 0),
+        providentFund: salarySheetData.reduce((sum, emp) => sum + emp.providentFund, 0),
+        tds: salarySheetData.reduce((sum, emp) => sum + emp.tds, 0),
+        loan: salarySheetData.reduce((sum, emp) => sum + emp.loan, 0),
+        salaryAdvance: salarySheetData.reduce((sum, emp) => sum + emp.salaryAdvance, 0),
+        otherDeduction: salarySheetData.reduce((sum, emp) => sum + emp.otherDeduction, 0),
+        totalDeduction: salarySheetData.reduce((sum, emp) => sum + emp.totalDeduction, 0),
+        netPaid: salarySheetData.reduce((sum, emp) => sum + emp.netPaid, 0),
+    };
+
+    const totalRow = [
+        "", "", "", "", "", "", "TOTALS:", // Label for totals, aligning with non-numeric columns
+        "", "", "", "", // Empty cells for Total Days, Day Paid, Week Off, Day Absent
+        totals.monthlyBasic.toFixed(2),
+        totals.monthlyHRA.toFixed(2),
+        totals.monthlyCA.toFixed(2),
+        totals.monthlyOtherAllowance.toFixed(2),
+        totals.monthlyMedical.toFixed(2),
+        totals.grossMonthlySalary.toFixed(2),
+        totals.actualBasic.toFixed(2),
+        totals.actualHRA.toFixed(2),
+        totals.actualCA.toFixed(2),
+        totals.actualOtherAllowance.toFixed(2),
+        totals.actualMedical.toFixed(2),
+        totals.arrears.toFixed(2),
+        totals.totalAllowance.toFixed(2),
+        totals.esic.toFixed(2),
+        totals.professionalTax.toFixed(2),
+        totals.providentFund.toFixed(2),
+        totals.tds.toFixed(2),
+        totals.loan.toFixed(2),
+        totals.salaryAdvance.toFixed(2),
+        totals.otherDeduction.toFixed(2),
+        totals.totalDeduction.toFixed(2),
+        totals.netPaid.toFixed(2),
+    ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+    csvRows.push(totalRow.join(','));
+
 
     const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -592,6 +645,5 @@ export default function SalarySheetPage() {
     </>
   );
 }
-
 
     
