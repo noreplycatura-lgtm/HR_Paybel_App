@@ -23,28 +23,25 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+
+// TEMPORARY FLAG FOR ONE-TIME CLEARING
+const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface LeaveDisplayData extends EmployeeDetail {
-  // Used leaves in selected month (from attendance)
   usedCLInMonth: number;
   usedSLInMonth: number;
   usedPLInMonth: number;
-
-  // Closing balance for selected month
   balanceCLAtMonthEnd: number;
   balanceSLAtMonthEnd: number;
   balancePLAtMonthEnd: number;
-
-  // New: Last Month's Usage
   usedCLLastMonth: number;
   usedSLLastMonth: number;
   usedPLLastMonth: number;
-
-  // New: Next Month's Opening Balance
   openingCLNextMonth: number;
   openingSLNextMonth: number;
   openingPLNextMonth: number;
@@ -67,6 +64,7 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); // Keep track of leave applications
 
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -97,8 +95,30 @@ export default function LeavePage() {
       
     let loadedEmployees: EmployeeDetail[] = [];
     let loadedOpeningBalances: OpeningLeaveBalance[] = [];
+    let loadedLeaveApplications: LeaveApplication[] = [];
     
     if (typeof window !== 'undefined') {
+      // --- TEMPORARY ONE-TIME DATA CLEARING ---
+      const hasCleared = sessionStorage.getItem(TEMP_LEAVE_DATA_CLEARED_FLAG);
+      if (!hasCleared) {
+        try {
+          localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+          localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+          setOpeningBalances([]); // Reset state
+          setLeaveApplications([]); // Reset state
+          sessionStorage.setItem(TEMP_LEAVE_DATA_CLEARED_FLAG, "true");
+          toast({
+            title: "Leave Data Reset",
+            description: "Opening balances and leave application history have been cleared. Please upload new opening balances if needed.",
+            duration: 7000,
+          });
+        } catch (e) {
+          console.error("Error during one-time leave data clear:", e);
+          toast({ title: "Error Clearing Data", description: "Could not perform one-time clear of leave data.", variant: "destructive" });
+        }
+      }
+      // --- END OF TEMPORARY CLEARING ---
+
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
@@ -110,7 +130,7 @@ export default function LeavePage() {
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
         } else {
-            toast({ title: "Data Missing", description: "Employee Master data not found. Please add employees first.", variant: "destructive", duration: 7000});
+            // toast({ title: "Data Missing", description: "Employee Master data not found. Please add employees first.", variant: "destructive", duration: 7000});
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
@@ -134,6 +154,23 @@ export default function LeavePage() {
         toast({ title: "Data Load Warning", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
       setOpeningBalances(loadedOpeningBalances);
+
+      try {
+        const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveApps) {
+            const parsedApps = JSON.parse(storedLeaveApps);
+            if (Array.isArray(parsedApps)) {
+                loadedLeaveApplications = parsedApps;
+            } else {
+                console.warn("Leave Mgt: Leave applications in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
+                toast({ title: "Data Load Warning", description: "Stored leave applications data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+            }
+        }
+      } catch (error) {
+         console.warn("Error loading leave applications from localStorage for Leave Mgt:", error);
+         toast({ title: "Data Load Warning", description: "Could not load leave applications. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+      }
+      setLeaveApplications(loadedLeaveApplications);
     }
   }, [toast]);
 
@@ -156,14 +193,13 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active")
       .map(emp => {
-        // --- 1. Calculate current month's used leaves and closing balances ---
-        const currentMonthAccrualDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, [], openingBalances
+        const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
+          emp, selectedYear, monthIndex, leaveApplications, openingBalances
         );
 
-        let usedCLInMonth = 0;
-        let usedSLInMonth = 0;
-        let usedPLInMonth = 0;
+        let usedCLFromAttendance = 0;
+        let usedSLFromAttendance = 0;
+        let usedPLFromAttendance = 0;
 
         if (typeof window !== 'undefined') {
           const { rawDataKey } = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
@@ -177,18 +213,19 @@ export default function LeavePage() {
                   const daysInSelectedMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
                   const dailyStatuses = empAttendanceRecord.attendance.slice(0, daysInSelectedMonth);
                   dailyStatuses.forEach(status => {
-                    if (status === 'CL') usedCLInMonth += 1;
-                    else if (status === 'SL') usedSLInMonth += 1;
-                    else if (status === 'PL') usedPLInMonth += 1;
+                    if (status === 'CL') usedCLFromAttendance += 1;
+                    else if (status === 'SL') usedSLFromAttendance += 1;
+                    else if (status === 'PL') usedPLFromAttendance += 1;
                   });
                 }
               } catch (e) { console.warn(`Could not parse attendance for ${emp.code} in ${selectedMonth} ${selectedYear} for Leave Page: ${e}`); }
             }
           }
         }
-        const currentClosingCL = currentMonthAccrualDetails.balanceCLAtMonthEnd - usedCLInMonth;
-        const currentClosingSL = currentMonthAccrualDetails.balanceSLAtMonthEnd - usedSLInMonth;
-        const currentClosingPL = currentMonthAccrualDetails.balancePLAtMonthEnd - usedPLInMonth;
+        
+        const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
+        const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
+        const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
 
         // --- 2. Calculate last month's used leaves ---
         let usedCLLastMonth = 0;
@@ -240,24 +277,24 @@ export default function LeavePage() {
         
         let openingCLNextMonth = 0;
         let openingSLNextMonth = 0;
-        const openingPLNextMonth = currentClosingPL + accrualPLNextMonth; // PL always carries over
+        const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; // PL always carries over
 
         if (nextMonthIndex === 3) { // April - CL/SL reset
             openingCLNextMonth = 0 + accrualCLNextMonth;
             openingSLNextMonth = 0 + accrualSLNextMonth;
         } else {
-            openingCLNextMonth = currentClosingCL + accrualCLNextMonth;
-            openingSLNextMonth = currentClosingSL + accrualSLNextMonth;
+            openingCLNextMonth = finalBalanceCL + accrualCLNextMonth;
+            openingSLNextMonth = finalSLBalance + accrualSLNextMonth;
         }
 
         return {
           ...emp,
-          usedCLInMonth,
-          usedSLInMonth,
-          usedPLInMonth,
-          balanceCLAtMonthEnd: currentClosingCL,
-          balanceSLAtMonthEnd: currentClosingSL,
-          balancePLAtMonthEnd: currentClosingPL,
+          usedCLInMonth: usedCLFromAttendance,
+          usedSLInMonth: usedSLFromAttendance,
+          usedPLInMonth: usedPLFromAttendance,
+          balanceCLAtMonthEnd: finalBalanceCL,
+          balanceSLAtMonthEnd: finalSLBalance,
+          balancePLAtMonthEnd: finalBalancePL,
           usedCLLastMonth,
           usedSLLastMonth,
           usedPLLastMonth,
@@ -267,9 +304,9 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set());
+    setSelectedEmployeeIds(new Set()); // Clear selection when data reloads
     setIsLoading(false);
-  }, [employees, openingBalances, selectedMonth, selectedYear, toast]);
+  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear, toast]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -791,19 +828,19 @@ export default function LeavePage() {
                             const parts = emp.doj.split(/[-/.]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) {
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
-                                } else if (parseInt(parts[0]) > 1000) {
-                                     reparsedDate = parseISO(emp.doj);
+                                if (parseInt(parts[2]) > 1000) { // DD/MM/YYYY or MM/DD/YYYY
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try YYYY-MM-DD
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try YYYY-DD-MM
+                                } else if (parseInt(parts[0]) > 1000) { // YYYY-MM-DD or YYYY/MM/DD
+                                     reparsedDate = parseISO(emp.doj); // Already likely ISO or parseISO handles it
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj;
+                            return emp.doj; // Fallback to original if still not parsable
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj;
+                          return emp.doj; // Fallback to original on error
                         }
                       }
                       return 'N/A';
@@ -842,3 +879,4 @@ export default function LeavePage() {
   );
 }
     
+
