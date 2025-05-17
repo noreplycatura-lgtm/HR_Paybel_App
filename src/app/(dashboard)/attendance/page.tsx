@@ -250,11 +250,10 @@ export default function AttendancePage() {
         currentMissingInMaster.push(emp);
       }
 
-      // Robust DOJ handling for processing
-      let employeeStartDate = new Date(1900, 0, 1); // Default to a very past date
+      let employeeStartDate = new Date(1900, 0, 1); 
       if (emp.doj) {
           try {
-              const parsedDoj = parseISO(emp.doj);
+              const parsedDoj = parseISO(emp.doj); // Assumes DOJ is in YYYY-MM-DD from CSV standardization
               if (isValid(parsedDoj)) {
                   employeeStartDate = parsedDoj;
               } else {
@@ -401,36 +400,37 @@ export default function AttendancePage() {
             if (isValid(parsedCsvDoj)) {
                 standardizedDoj = format(parsedCsvDoj, 'yyyy-MM-dd');
             } else {
-                 // Attempt to parse DD/MM/YYYY or MM/DD/YYYY
                 const dateParts = dojFromCsv.match(/^(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})$/);
                 if (dateParts) {
-                    let day, month, year;
-                    const part1 = parseInt(dateParts[1]);
-                    const part2 = parseInt(dateParts[2]);
-                    const part3 = parseInt(dateParts[3]);
+                    let day, month, yearStr;
+                    const part1 = parseInt(dateParts[1]); // Potentially day or month
+                    const part2 = parseInt(dateParts[2]); // Potentially month or day
+                    const part3 = parseInt(dateParts[3]); // Year (2 or 4 digit)
 
                     if (part3 > 1000) { // YYYY is part 3
-                        year = part3;
-                        // Try MM/DD/YYYY
-                        if (part1 <= 12 && part2 <=31 && isValid(new Date(year, part1 - 1, part2))) {
-                           standardizedDoj = format(new Date(year, part1 - 1, part2), 'yyyy-MM-dd');
+                        yearStr = part3;
+                        // Try DD-MM-YYYY (or DD/MM/YYYY or DD.MM.YYYY)
+                        if (part2 <= 12 && part1 <=31 && isValid(new Date(yearStr, part2 - 1, part1))) {
+                           standardizedDoj = format(new Date(yearStr, part2 - 1, part1), 'yyyy-MM-dd');
                         } 
-                        // Try DD/MM/YYYY
-                        else if (part2 <= 12 && part1 <=31 && isValid(new Date(year, part2 - 1, part1))) {
-                           standardizedDoj = format(new Date(year, part2 - 1, part1), 'yyyy-MM-dd');
+                        // Else try MM-DD-YYYY
+                        else if (part1 <= 12 && part2 <=31 && isValid(new Date(yearStr, part1 - 1, part2))) {
+                           standardizedDoj = format(new Date(yearStr, part1 - 1, part2), 'yyyy-MM-dd');
                         }
-                    } else { // YY is part 3 (less common for DOJ, but handle)
-                        year = part3 + 2000;
-                         if (part1 <= 12 && part2 <=31 && isValid(new Date(year, part1 - 1, part2))) {
-                           standardizedDoj = format(new Date(year, part1 - 1, part2), 'yyyy-MM-dd');
-                        } 
-                        else if (part2 <= 12 && part1 <=31 && isValid(new Date(year, part2 - 1, part1))) {
-                           standardizedDoj = format(new Date(year, part2 - 1, part1), 'yyyy-MM-dd');
+                    } else { // YY is part 3
+                        yearStr = part3 + 2000; // Assuming 21st century
+                        // Try DD-MM-YY
+                         if (part2 <= 12 && part1 <=31 && isValid(new Date(yearStr, part2 - 1, part1))) {
+                           standardizedDoj = format(new Date(yearStr, part2 - 1, part1), 'yyyy-MM-dd');
+                        }
+                        // Else try MM-DD-YY
+                        else if (part1 <= 12 && part2 <=31 && isValid(new Date(yearStr, part1 - 1, part2))) {
+                           standardizedDoj = format(new Date(yearStr, part1 - 1, part2), 'yyyy-MM-dd');
                         }
                     }
                 }
-                 if (standardizedDoj === new Date(1900,0,1).toISOString().split('T')[0]) { // If still fallback after attempts
-                    console.warn(`Could not parse DOJ "${dojFromCsv}" for employee ${code}. Using default 1900-01-01. Please use YYYY-MM-DD format in CSV.`);
+                 if (standardizedDoj === new Date(1900,0,1).toISOString().split('T')[0]) { 
+                    console.warn(`Could not parse DOJ "${dojFromCsv}" for employee ${code}. Using default 1900-01-01. Please use YYYY-MM-DD, DD-MM-YYYY, or MM-DD-YYYY format in CSV.`);
                  }
             }
           } else {
@@ -511,7 +511,7 @@ export default function AttendancePage() {
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure DOJ is in YYYY-MM-DD.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure DOJ is in YYYY-MM-DD, DD-MM-YYYY, or MM-DD-YYYY.", variant: "destructive", duration: 7000 });
       }
     };
 
@@ -1338,4 +1338,3 @@ export default function AttendancePage() {
 }
 
     
-
