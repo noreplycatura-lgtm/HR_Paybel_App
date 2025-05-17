@@ -33,11 +33,11 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/leave',
     icon: Briefcase,
   },
-  {
-    title: 'Salary Setup',
-    href: '/salary-setup',
-    icon: Wrench,
-  },
+  // {
+  //   title: 'Salary Setup',
+  //   href: '/salary-setup',
+  //   icon: Wrench,
+  // },
   {
     title: 'Salary Slip',
     href: '/salary-slip',
@@ -71,3 +71,4 @@ export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
   PL: 'bg-amber-100 text-amber-700',  // Paid Leave
   '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
 };
+
