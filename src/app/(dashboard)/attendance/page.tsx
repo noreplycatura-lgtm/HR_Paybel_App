@@ -18,7 +18,8 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations";
+// Removed direct import of sampleEmployees as Employee Master should be the source
+// import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations"; // calculateMonthsOfService might not be needed here if DOJ processing is simple
 import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
@@ -99,7 +100,7 @@ export default function AttendancePage() {
     }
     setSelectedMonth(initialSelectedMonth);
     setSelectedYear(initialSelectedYear);
-    setUploadMonth(defaultMonthName); // Default upload selectors to current month/year
+    setUploadMonth(defaultMonthName); 
     setUploadYear(defaultYear);
     
     setIsLoadingState(false); 
@@ -110,16 +111,27 @@ export default function AttendancePage() {
       try {
         const storedMaster = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedMaster) {
-          setEmployeeMasterList(JSON.parse(storedMaster));
+          const parsedMaster = JSON.parse(storedMaster);
+          if (Array.isArray(parsedMaster)) {
+            setEmployeeMasterList(parsedMaster);
+          } else {
+            console.error("Employee master data in localStorage is not an array.");
+            toast({
+              title: "Master Data Format Error",
+              description: "Stored employee master data is corrupted. Highlighting may be inaccurate.",
+              variant: "destructive",
+              duration: 7000,
+            });
+            setEmployeeMasterList([]);
+          }
         } else {
            setEmployeeMasterList([]); 
-           // No toast here, as it might be normal if master isn't set up yet.
         }
       } catch (error) {
         console.error("Error loading employee master for attendance cross-check:", error);
         toast({
           title: "Master Data Load Error",
-          description: "Could not load employee master list. Highlighting of missing employees may be inaccurate. Stored data might be corrupted.",
+          description: "Could not load employee master list. Highlighting may be inaccurate. Stored data might be corrupted.",
           variant: "destructive",
           duration: 7000,
         });
@@ -130,6 +142,7 @@ export default function AttendancePage() {
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
       setRawAttendanceData([]);
+      setProcessedAttendanceData([]);
       setUploadedFileName(null);
       return;
     }
@@ -149,12 +162,12 @@ export default function AttendancePage() {
           console.error(`Error parsing attendance data from localStorage for ${selectedMonth} ${selectedYear}:`, error);
           toast({
             title: "Data Load Error",
-            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. It might be corrupted. Data has not been cleared from storage.`,
+            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. Stored data might be corrupted. Defaulting to empty.`,
             variant: "destructive",
             duration: 7000,
           });
-          setRawAttendanceData([]); // Clear data if parsing fails
-          setUploadedFileName(null); // Clear filename as well
+          setRawAttendanceData([]); 
+          setUploadedFileName(null); 
         }
       } else {
         setRawAttendanceData([]); 
@@ -188,6 +201,7 @@ export default function AttendancePage() {
       const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
       const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
 
+      // If the entire selected month is before the employee's DOJ, mark all days as '-'
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
@@ -198,9 +212,9 @@ export default function AttendancePage() {
       const newProcessedAttendance = rawDailyStatuses.map((status, dayIndex) => {
         const currentDateInLoop = new Date(selectedYear, monthIndex, dayIndex + 1);
         if (isBefore(currentDateInLoop, startOfDay(employeeStartDate))) {
-          return '-';
+          return '-'; // Day is before DOJ
         }
-        return status; 
+        return status; // Use status as is from raw (already parsed from CSV)
       });
       
       return { ...emp, processedAttendance: newProcessedAttendance, isMissingInMaster };
@@ -265,7 +279,6 @@ export default function AttendancePage() {
 
         const headerLine = lines[0];
         const headerValues = headerLine.split(',');
-        // Columns: Status, Division, Code, Name, Designation, DOJ + days of month
         const expectedBaseColumns = 6; 
         const actualDayColumnsInFile = headerValues.length - expectedBaseColumns;
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
@@ -298,12 +311,12 @@ export default function AttendancePage() {
           const code = values[2]?.trim() || `TEMP_ID_${rowIndex}`;
           const name = values[3]?.trim() || "N/A";
           const designation = values[4]?.trim() || "N/A";
-          const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; // Default to today if empty
+          const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const hq = "N/A"; // Not in attendance CSV per template
-          const grossMonthlySalary = 0; // Not in attendance CSV
+          const hq = "N/A"; 
+          const grossMonthlySalary = 0; 
 
-          if (!code || !name || !designation || !doj ) { // Basic validation
+          if (!code || !name || !designation || !doj ) { 
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) in attendance CSV: missing critical employee details.`);
             malformedRowCount++;
             return;
@@ -319,7 +332,7 @@ export default function AttendancePage() {
           const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusValue => {
             const trimmedUpperStatus = statusValue.trim().toUpperCase();
             if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
-              return 'A'; // Blank or '-' from file is treated as 'A'
+              return 'A'; 
             }
             return trimmedUpperStatus;
           });
@@ -340,19 +353,17 @@ export default function AttendancePage() {
                         localStorage.setItem(fileNameKey, file.name);
                         localStorage.setItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY, JSON.stringify({month: uploadMonth, year: uploadYear}));
                         
-                        // If this upload is for the currently selected view, update immediately
                         if (uploadMonth === selectedMonth && uploadYear === selectedYear) {
                             setRawAttendanceData(newAttendanceData);
                             setUploadedFileName(file.name);
                         } else {
-                            // Otherwise, just set the upload context and switch view
                             setSelectedMonth(uploadMonth); 
                             setSelectedYear(uploadYear);
                         }
                     } catch (storageError) {
                         console.error("Error saving attendance data to localStorage:", storageError);
                         toast({ title: "Storage Error", description: "Could not save attendance data locally.", variant: "destructive" });
-                        return; // Don't proceed if saving fails
+                        return; 
                     }
                 }
             }
@@ -400,7 +411,6 @@ export default function AttendancePage() {
     const daysInCurrentMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
     const csvRows: string[][] = [];
 
-    // Headers adjusted to include Status and Division at the beginning
     const headers = [
       "Status", "Division", "Code", "Name", "Designation", "DOJ",
       ...Array.from({ length: daysInCurrentMonth }, (_, i) => (i + 1).toString()),
@@ -426,7 +436,6 @@ export default function AttendancePage() {
       const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
 
       const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
-      // Paid days: P + W + CL + SL + PL + PH + HD*0.5
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
       const row = [
@@ -473,7 +482,6 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    // Corrected order: Status, Division, Code, Name, Designation, DOJ, then day numbers
     const headers = ["Status", "Division", "Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
@@ -526,7 +534,7 @@ export default function AttendancePage() {
         
         if (dialogClearMonth === selectedMonth && dialogClearYear === selectedYear) {
             setRawAttendanceData([]);
-            setProcessedAttendanceData([]); // This will trigger filteredAttendanceData to clear via its effect
+            setProcessedAttendanceData([]); 
             setUploadedFileName(null); 
         }
         
@@ -556,14 +564,12 @@ export default function AttendancePage() {
   };
   
   const handleOpenEditAttendanceDialog = (employeeCode: string) => {
-    // Ensure we use rawAttendanceData to get the original statuses, not processed ones
     const employee = rawAttendanceData.find(emp => emp.code === employeeCode); 
     if (employee && selectedYear > 0 && selectedMonth) {
       const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
-      // Use a copy of the employee's raw attendance, padded if necessary
       const currentRawAttendance = [...employee.attendance];
       while(currentRawAttendance.length < daysInMonth) {
-        currentRawAttendance.push('A'); // Default to 'A' if raw data is shorter (e.g., from an old upload)
+        currentRawAttendance.push('A'); 
       }
       setEditableDailyStatuses(currentRawAttendance.slice(0, daysInMonth));
       setEditingAttendanceEmployee(employee);
@@ -589,12 +595,12 @@ export default function AttendancePage() {
 
     const updatedRawAttendanceData = rawAttendanceData.map(emp => {
       if (emp.code === editingAttendanceEmployee.code) {
-        return { ...emp, attendance: [...editableDailyStatuses] }; // Save the edited statuses
+        return { ...emp, attendance: [...editableDailyStatuses] }; 
       }
       return emp;
     });
 
-    setRawAttendanceData(updatedRawAttendanceData); // This will trigger recalculation of processed data
+    setRawAttendanceData(updatedRawAttendanceData); 
 
     const { rawDataKey } = getDynamicLocalStorageKeys(selectedMonth, selectedYear);
     if (rawDataKey && typeof window !== 'undefined') {
@@ -618,7 +624,7 @@ export default function AttendancePage() {
   const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-');
 
 
-  if (isLoadingState && !selectedMonth && currentYear === 0) { // More specific initial loading check
+  if (isLoadingState && !selectedMonth && currentYear === 0) { 
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -781,7 +787,7 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              {(isLoadingState && selectedYear === 0 && currentYear > 0) ? ( // check currentYear to ensure availableYears is populated
+              {(isLoadingState && selectedYear === 0 && currentYear > 0) ? ( 
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
                 <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => { setSelectedYear(parseInt(value)); setSearchTerm(''); }} >
@@ -884,7 +890,7 @@ export default function AttendancePage() {
                       </TableHeader>
                       <TableBody>
                         {filteredAttendanceData.map((emp) => {
-                          if (!emp.processedAttendance) { // Should not happen if processedAttendanceData effect runs correctly
+                          if (!emp.processedAttendance) { 
                             return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 17}>Loading processed data for {emp.name}...</TableCell></TableRow>;
                           }
                           const finalAttendanceToUse = emp.processedAttendance;
@@ -956,10 +962,10 @@ export default function AttendancePage() {
                         </div>
                     );
                 }
-                if (isLoadingState) { // Catch-all loading for the view tab after initial filter selection
+                if (isLoadingState) { 
                      return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}...</div>;
                 }
-                // Default "no data available" if other conditions didn't catch it.
+                
                 return ( 
                   <div className="text-center py-8 text-muted-foreground">
                      No attendance data available to display for {selectedMonth} {selectedYear}.
@@ -1039,3 +1045,4 @@ export default function AttendancePage() {
   );
 }
 
+    

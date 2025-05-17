@@ -68,30 +68,46 @@ export default function EmployeeMasterPage() {
   React.useEffect(() => {
     setIsLoadingData(true);
     if (typeof window !== 'undefined') {
-      let loadedEmployees = sampleEmployees; // Default to sample
+      let loadedEmployees: EmployeeDetail[] | null = null;
       try {
-        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployees) {
-          loadedEmployees = JSON.parse(storedEmployees);
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployeesStr) {
+          const parsedData = JSON.parse(storedEmployeesStr);
+          if (Array.isArray(parsedData)) { // Ensure it's an array (even empty)
+            loadedEmployees = parsedData;
+          } else {
+            // Data is present but not an array - consider it corrupted
+            console.error("Employee master data in localStorage is corrupted (not an array).");
+            toast({ 
+                title: "Data Load Error", 
+                description: "Stored employee master data is corrupted. Using default sample data and resetting storage.", 
+                variant: "destructive",
+                duration: 7000,
+            });
+            loadedEmployees = sampleEmployees; // Fallback
+            saveEmployeesToLocalStorage(sampleEmployees); // Overwrite corrupted with samples
+          }
         } else {
-          // No data in localStorage, so use samples and save them for next time
-          saveEmployeesToLocalStorage(sampleEmployees);
+          // Key doesn't exist, so this is likely the first load or storage was cleared.
+          // Use samples and save them for next time.
           loadedEmployees = sampleEmployees;
+          saveEmployeesToLocalStorage(sampleEmployees);
         }
       } catch (error) {
-        console.error("Error loading employees from localStorage:", error);
+        console.error("Error loading or parsing employees from localStorage:", error);
         toast({ 
             title: "Data Load Error", 
-            description: "Could not load employee master data from local storage. It might be corrupted. Using default sample data.", 
+            description: "Could not load employee master data from local storage. It might be corrupted. Using default sample data and resetting storage.", 
             variant: "destructive",
             duration: 7000,
         });
-        // Fallback to sample data if parsing fails but don't delete localStorage item
+        loadedEmployees = sampleEmployees; // Fallback on any error
+        saveEmployeesToLocalStorage(sampleEmployees); // Overwrite with samples
       }
-      setEmployees(loadedEmployees);
+      setEmployees(loadedEmployees || []); // Ensure employees is always an array
     }
     setIsLoadingData(false);
-  }, [toast]); // Keep toast in dependency array for its usage in catch
+  }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -195,7 +211,6 @@ export default function EmployeeMasterPage() {
         }
 
         const dataRows = lines.slice(1); 
-        // Expected columns based on template: Status, Division, Code, Name, Designation, HQ, DOJ, GrossMonthlySalary
         const expectedColumns = 8; 
         const uploadedEmployees: EmployeeDetail[] = [];
         const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
@@ -488,20 +503,19 @@ export default function EmployeeMasterPage() {
                             const parts = employee.doj.split(/[-/]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                // Attempt common non-ISO formats like dd-MM-yyyy or MM-dd-yyyy
-                                if (parseInt(parts[2]) > 1000) { // Likely yyyy is last
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // dd-MM-yyyy
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // MM-dd-yyyy
-                                } else if (parseInt(parts[0]) > 1000) { // Likely yyyy is first (already ISO-like)
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(\`\${parts[2]}-\${parts[1]}-\${parts[0]}\`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(\`\${parts[2]}-\${parts[0]}-\${parts[1]}\`);
+                                } else if (parseInt(parts[0]) > 1000) { 
                                      reparsedDate = parseISO(employee.doj);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return employee.doj; // Fallback to original string if still not parsable
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return employee.doj; // Fallback on any error
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -533,3 +547,4 @@ export default function EmployeeMasterPage() {
   );
 }
 
+    

@@ -53,7 +53,8 @@ const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
 export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
+  // Leave Applications are conceptual for calculation; no UI to add/remove them directly here in this version
+  // const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
@@ -83,15 +84,21 @@ export default function LeavePage() {
     setIsLoading(true);
     if (typeof window !== 'undefined') {
       let loadedEmployees: EmployeeDetail[] = [];
-      let loadedLeaveApplications: LeaveApplication[] = [];
+      // let loadedLeaveApplications: LeaveApplication[] = []; // Not actively managed by UI for now
       let loadedOpeningBalances: OpeningLeaveBalance[] = [];
 
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
-          loadedEmployees = JSON.parse(storedEmployees);
+          const parsedEmployees = JSON.parse(storedEmployees);
+          if (Array.isArray(parsedEmployees)) {
+            loadedEmployees = parsedEmployees;
+          } else {
+             console.error("Employee master data in localStorage is not an array.");
+             toast({ title: "Employee Data Error", description: "Stored employee master is corrupted. Using empty list.", variant: "destructive", duration: 7000});
+          }
         } else {
-          toast({ title: "No Employee Data", description: "Employee master data not found in local storage. Please set up employees first.", variant: "destructive", duration: 7000 });
+          toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage:", error);
@@ -99,21 +106,23 @@ export default function LeavePage() {
       }
       setEmployees(loadedEmployees);
 
-      try {
-        const storedLeaveApplications = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-        if (storedLeaveApplications) {
-          loadedLeaveApplications = JSON.parse(storedLeaveApplications);
-        }
-      } catch (error) {
-        console.error("Error loading leave applications from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load leave applications. Stored data might be corrupted.", variant: "destructive", duration: 7000 });
-      }
-      setLeaveApplications(loadedLeaveApplications);
+      // Conceptual: load leave applications if a UI to manage them existed
+      // try {
+      //   const storedLeaveApplications = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+      //   if (storedLeaveApplications) loadedLeaveApplications = JSON.parse(storedLeaveApplications);
+      // } catch (error) { console.error("Error loading leave applications from localStorage:", error); toast({ title: "Data Load Error", description: "Could not load leave applications. Stored data might be corrupted.", variant: "destructive", duration: 7000 }); }
+      // setLeaveApplications(loadedLeaveApplications);
 
       try {
         const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOpeningBalances) {
-            loadedOpeningBalances = JSON.parse(storedOpeningBalances);
+            const parsedOB = JSON.parse(storedOpeningBalances);
+            if (Array.isArray(parsedOB)) {
+                loadedOpeningBalances = parsedOB;
+            } else {
+                console.error("Opening balances in localStorage is not an array.");
+                toast({ title: "Opening Balance Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+            }
         }
       } catch (error)
       {
@@ -122,13 +131,13 @@ export default function LeavePage() {
       }
       setOpeningBalances(loadedOpeningBalances);
     }
-    // setIsLoading(false) will be handled by the next useEffect that depends on these states
+    setIsLoading(false);
   }, [toast]);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
       setDisplayData([]);
-      setIsLoading(false); // Ensure loading is false if prerequisites not met
+      setIsLoading(false); 
       return;
     }
     
@@ -143,12 +152,11 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
       .map(emp => {
-        // Pass empty array for applications, as used leaves are derived from attendance
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
           emp, 
           selectedYear, 
           monthIndex, 
-          [], 
+          [], // Pass empty array for formal leave applications
           openingBalances
         );
 
@@ -176,8 +184,8 @@ export default function LeavePage() {
                   });
                 }
               } catch (e) {
-                console.error(`Error parsing attendance data for ${emp.code} in ${selectedMonth} ${selectedYear} on Leave Page:`, e);
-                // Don't toast for each employee, could be overwhelming
+                console.warn(`Could not parse attendance for ${emp.code} in ${selectedMonth} ${selectedYear} for Leave Page: ${e}`);
+                // Do not toast for each employee; could be overwhelming.
               }
             }
           }
@@ -200,7 +208,7 @@ export default function LeavePage() {
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, openingBalances, selectedMonth, selectedYear, toast]); // leaveApplications removed as it's not directly used for 'used' counts here
+  }, [employees, openingBalances, selectedMonth, selectedYear, toast]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -225,7 +233,6 @@ export default function LeavePage() {
   
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
-    // Financial year starts in April. If selected month is Jan-Mar, FY started previous calendar year.
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
@@ -238,8 +245,6 @@ export default function LeavePage() {
       setEditableOB_SL(existingOB.openingSL);
       setEditableOB_PL(existingOB.openingPL);
     } else {
-      // If no OB for this FY, try to find the latest previous OB for PL to carry forward if rules imply
-      // However, for direct editing, it's simpler to default to 0 if specific FY entry not found
       setEditableOB_CL(0);
       setEditableOB_SL(0);
       setEditableOB_PL(0);
@@ -396,7 +401,7 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>(); // To check for duplicates within the CSV itself
+            const employeeCodesInFile = new Set<string>(); 
             let skippedDuplicatesInFile = 0;
             let malformedRows = 0;
 
@@ -439,7 +444,7 @@ export default function LeavePage() {
                 setOpeningBalances(prevBalances => {
                     const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
                     newOpeningBalances.forEach(nb => {
-                        existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); // Add or overwrite
+                        existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); 
                     });
                     const updatedBalances = Array.from(existingRecordsMap.values());
                     
@@ -674,8 +679,8 @@ export default function LeavePage() {
                             let reparsedDate = null;
                             if (parts.length === 3) {
                                 if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                                     reparsedDate = parseISO(\`\${parts[2]}-\${parts[1]}-\${parts[0]}\`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(\`\${parts[2]}-\${parts[0]}-\${parts[1]}\`);
                                 } else if (parseInt(parts[0]) > 1000) { 
                                      reparsedDate = parseISO(emp.doj);
                                 }
@@ -715,3 +720,4 @@ export default function LeavePage() {
   );
 }
 
+    

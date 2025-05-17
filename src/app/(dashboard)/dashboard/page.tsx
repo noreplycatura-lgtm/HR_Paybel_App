@@ -6,13 +6,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserCheck, CalendarCheck, History, DollarSign, HardDrive } from "lucide-react";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data"; 
-import { useToast } from "@/hooks/use-toast"; // Added import
+import { useToast } from "@/hooks/use-toast"; 
 
-// localStorage keys
 const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Though not actively managed by a UI yet
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 
 interface StoredEmployeeAttendanceData {
   code: string;
@@ -43,39 +42,35 @@ export default function DashboardPage() {
     let totalLeaveRecords = 0; 
 
     if (typeof window !== 'undefined') {
-      // Calculate Total Active Employees
       try {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        let employeesToUseForCount: EmployeeDetail[] = [];
+        let employeesToUseForCount: EmployeeDetail[] = sampleEmployees; // Default
 
-        if (storedEmployeesStr !== null) { // Check if the key exists
+        if (storedEmployeesStr) { 
           try {
             const parsedEmployees = JSON.parse(storedEmployeesStr) as EmployeeDetail[];
-            if (Array.isArray(parsedEmployees)) {
+            if (Array.isArray(parsedEmployees)) { // Ensure it's an array
               employeesToUseForCount = parsedEmployees;
             } else {
               console.error("Employee master data in localStorage is not an array. Using defaults for count.");
               toast({title: "Data Format Error", description: "Stored employee master data is corrupted. Using defaults for counts.", variant: "destructive", duration: 7000});
-              employeesToUseForCount = sampleEmployees; 
+              // Keep default sampleEmployees
             }
           } catch (parseError) {
             console.error("Error parsing employee master data from localStorage for dashboard.", parseError);
             toast({title: "Data Load Error", description: "Could not parse employee master data from localStorage. Stored data might be corrupted. Using defaults.", variant: "destructive", duration: 7000});
-            employeesToUseForCount = sampleEmployees; 
+            // Keep default sampleEmployees
           }
         } else {
-            // Key doesn't exist, likely first run or cleared. Use sample data.
-            // console.log("No employee master found in localStorage, using sample data for dashboard count.");
-            employeesToUseForCount = sampleEmployees;
+            // Key doesn't exist, likely first run or cleared. Use sample data, no toast necessary here.
         }
         activeEmployeesCount = employeesToUseForCount.filter(emp => emp.status === "Active").length;
       } catch (error) {
-        console.error("Error accessing or processing employee master data for dashboard count:", error);
+        console.error("Error accessing employee master data for dashboard count:", error);
         toast({title: "Storage Access Error", description: "Could not access employee master data for dashboard. Using defaults.", variant: "destructive", duration: 7000});
         activeEmployeesCount = sampleEmployees.filter(emp => emp.status === "Active").length; 
       }
 
-      // Calculate Overall Attendance from last upload context
       try {
         const storedLastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
         if (storedLastUploadContextStr) {
@@ -126,7 +121,6 @@ export default function DashboardPage() {
         toast({title: "Attendance Data Error", description: "Could not process attendance data for dashboard. Stored data might be corrupted.", variant: "destructive", duration: 7000});
       }
 
-      // Get Total Leave Records (count from localStorage if conceptualized, else 0)
       try {
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
@@ -135,7 +129,7 @@ export default function DashboardPage() {
             totalLeaveRecords = parsedLeaveApps.length;
           }
         } else {
-            totalLeaveRecords = 0; // Or could use sampleLeaveHistory.length if you want to show sample count
+            totalLeaveRecords = 0; 
         }
       } catch (error) {
         console.error("Error loading leave applications for dashboard count:", error);
@@ -217,3 +211,4 @@ export default function DashboardPage() {
   );
 }
 
+    

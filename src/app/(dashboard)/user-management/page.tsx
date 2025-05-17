@@ -81,24 +81,28 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
-          // Filter out "Novita" if it exists from previous logic, or any other specific cleanup if needed
-          const filteredUsers = parsedUsers.filter(user => user.username !== "Novita"); // Example: if 'Novita' was a temporary admin
-          usersToSet = filteredUsers;
-          
-          if (filteredUsers.length < parsedUsers.length) {
-            // If any user was filtered out, save the cleaned list back.
-            localStorage.setItem(SIMULATED_USERS_STORAGE_KEY, JSON.stringify(filteredUsers));
+          if (Array.isArray(parsedUsers)) {
+            usersToSet = parsedUsers;
+          } else {
+            console.error("Simulated users data in localStorage is not an array. Resetting to empty.");
+            toast({ 
+                title: "Data Format Error", 
+                description: "Stored user list is corrupted. Resetting to empty.", 
+                variant: "destructive",
+                duration: 7000,
+            });
+            saveSimulatedUsersToLocalStorage([]); // Reset to empty
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
         toast({ 
             title: "Data Load Error", 
-            description: "Could not load user list. Stored data might be corrupted.", 
+            description: "Could not load user list. Stored data might be corrupted. Resetting to empty.", 
             variant: "destructive",
             duration: 7000,
         });
-        // Do not delete the key, just fall back to empty if parsing fails.
+        saveSimulatedUsersToLocalStorage([]); // Reset to empty on error
       }
       setSimulatedUsers(usersToSet);
     }
@@ -319,7 +323,7 @@ export default function UserManagementPage() {
                         size="icon" 
                         onClick={() => handleResetPassword(user.username)} 
                         title={`Simulate Reset Password for ${user.username}`}
-                        disabled={user.username === MAIN_ADMIN_USERNAME} // Should not be necessary as main admin not listed
+                        disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       <KeyRound className="h-4 w-4" />
                     </Button>
@@ -377,3 +381,4 @@ export default function UserManagementPage() {
   );
 }
 
+    
