@@ -86,6 +86,7 @@ export default function SalarySheetPage() {
   const [allEmployees, setAllEmployees] = React.useState<EmployeeDetail[]>([]);
   const [salarySheetData, setSalarySheetData] = React.useState<SalarySheetEntry[]>([]);
   const [filteredSalarySheetData, setFilteredSalarySheetData] = React.useState<SalarySheetEntry[]>([]);
+  const [rawAttendanceForPeriod, setRawAttendanceForPeriod] = React.useState<MonthlyEmployeeAttendance[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -115,7 +116,12 @@ export default function SalarySheetPage() {
           setAllEmployees(Array.isArray(parsedEmployees) ? parsedEmployees : []);
         } else {
           setAllEmployees([]);
-          toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
+           toast({ 
+            title: "Employee Data Missing", 
+            description: "Employee master data not found in local storage. Please add employees in the Employee Master tab first.", 
+            variant: "destructive",
+            duration: 7000 
+          });
         }
       } catch (error) {
         setAllEmployees([]);
@@ -127,6 +133,12 @@ export default function SalarySheetPage() {
   }, [toast]);
 
   React.useEffect(() => {
+    if (!selectedMonth || !selectedYear) {
+        setRawAttendanceForPeriod([]); // Reset when month/year changes
+    }
+  }, [selectedMonth, selectedYear]);
+
+  React.useEffect(() => {
     if (isLoading || isLoadingEmployees || !selectedMonth || !selectedYear || selectedYear === 0) {
       setSalarySheetData([]);
       return;
@@ -136,6 +148,7 @@ export default function SalarySheetPage() {
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
       setSalarySheetData([]);
+      setRawAttendanceForPeriod([]);
       setIsLoadingCalculations(false);
       return;
     }
@@ -166,6 +179,7 @@ export default function SalarySheetPage() {
                  toast({ title: "No Attendance Data", description: `Attendance data for ${selectedMonth} ${selectedYear} not found. Salary sheet calculations will be affected. Please upload attendance.`, variant: "destructive", duration: 7000 });
             }
         }
+        setRawAttendanceForPeriod(attendanceForMonth); // Update state for JSX access
 
         const editsKey = getSalaryEditsStorageKey(selectedMonth, selectedYear);
         if (editsKey) {
@@ -184,7 +198,7 @@ export default function SalarySheetPage() {
     const newSalarySheetData = allEmployees
       .map(emp => {
         const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-        // If no attendance record, this employee won't be included later
+        
         if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
             return null; 
         }
@@ -266,7 +280,7 @@ export default function SalarySheetPage() {
           employeeStatus: emp.status as "Active" | "Left",
         };
       })
-      .filter(emp => emp !== null) as SalarySheetEntry[]; // Filter out nulls (employees without attendance)
+      .filter(emp => emp !== null) as SalarySheetEntry[]; 
 
     setSalarySheetData(newSalarySheetData);
     setIsLoadingCalculations(false);
@@ -360,7 +374,6 @@ export default function SalarySheetPage() {
 
     const csvRows = [headers.join(',')];
     
-    // Use salarySheetData for download to include all employees with attendance
     salarySheetData.forEach(emp => { 
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const row = [
@@ -581,7 +594,7 @@ export default function SalarySheetPage() {
                     <TableCell className="text-right">{emp.actualMedical.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     
                     <TableCell>
-                      <Input type="number" value={emp.arrears} onChange={(e) => handleEditableInputChange(emp.id, 'arrears', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.arrears} onChange={(e) => handleEditableInputChange(emp.id, 'arrears', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell className="text-right">{emp.totalAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     
@@ -589,16 +602,16 @@ export default function SalarySheetPage() {
                     <TableCell className="text-right">{emp.professionalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.providentFund.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell>
-                      <Input type="number" value={emp.tds} onChange={(e) => handleEditableInputChange(emp.id, 'tds', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.tds} onChange={(e) => handleEditableInputChange(emp.id, 'tds', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell>
-                      <Input type="number" value={emp.loan} onChange={(e) => handleEditableInputChange(emp.id, 'loan', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.loan} onChange={(e) => handleEditableInputChange(emp.id, 'loan', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell>
-                      <Input type="number" value={emp.salaryAdvance} onChange={(e) => handleEditableInputChange(emp.id, 'salaryAdvance', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.salaryAdvance} onChange={(e) => handleEditableInputChange(emp.id, 'salaryAdvance', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell>
-                      <Input type="number" value={emp.otherDeduction} onChange={(e) => handleEditableInputChange(emp.id, 'otherDeduction', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.otherDeduction} onChange={(e) => handleEditableInputChange(emp.id, 'otherDeduction', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     
                     <TableCell className="text-right">{emp.totalDeduction.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -646,8 +659,8 @@ export default function SalarySheetPage() {
               {isLoadingCalculations ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /> :
                allEmployees.length === 0 ? "No employees found in Employee Master. Please add employees first." :
                !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet." :
-               salarySheetData.length === 0 && attendanceForMonth.length === 0 ? "No attendance data found for the selected month. Please upload attendance first." :
-               salarySheetData.length === 0 && attendanceForMonth.length > 0 ? "No employees from master list have attendance data for the selected month." :
+               salarySheetData.length === 0 && rawAttendanceForPeriod.length === 0 ? "No attendance data found for the selected month. Please upload attendance first." :
+               salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 ? "No employees from master list have attendance data for the selected month." :
                searchTerm && filteredSalarySheetData.length === 0 ? `No active employees with attendance found matching "${searchTerm}".` :
                "No active employees with attendance to display for the selected criteria."}
             </div>
@@ -657,5 +670,7 @@ export default function SalarySheetPage() {
     </>
   );
 }
+
+    
 
     
