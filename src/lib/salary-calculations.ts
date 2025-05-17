@@ -58,4 +58,3 @@ export function calculateMonthlySalaryComponents(grossMonthlySalary: number): Mo
     totalGross: grossMonthlySalary,
   };
 }
-
