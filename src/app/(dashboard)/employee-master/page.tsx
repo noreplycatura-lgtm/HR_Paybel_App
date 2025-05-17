@@ -11,13 +11,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
-import { format, parseISO, isValid } from "date-fns";
+import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
@@ -27,7 +29,7 @@ const employeeFormSchema = z.object({
   name: z.string().min(1, "Employee name is required"),
   designation: z.string().min(1, "Designation is required"),
   doj: z.string().refine((val) => {
-    if (!val) return false; // DOJ is required
+    if (!val) return false;
     try {
         const date = parseISO(val);
         return isValid(date);
@@ -39,7 +41,7 @@ const employeeFormSchema = z.object({
   division: z.string().min(1, "Division is required"),
   hq: z.string().min(1, "HQ is required"),
   dor: z.string().optional().refine((val) => {
-    if (!val || val.trim() === "") return true; // DOR is optional
+    if (!val || val.trim() === "") return true;
     try {
         const date = parseISO(val);
         return isValid(date);
@@ -50,11 +52,11 @@ const employeeFormSchema = z.object({
   grossMonthlySalary: z.coerce.number().positive({ message: "Gross salary must be a positive number" }),
 }).refine(data => {
     if (data.status === "Active" && (data.dor && data.dor.trim() !== "")) {
-        return false; // DOR must be empty if status is Active
+        return false; 
     }
     if (data.status === "Left" && data.doj && data.dor && data.dor.trim() !== "" && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
         if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
-            return false; // DOR cannot be before DOJ
+            return false;
         }
     }
     return true;
@@ -73,6 +75,10 @@ export default function EmployeeMasterPage() {
   const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null);
   const [filterTerm, setFilterTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "Active" | "Left">("all");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
+  const [isDeleteSelectedDialogOpen, setIsDeleteSelectedDialogOpen] = React.useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = React.useState<EmployeeDetail | null>(null);
+
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -93,7 +99,7 @@ export default function EmployeeMasterPage() {
 
   React.useEffect(() => {
     if (statusInForm === "Active") {
-      form.setValue("dor", ""); // Clear DOR if status becomes Active
+      form.setValue("dor", "");
     }
   }, [statusInForm, form]);
 
@@ -105,10 +111,14 @@ export default function EmployeeMasterPage() {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployeesStr) {
           const parsedData = JSON.parse(storedEmployeesStr);
-          if (Array.isArray(parsedData) && parsedData.length > 0) {
-            loadedEmployees = parsedData;
-          } else if (Array.isArray(parsedData) && parsedData.length === 0) {
-            loadedEmployees = []; // Explicitly use empty array if that's what's stored
+          if (Array.isArray(parsedData)) { 
+            loadedEmployees = parsedData; 
+            if (parsedData.length === 0 && sampleEmployees.length > 0) {
+                 // If localStorage is empty but we have samples, it might be first time after clearing, so use samples
+                 // This ensures that if a user clears data, then reloads, they see samples not a blank screen.
+                 // However, if they intentionally save an empty list, that should be respected.
+                 // The current logic: if localStorage has an empty array, it's used.
+            }
           } else { // Corrupted or not an array
             console.warn("Employee master data in localStorage is corrupted or not an array. Using default sample data and resetting storage.");
             toast({ title: "Data Load Warning", description: "Stored employee master data might be corrupted. Using default samples.", variant: "destructive", duration: 7000 });
@@ -123,7 +133,7 @@ export default function EmployeeMasterPage() {
         }
       } catch (error) {
         console.error("Error loading or parsing employees from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted. Using default samples and resetting storage.", variant: "destructive", duration: 7000 });
+        toast({ title: "Data Load Error", description: "Could not load employee master data. Stored data might be corrupted. Using default samples and resetting storage.", variant: "destructive", duration: 7000 });
         loadedEmployees = [...sampleEmployees]; 
         saveEmployeesToLocalStorage([...sampleEmployees]);
       }
@@ -146,7 +156,7 @@ export default function EmployeeMasterPage() {
   const onSubmit = (values: EmployeeFormValues) => {
     let submissionValues = { ...values };
     if (submissionValues.status === "Active") {
-      submissionValues.dor = ""; // Ensure DOR is empty string if Active
+      submissionValues.dor = ""; 
     }
 
     if (editingEmployeeId) {
@@ -168,9 +178,9 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code,
+        id: submissionValues.code, 
         ...submissionValues,
-        dor: submissionValues.dor || undefined, // Store as undefined if empty string
+        dor: submissionValues.dor || undefined, 
       };
       const updatedEmployees = [...employees, newEmployee];
       setEmployees(updatedEmployees);
@@ -205,19 +215,28 @@ export default function EmployeeMasterPage() {
     }
   };
 
- const handleDeleteEmployee = (employeeId: string) => {
-    const employeeToDelete = employees.find(emp => emp.id === employeeId);
-    if (confirm(`Are you sure you want to delete ${employeeToDelete?.name || `Employee ID ${employeeId}`}? This action cannot be undone.`)) {
-        const updatedEmployees = employees.filter(emp => emp.id !== employeeId);
-        setEmployees(updatedEmployees);
-        saveEmployeesToLocalStorage(updatedEmployees);
-        toast({
-          title: "Employee Removed",
-          description: `${employeeToDelete?.name || `Employee ID ${employeeId}`} has been removed from the list.`,
-          variant: "destructive"
-        });
-    }
+  const handleDeleteEmployeeClick = (employee: EmployeeDetail) => {
+    setEmployeeToDelete(employee);
   };
+
+  const confirmDeleteSingleEmployee = () => {
+    if (!employeeToDelete) return;
+    const updatedEmployees = employees.filter(emp => emp.id !== employeeToDelete.id);
+    setEmployees(updatedEmployees);
+    saveEmployeesToLocalStorage(updatedEmployees);
+    setSelectedEmployeeIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(employeeToDelete.id);
+        return newSet;
+    });
+    toast({
+        title: "Employee Removed",
+        description: `${employeeToDelete.name} has been removed from the list.`,
+        variant: "destructive"
+    });
+    setEmployeeToDelete(null);
+  };
+
 
   const handleUploadEmployees = (file: File) => {
     const reader = new FileReader();
@@ -239,7 +258,7 @@ export default function EmployeeMasterPage() {
         
         const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
         if (missingHeaders.length > 0) {
-             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}. Expected: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, GrossMonthlySalary. Check spelling.`, variant: "destructive", duration: 9000 });
+             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}. Expected: ${expectedHeaders.join(', ')}. Check spelling and ensure all are present.`, variant: "destructive", duration: 9000 });
              return;
         }
         
@@ -278,7 +297,7 @@ export default function EmployeeMasterPage() {
           const designation = values[idxDesignation];
           const hq = values[idxHq];
           const doj = values[idxDoj];
-          let dor = values[idxDor] || ""; // DOR is optional
+          let dor = values[idxDor] || "";
           const grossMonthlySalaryStr = values[idxGrossSalary];
           
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
@@ -289,11 +308,11 @@ export default function EmployeeMasterPage() {
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            status = "Active"; // Default to Active if invalid status
+            status = "Active"; 
             console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
           }
 
-          if (status === "Active") dor = ""; // Ensure DOR is empty if status is Active
+          if (status === "Active") dor = "";
 
           if (codesInCsv.has(code)) {
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to duplicate code within this CSV file.`);
@@ -315,7 +334,6 @@ export default function EmployeeMasterPage() {
           if (dor && !/^\d{4}-\d{2}-\d{2}$/.test(dor)) {
              try { const d = new Date(dor.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDor = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
-
 
           uploadedEmployees.push({
             id: code, status, division, code, name, designation, hq, 
@@ -400,6 +418,48 @@ export default function EmployeeMasterPage() {
     return { activeCount, leftCount, totalCount: employees.length };
   }, [employees, isLoadingData]);
 
+  const handleSelectAll = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      const allVisibleEmployeeIds = filteredEmployees.map(emp => emp.id);
+      setSelectedEmployeeIds(new Set(allVisibleEmployeeIds));
+    } else {
+      setSelectedEmployeeIds(new Set());
+    }
+  };
+
+  const handleSelectEmployee = (employeeId: string, checked: boolean) => {
+    setSelectedEmployeeIds(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (checked) {
+        newSelected.add(employeeId);
+      } else {
+        newSelected.delete(employeeId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleDeleteSelectedEmployees = () => {
+    if (selectedEmployeeIds.size > 0) {
+      setIsDeleteSelectedDialogOpen(true);
+    } else {
+      toast({ title: "No Employees Selected", description: "Please select employees to delete.", variant: "destructive"});
+    }
+  };
+
+  const confirmDeleteSelectedEmployees = () => {
+    const updatedEmployees = employees.filter(emp => !selectedEmployeeIds.has(emp.id));
+    setEmployees(updatedEmployees);
+    saveEmployeesToLocalStorage(updatedEmployees);
+    toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted.`, variant: "destructive" });
+    setSelectedEmployeeIds(new Set());
+    setIsDeleteSelectedDialogOpen(false);
+  };
+
+  const isAllSelected = filteredEmployees.length > 0 && selectedEmployeeIds.size === filteredEmployees.length;
+  const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < filteredEmployees.length;
+
+
   if (isLoadingData) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -414,6 +474,9 @@ export default function EmployeeMasterPage() {
         title="Employee Master"
         description="View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary."
       >
+        <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0} title="Delete selected employees">
+            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedEmployeeIds.size})
+        </Button>
         <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
             setIsEmployeeFormOpen(isOpen);
             if (!isOpen) {
@@ -511,6 +574,7 @@ export default function EmployeeMasterPage() {
               <CardDescription>
                 Displaying {filteredEmployees.length} of {employeeCounts.totalCount} total employees
                 ({employeeCounts.activeCount} Active, {employeeCounts.leftCount} Left).
+                Selected: {selectedEmployeeIds.size}
               </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -541,6 +605,14 @@ export default function EmployeeMasterPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]">
+                   <Checkbox
+                    checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
+                    onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
+                    aria-label="Select all visible rows"
+                    disabled={filteredEmployees.length === 0}
+                  />
+                </TableHead>
                 <TableHead className="min-w-[100px]">Status</TableHead>
                 <TableHead className="min-w-[120px]">Division</TableHead>
                 <TableHead className="min-w-[80px]">Code</TableHead>
@@ -555,7 +627,14 @@ export default function EmployeeMasterPage() {
             </TableHeader>
             <TableBody>
               {filteredEmployees.map((employee) => (
-                <TableRow key={employee.id}>
+                <TableRow key={employee.id} data-state={selectedEmployeeIds.has(employee.id) ? "selected" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedEmployeeIds.has(employee.id)}
+                      onCheckedChange={(checked) => handleSelectEmployee(employee.id, !!checked)}
+                      aria-label={`Select row for ${employee.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
                       {employee.status || "N/A"}
@@ -572,22 +651,22 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) {
-                            const parts = employee.doj.split(/[-/.]/); // Allow . or / or -
+                            const parts = employee.doj.split(/[-/.]/); 
                             let reparsedDate = null;
-                            if (parts.length === 3) { // Basic check for d/m/y or m/d/y
-                                if (parseInt(parts[2]) > 1000) { // Assume YYYY is last
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try YYYY-MM-DD
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try YYYY-DD-MM
-                                } else if (parseInt(parts[0]) > 1000) { // Assume YYYY is first
-                                     reparsedDate = parseISO(employee.doj); // Already tried
+                            if (parts.length === 3) { 
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
+                                } else if (parseInt(parts[0]) > 1000) { 
+                                     reparsedDate = parseISO(employee.doj); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return employee.doj; // Fallback to original string if parsing fails
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return employee.doj; // Fallback on any error
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -625,7 +704,7 @@ export default function EmployeeMasterPage() {
                     <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployee(employee.id)} className="text-destructive hover:text-destructive/80" title="Delete this employee">
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployeeClick(employee)} className="text-destructive hover:text-destructive/80" title="Delete this employee">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -633,7 +712,7 @@ export default function EmployeeMasterPage() {
               ))}
               {filteredEmployees.length === 0 && !isLoadingData && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground">
                     {filterTerm || statusFilter !== "all" ? "No employees match your filters." : (employees.length === 0 ? "No employee data available. Use 'Add New Employee' or 'Upload Employees'." : "No employees found.")}
                   </TableCell>
                 </TableRow>
@@ -642,7 +721,42 @@ export default function EmployeeMasterPage() {
           </Table>
         </CardContent>
       </Card>
+      
+      <AlertDialog open={isDeleteSelectedDialogOpen} onOpenChange={setIsDeleteSelectedDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedEmployeeIds.size} selected employee(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteSelectedEmployees} variant="destructive">
+              Delete Selected
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!employeeToDelete} onOpenChange={(isOpen) => { if(!isOpen) setEmployeeToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete employee {employeeToDelete?.name} (Code: {employeeToDelete?.code})? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setEmployeeToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteSingleEmployee} variant="destructive">
+              Delete Employee
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
 
+    
