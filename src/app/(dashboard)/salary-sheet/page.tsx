@@ -23,7 +23,7 @@ interface SalarySheetEntry extends EmployeeDetail {
   totalDaysInMonth: number;
   daysPaid: number;
   weekOffs: number;
-  daysAbsent: number;
+  daysAbsent: number; // Will now reflect 'A' + 0.5 * 'HD'
   monthlyBasic: number;
   monthlyHRA: number;
   monthlyCA: number;
@@ -148,23 +148,25 @@ export default function SalarySheetPage() {
       
       let daysPaid = 0;
       let weekOffs = 0;
-      let daysAbsent = 0;
+      let fullAbsentDays = 0; // For 'A'
+      let halfDaysTaken = 0;   // For 'HD'
 
       empAttendance.slice(0, totalDaysInMonth).forEach(status => {
         if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') {
           daysPaid++;
         } else if (status === 'HD') {
           daysPaid += 0.5;
+          halfDaysTaken++; 
         } else if (status === 'W') {
           weekOffs++;
-          daysPaid++; // Week offs are usually paid
+          daysPaid++; 
         } else if (status === 'A') {
-          daysAbsent++;
+          fullAbsentDays++;
         }
       });
       
-      // Ensure daysPaid doesn't exceed totalDaysInMonth
       daysPaid = Math.min(daysPaid, totalDaysInMonth);
+      const daysAbsentDisplay = fullAbsentDays + (halfDaysTaken * 0.5);
 
 
       const monthlyComponents = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
@@ -176,16 +178,16 @@ export default function SalarySheetPage() {
       const actualMedical = monthlyComponents.medical * payFactor;
       const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
       
-      const arrears = 0; // Placeholder
+      const arrears = 0; 
       const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
 
-      const esic = 0; // Placeholder
-      const professionalTax = 0; // Placeholder
-      const providentFund = 0; // Placeholder
-      const tds = 0; // Placeholder
-      const loan = 0; // Placeholder
-      const salaryAdvance = 0; // Placeholder
-      const otherDeduction = 0; // Placeholder
+      const esic = 0; 
+      const professionalTax = 0; 
+      const providentFund = 0; 
+      const tds = 0; 
+      const loan = 0; 
+      const salaryAdvance = 0; 
+      const otherDeduction = 0; 
       const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
       
       const netPaid = totalAllowance - totalDeduction;
@@ -195,7 +197,7 @@ export default function SalarySheetPage() {
         totalDaysInMonth,
         daysPaid,
         weekOffs,
-        daysAbsent,
+        daysAbsent: daysAbsentDisplay,
         monthlyBasic: monthlyComponents.basic,
         monthlyHRA: monthlyComponents.hra,
         monthlyCA: monthlyComponents.ca,
@@ -261,11 +263,11 @@ export default function SalarySheetPage() {
 
     const csvRows = [headers.join(',')];
 
-    salarySheetData.forEach(emp => { // Download all employees (Active & Left)
+    salarySheetData.forEach(emp => { 
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const row = [
         emp.employeeStatus, emp.division, emp.code, emp.name, emp.designation, emp.hq, dojFormatted,
-        emp.totalDaysInMonth.toString(), emp.daysPaid.toFixed(1), emp.weekOffs.toString(), emp.daysAbsent.toString(),
+        emp.totalDaysInMonth.toString(), emp.daysPaid.toFixed(1), emp.weekOffs.toString(), emp.daysAbsent.toFixed(1),
         emp.monthlyBasic.toFixed(2), emp.monthlyHRA.toFixed(2), emp.monthlyCA.toFixed(2), emp.monthlyOtherAllowance.toFixed(2), emp.monthlyMedical.toFixed(2),
         emp.grossMonthlySalary.toFixed(2),
         emp.actualBasic.toFixed(2), emp.actualHRA.toFixed(2), emp.actualCA.toFixed(2), emp.actualOtherAllowance.toFixed(2), emp.actualMedical.toFixed(2),
@@ -385,7 +387,7 @@ export default function SalarySheetPage() {
                     <TableCell className="text-center">{emp.totalDaysInMonth}</TableCell>
                     <TableCell className="text-center">{emp.daysPaid.toFixed(1)}</TableCell>
                     <TableCell className="text-center">{emp.weekOffs}</TableCell>
-                    <TableCell className="text-center">{emp.daysAbsent}</TableCell>
+                    <TableCell className="text-center">{emp.daysAbsent.toFixed(1)}</TableCell>
                     <TableCell className="text-right">{emp.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.totalAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.totalDeduction.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -426,4 +428,5 @@ export default function SalarySheetPage() {
     </>
   );
 }
+
 
