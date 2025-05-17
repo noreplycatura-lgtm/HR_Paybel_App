@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths } from 'date-fns';
@@ -23,12 +22,10 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
-// TEMPORARY FLAG FOR ONE-TIME CLEARING - REMOVE AFTER ONE SUCCESSFUL CLEAR
-const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1";
-
+const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1"; // For one-time clearing
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -64,7 +61,7 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
 
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -92,12 +89,12 @@ export default function LeavePage() {
 
   React.useEffect(() => {
     setIsLoading(true);
-      
     let loadedEmployees: EmployeeDetail[] = [];
     let loadedOpeningBalances: OpeningLeaveBalance[] = [];
     let loadedLeaveApplications: LeaveApplication[] = [];
-    
+
     if (typeof window !== 'undefined') {
+      // One-time clearing logic (can be removed after one successful run per user/browser)
       const hasCleared = sessionStorage.getItem(TEMP_LEAVE_DATA_CLEARED_FLAG);
       if (!hasCleared) {
         try {
@@ -123,8 +120,8 @@ export default function LeavePage() {
           if (Array.isArray(parsedEmployees)) {
             loadedEmployees = parsedEmployees;
           } else {
-             console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
-             toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
+            console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
+            toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         }
       } catch (error) {
@@ -136,13 +133,13 @@ export default function LeavePage() {
       try {
         const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOpeningBalances) {
-            const parsedOB = JSON.parse(storedOpeningBalances);
-            if (Array.isArray(parsedOB)) {
-                loadedOpeningBalances = parsedOB;
-            } else {
-                console.warn("Leave Mgt: Opening balances in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
-                toast({ title: "Data Load Warning", description: "Stored opening balances data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
-            }
+          const parsedOB = JSON.parse(storedOpeningBalances);
+          if (Array.isArray(parsedOB)) {
+            loadedOpeningBalances = parsedOB;
+          } else {
+            console.warn("Leave Mgt: Opening balances in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
+            toast({ title: "Data Load Warning", description: "Stored opening balances data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+          }
         }
       } catch (error) {
         console.warn("Error loading opening balances from localStorage for Leave Mgt:", error);
@@ -150,25 +147,24 @@ export default function LeavePage() {
       }
       setOpeningBalances(loadedOpeningBalances);
 
+      // Leave Applications are conceptual for calculation, no UI to add/manage them directly here for now
       try {
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
-            const parsedApps = JSON.parse(storedLeaveApps);
-            if (Array.isArray(parsedApps)) {
-                loadedLeaveApplications = parsedApps;
-            } else {
-                console.warn("Leave Mgt: Leave applications in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
-                toast({ title: "Data Load Warning", description: "Stored leave applications data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
-            }
+          const parsedApps = JSON.parse(storedLeaveApps);
+          if (Array.isArray(parsedApps)) {
+            loadedLeaveApplications = parsedApps; // Use if formal leave app system exists
+          } else {
+            console.warn("Leave Mgt: Leave applications in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
+          }
         }
       } catch (error) {
-         console.warn("Error loading leave applications from localStorage for Leave Mgt:", error);
-         toast({ title: "Data Load Warning", description: "Could not load leave applications. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+        console.warn("Error loading leave applications from localStorage for Leave Mgt:", error);
       }
-      setLeaveApplications(loadedLeaveApplications);
+      setLeaveApplications(loadedLeaveApplications); // For now, it will mostly be empty
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Runs once on mount to load initial data
+    // Dependency array corrected for initial data load
+  }, [toast]);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
@@ -187,17 +183,18 @@ export default function LeavePage() {
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
 
     const newDisplayData = employees
-      .filter(emp => emp.status === "Active")
+      .filter(emp => emp.status === "Active") // Only show active employees
       .map(emp => {
-        // Pass empty array for leaveApplications to get pure accrued balance for the month
+        // Get accrued balances up to end of selected month (as if no leaves from attendance were taken yet)
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, [], openingBalances
+          emp, selectedYear, monthIndex, leaveApplications, openingBalances // Pass formal leave apps if any
         );
 
         let usedCLFromAttendance = 0;
         let usedSLFromAttendance = 0;
         let usedPLFromAttendance = 0;
 
+        // Get actual used leaves from attendance for the selected month
         if (typeof window !== 'undefined') {
           const { rawDataKey } = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
           if (rawDataKey) {
@@ -220,10 +217,12 @@ export default function LeavePage() {
           }
         }
         
+        // Final EOM balance for selected month = Accrued EOM - Used from Attendance in selected month
         const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
         const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
 
+        // Calculate usage for the previous month
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
         let usedPLLastMonth = 0;
@@ -253,6 +252,7 @@ export default function LeavePage() {
           }
         }
         
+        // Calculate Opening Balance for Next Month
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndex = getMonth(nextMonthDateObject);
         const nextMonthYear = getYear(nextMonthDateObject);
@@ -274,9 +274,9 @@ export default function LeavePage() {
         let openingSLNextMonth = 0;
         const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; 
 
-        if (nextMonthIndex === 3) { 
-            openingCLNextMonth = 0 + accrualCLNextMonth;
-            openingSLNextMonth = 0 + accrualSLNextMonth;
+        if (nextMonthIndex === 3) { // April is month 3 (0-indexed)
+            openingCLNextMonth = 0 + accrualCLNextMonth; // Reset + next month's accrual
+            openingSLNextMonth = 0 + accrualSLNextMonth; // Reset + next month's accrual
         } else {
             openingCLNextMonth = finalBalanceCL + accrualCLNextMonth;
             openingSLNextMonth = finalSLBalance + accrualSLNextMonth;
@@ -299,8 +299,9 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set()); 
+    setSelectedEmployeeIds(new Set());
     setIsLoading(false);
+    // Dependency array includes all necessary states for re-calculation
   }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
@@ -326,6 +327,7 @@ export default function LeavePage() {
 
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
+    // Determine financial year start based on selectedMonth and selectedYear
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
@@ -480,7 +482,7 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>();
+            const employeeCodesInFile = new Set<string>(); // To track employeeCode-financialYearStart uniqueness within the file
             let skippedDuplicatesInFile = 0;
             let malformedRows = 0;
 
@@ -520,6 +522,7 @@ export default function LeavePage() {
             let message = "";
             if (newOpeningBalances.length > 0) {
                 message += `${newOpeningBalances.length} records processed from ${file.name}. `;
+                // Update existing records or add new ones
                 setOpeningBalances(prevBalances => {
                     const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
                     newOpeningBalances.forEach(nb => {
@@ -595,6 +598,7 @@ export default function LeavePage() {
         setIsDeleteSelectedOBDialogOpen(false);
         return;
     }
+    // Determine financial year start based on selectedMonth and selectedYear
     const financialYearToClear = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
 
     const updatedOpeningBalances = openingBalances.filter(ob =>
@@ -614,6 +618,7 @@ export default function LeavePage() {
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedOBDialogOpen(false);
   };
+
 
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
   const activeEmployeesInDisplay = displayData.filter(emp => emp.status === "Active");
@@ -873,5 +878,3 @@ export default function LeavePage() {
     </>
   );
 }
-    
-
