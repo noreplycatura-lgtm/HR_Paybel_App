@@ -26,7 +26,7 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
-// TEMPORARY FLAG FOR ONE-TIME CLEARING
+// TEMPORARY FLAG FOR ONE-TIME CLEARING - REMOVE AFTER ONE SUCCESSFUL CLEAR
 const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1";
 
 
@@ -64,7 +64,7 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); // Keep track of leave applications
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
 
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -98,26 +98,23 @@ export default function LeavePage() {
     let loadedLeaveApplications: LeaveApplication[] = [];
     
     if (typeof window !== 'undefined') {
-      // --- TEMPORARY ONE-TIME DATA CLEARING ---
       const hasCleared = sessionStorage.getItem(TEMP_LEAVE_DATA_CLEARED_FLAG);
       if (!hasCleared) {
         try {
           localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
           localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-          setOpeningBalances([]); // Reset state
-          setLeaveApplications([]); // Reset state
-          sessionStorage.setItem(TEMP_LEAVE_DATA_CLEARED_FLAG, "true");
+          console.log("One-time: Cleared opening balances and leave applications from localStorage.");
           toast({
             title: "Leave Data Reset",
             description: "Opening balances and leave application history have been cleared. Please upload new opening balances if needed.",
             duration: 7000,
           });
+          sessionStorage.setItem(TEMP_LEAVE_DATA_CLEARED_FLAG, "true");
         } catch (e) {
           console.error("Error during one-time leave data clear:", e);
           toast({ title: "Error Clearing Data", description: "Could not perform one-time clear of leave data.", variant: "destructive" });
         }
       }
-      // --- END OF TEMPORARY CLEARING ---
 
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
@@ -129,8 +126,6 @@ export default function LeavePage() {
              console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
-        } else {
-            // toast({ title: "Data Missing", description: "Employee Master data not found. Please add employees first.", variant: "destructive", duration: 7000});
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
@@ -172,7 +167,8 @@ export default function LeavePage() {
       }
       setLeaveApplications(loadedLeaveApplications);
     }
-  }, [toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Runs once on mount to load initial data
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
@@ -193,8 +189,9 @@ export default function LeavePage() {
     const newDisplayData = employees
       .filter(emp => emp.status === "Active")
       .map(emp => {
+        // Pass empty array for leaveApplications to get pure accrued balance for the month
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, leaveApplications, openingBalances
+          emp, selectedYear, monthIndex, [], openingBalances
         );
 
         let usedCLFromAttendance = 0;
@@ -227,7 +224,6 @@ export default function LeavePage() {
         const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
 
-        // --- 2. Calculate last month's used leaves ---
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
         let usedPLLastMonth = 0;
@@ -257,7 +253,6 @@ export default function LeavePage() {
           }
         }
         
-        // --- 3. Calculate next month's opening balances ---
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndex = getMonth(nextMonthDateObject);
         const nextMonthYear = getYear(nextMonthDateObject);
@@ -277,9 +272,9 @@ export default function LeavePage() {
         
         let openingCLNextMonth = 0;
         let openingSLNextMonth = 0;
-        const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; // PL always carries over
+        const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; 
 
-        if (nextMonthIndex === 3) { // April - CL/SL reset
+        if (nextMonthIndex === 3) { 
             openingCLNextMonth = 0 + accrualCLNextMonth;
             openingSLNextMonth = 0 + accrualSLNextMonth;
         } else {
@@ -304,9 +299,9 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set()); // Clear selection when data reloads
+    setSelectedEmployeeIds(new Set()); 
     setIsLoading(false);
-  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear, toast]);
+  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
