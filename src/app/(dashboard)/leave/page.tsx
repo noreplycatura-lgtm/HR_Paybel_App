@@ -15,14 +15,14 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
 import type { LeaveApplication, LeaveType, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
@@ -40,7 +40,7 @@ interface LeaveDisplayData extends EmployeeDetail {
 
 interface MonthlyEmployeeAttendance {
   code: string;
-  attendance: string[]; 
+  attendance: string[];
 }
 
 const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
@@ -55,18 +55,18 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  
+
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
-  
+
   const [displayData, setDisplayData] = React.useState<LeaveDisplayData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
 
   const [isEditOpeningBalanceDialogOpen, setIsEditOpeningBalanceDialogOpen] = React.useState(false);
   const [editingEmployeeForOB, setEditingEmployeeForOB] = React.useState<EmployeeDetail | null>(null);
-  const [editingOBYear, setEditingOBYear] = React.useState<number>(0); 
+  const [editingOBYear, setEditingOBYear] = React.useState<number>(0);
   const [editableOB_CL, setEditableOB_CL] = React.useState<number>(0);
   const [editableOB_SL, setEditableOB_SL] = React.useState<number>(0);
   const [editableOB_PL, setEditableOB_PL] = React.useState<number>(0);
@@ -83,36 +83,36 @@ export default function LeavePage() {
   React.useEffect(() => {
     setIsLoading(true);
     let didClearOB = false;
-    let didClearApps = false;
+    // let didClearApps = false; // Keep if leave applications might be cleared
 
     if (typeof window !== 'undefined') {
         // --- TEMPORARY CODE TO CLEAR LEAVE DATA AS PER USER REQUEST ---
-        // This will run once when the page loads next time.
-        // This code block should ideally be removed after it has served its purpose
-        // to avoid clearing data on every subsequent page load.
-        console.log("LeavePage: Checking if leave data needs to be cleared from localStorage...");
-        if (localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY)) {
-            localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-            didClearOB = true;
-            console.log("LeavePage: Opening balances cleared from localStorage.");
-        }
-        if (localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY)) {
-            localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-            didClearApps = true;
-            console.log("LeavePage: Leave applications cleared from localStorage.");
-        }
-        // --- END OF TEMPORARY CODE ---
+        const shouldClearData = localStorage.getItem("novita_clear_leave_data_flag_v1"); // Example flag
+        if (shouldClearData === "true") {
+            console.log("LeavePage: Clearing specific leave data from localStorage as per flag...");
+            if (localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY)) {
+                localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+                didClearOB = true;
+                console.log("LeavePage: Opening balances cleared from localStorage.");
+            }
+            // if (localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY)) {
+            //     localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+            //     didClearApps = true;
+            //     console.log("LeavePage: Leave applications cleared from localStorage.");
+            // }
+            localStorage.removeItem("novita_clear_leave_data_flag_v1"); // Remove the flag after clearing
 
-        if (didClearOB || didClearApps) {
             toast({
                 title: "Leave Data Cleared",
-                description: "All opening leave balances and/or leave application history have been cleared. Please re-upload Jan 2025 balances if needed.",
+                description: "Opening leave balances have been cleared as requested. Please re-upload if needed.",
                 duration: 9000,
             });
         }
+        // --- END OF TEMPORARY CODE ---
       
       let loadedEmployees: EmployeeDetail[] = [];
       let loadedOpeningBalances: OpeningLeaveBalance[] = [];
+      // No need to load leave applications as they are not used in this version's edit logic
 
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
@@ -124,9 +124,6 @@ export default function LeavePage() {
              console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
-        } else {
-          // toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
-          // Do not toast here if it's normal for it to be empty initially
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
@@ -135,22 +132,21 @@ export default function LeavePage() {
       setEmployees(loadedEmployees);
 
       try {
-        const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY); // This will be null if cleared above
+        const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOpeningBalances) {
             const parsedOB = JSON.parse(storedOpeningBalances);
             if (Array.isArray(parsedOB)) {
                 loadedOpeningBalances = parsedOB;
             } else {
-                console.error("Leave Mgt: Opening balances in localStorage is not an array. Using empty list.");
-                // toast({ title: "Data Load Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+                console.warn("Leave Mgt: Opening balances in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
+                toast({ title: "Data Load Warning", description: "Stored opening balances data is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
             }
         }
-      } catch (error)
-      {
-        console.error("Error loading opening balances from localStorage for Leave Mgt:", error);
-        // toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+      } catch (error) {
+        console.warn("Error loading opening balances from localStorage for Leave Mgt:", error);
+        toast({ title: "Data Load Warning", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
-      setOpeningBalances(loadedOpeningBalances); // Will be empty if cleared above
+      setOpeningBalances(loadedOpeningBalances);
     }
     // setIsLoading(false); // This will be set by the effect below
   }, [toast]);
@@ -158,25 +154,25 @@ export default function LeavePage() {
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
       setDisplayData([]);
-      setIsLoading(false); 
+      setIsLoading(false);
       return;
     }
-    
-    setIsLoading(true); 
+
+    setIsLoading(true);
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) { 
+    if (monthIndex === -1) {
       setDisplayData([]);
       setIsLoading(false);
       return;
     }
 
     const newDisplayData = employees
-      .filter(emp => emp.status === "Active") 
+      .filter(emp => emp.status === "Active")
       .map(emp => {
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, 
-          selectedYear, 
-          monthIndex, 
+          emp,
+          selectedYear,
+          monthIndex,
           [], // Pass empty array for formal leave applications for now
           openingBalances
         );
@@ -193,7 +189,7 @@ export default function LeavePage() {
               try {
                 const monthAttendanceForAllEmployees: MonthlyEmployeeAttendance[] = JSON.parse(storedRawAttendance);
                 const empAttendanceRecord = monthAttendanceForAllEmployees.find(attEmp => attEmp.code === emp.code);
-                
+
                 if (empAttendanceRecord && empAttendanceRecord.attendance) {
                   const daysInSelectedMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
                   const dailyStatuses = empAttendanceRecord.attendance.slice(0, daysInSelectedMonth);
@@ -210,11 +206,11 @@ export default function LeavePage() {
             }
           }
         }
-        
+
         const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
-        const finalBalanceSL = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
+        const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
-        
+
         return {
           ...emp,
           usedCLInMonth: usedCLFromAttendance,
@@ -226,7 +222,7 @@ export default function LeavePage() {
         };
     });
     setDisplayData(newDisplayData);
-    setSelectedEmployeeIds(new Set()); 
+    setSelectedEmployeeIds(new Set());
     setIsLoading(false);
   }, [employees, openingBalances, selectedMonth, selectedYear, toast]);
 
@@ -250,7 +246,7 @@ export default function LeavePage() {
       return newSelected;
     });
   };
-  
+
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
@@ -306,7 +302,7 @@ export default function LeavePage() {
             toast({ title: "Storage Error", description: "Could not save opening balances locally.", variant: "destructive" });
         }
     }
-    
+
     toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved.`});
     setIsEditOpeningBalanceDialogOpen(false);
     setEditingEmployeeForOB(null);
@@ -354,10 +350,10 @@ export default function LeavePage() {
           if (isValid(parsed)) {
             formattedDoj = format(parsed, 'dd-MMM-yyyy');
           } else {
-            formattedDoj = emp.doj; 
+            formattedDoj = emp.doj;
           }
         } catch {
-          formattedDoj = emp.doj; 
+          formattedDoj = emp.doj;
         }
       }
 
@@ -411,7 +407,7 @@ export default function LeavePage() {
                 toast({ title: "Invalid File", description: "File empty or no data. Header + data row expected.", variant: "destructive" });
                 return;
             }
-            const headersFromFile = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const headersFromFile = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, ''));
             const expectedHeaders = ["employeecode", "openingcl", "openingsl", "openingpl", "financialyearstart"];
             const missingHeaders = expectedHeaders.filter(eh => !headersFromFile.includes(eh));
             if (missingHeaders.length > 0) {
@@ -421,7 +417,7 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>(); 
+            const employeeCodesInFile = new Set<string>();
             let skippedDuplicatesInFile = 0;
             let malformedRows = 0;
 
@@ -464,10 +460,10 @@ export default function LeavePage() {
                 setOpeningBalances(prevBalances => {
                     const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
                     newOpeningBalances.forEach(nb => {
-                        existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb); 
+                        existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb);
                     });
                     const updatedBalances = Array.from(existingRecordsMap.values());
-                    
+
                     if (typeof window !== 'undefined') {
                         try {
                             localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
@@ -481,13 +477,13 @@ export default function LeavePage() {
             } else {
                  message += `No new valid opening balance records found in ${file.name}. `;
             }
-            
+
             if (skippedDuplicatesInFile > 0) message += `${skippedDuplicatesInFile} duplicate row(s) (same employee/year) within the file were skipped. `;
             if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to invalid/missing data. `;
-            
-            toast({ 
-                title: newOpeningBalances.length > 0 ? "Opening Balances Processed" : "Upload Issue", 
-                description: message.trim(), 
+
+            toast({
+                title: newOpeningBalances.length > 0 ? "Opening Balances Processed" : "Upload Issue",
+                description: message.trim(),
                 duration: 9000,
                 variant: newOpeningBalances.length > 0 ? "default" : "destructive",
             });
@@ -537,8 +533,8 @@ export default function LeavePage() {
         return;
     }
     const financialYearToClear = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
-    
-    const updatedOpeningBalances = openingBalances.filter(ob => 
+
+    const updatedOpeningBalances = openingBalances.filter(ob =>
         !(selectedEmployeeIds.has(ob.employeeCode) && ob.financialYearStart === financialYearToClear)
     );
 
@@ -555,14 +551,14 @@ export default function LeavePage() {
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedOBDialogOpen(false);
   };
-  
+
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
   const activeEmployeesInDisplay = displayData.filter(emp => emp.status === "Active");
   const isAllSelected = activeEmployeesInDisplay.length > 0 && selectedEmployeeIds.size === activeEmployeesInDisplay.length;
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < activeEmployeesInDisplay.length;
 
 
-  if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear && currentYearState === 0) { 
+  if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear && currentYearState === 0) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -719,7 +715,7 @@ export default function LeavePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && displayData.length === 0 && employees.length > 0 ? ( 
+              {isLoading && displayData.length === 0 && employees.length > 0 ? (
                 <TableRow>
                   <TableCell colSpan={14} className="text-center py-8">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
@@ -750,23 +746,23 @@ export default function LeavePage() {
                       if (emp.doj && typeof emp.doj === 'string' && emp.doj.trim() !== '') {
                         try {
                           const parsedDate = parseISO(emp.doj);
-                          if (!isValid(parsedDate)) { 
+                          if (!isValid(parsedDate)) {
                             const parts = emp.doj.split(/[-/.]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                if (parseInt(parts[2]) > 1000) {
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
                                      if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
-                                } else if (parseInt(parts[0]) > 1000) { 
+                                } else if (parseInt(parts[0]) > 1000) {
                                      reparsedDate = parseISO(emp.doj);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj; 
+                            return emp.doj;
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj; 
+                          return emp.doj;
                         }
                       }
                       return 'N/A';
@@ -782,7 +778,7 @@ export default function LeavePage() {
               )) : (
                 <TableRow>
                   <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
-                    {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." : 
+                    {employees.length === 0 && !isLoading ? "No employees found in Employee Master. Please add employees to view leave data." :
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
                      "Please select month and year to view leave summary."}
                   </TableCell>
@@ -795,6 +791,5 @@ export default function LeavePage() {
     </>
   );
 }
-
 
     
