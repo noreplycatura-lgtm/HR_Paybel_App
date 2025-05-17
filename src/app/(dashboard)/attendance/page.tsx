@@ -985,7 +985,7 @@ export default function AttendancePage() {
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Month" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="item-aligned">
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -997,7 +997,7 @@ export default function AttendancePage() {
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Year" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="item-aligned">
                     {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -1195,7 +1195,7 @@ export default function AttendancePage() {
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Upload Month" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="item-aligned">
                     {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -1203,7 +1203,7 @@ export default function AttendancePage() {
                   <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue placeholder="Select Upload Year" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="item-aligned">
                     {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
                   </SelectContent>
                 </Select>
