@@ -18,9 +18,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-// Removed direct import of sampleEmployees as Employee Master should be the source
-// import { getLeaveBalancesAtStartOfMonth, calculateMonthsOfService } from "@/lib/hr-calculations"; // calculateMonthsOfService might not be needed here if DOJ processing is simple
-import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth } from "date-fns";
+import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth, getDaysInMonth } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; // Raw daily statuses as uploaded/parsed
@@ -65,6 +63,11 @@ export default function AttendancePage() {
   const [editingAttendanceEmployee, setEditingAttendanceEmployee] = React.useState<EmployeeAttendanceData | null>(null);
   const [editableDailyStatuses, setEditableDailyStatuses] = React.useState<string[]>([]);
 
+  // States for mismatch report
+  const [missingInMasterList, setMissingInMasterList] = React.useState<EmployeeAttendanceData[]>([]);
+  const [missingInAttendanceList, setMissingInAttendanceList] = React.useState<EmployeeDetail[]>([]);
+
+
   const getDynamicLocalStorageKeys = (month: string, year: number) => {
     if (!month || year === 0) return { rawDataKey: null, fileNameKey: null };
     return {
@@ -94,7 +97,6 @@ export default function AttendancePage() {
                 initialSelectedYear = lastContext.year || defaultYear;
             } catch (e) {
                 console.error("Error parsing last upload context from localStorage:", e);
-                // Keep defaults
             }
         }
     }
@@ -142,7 +144,6 @@ export default function AttendancePage() {
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
       setRawAttendanceData([]);
-      setProcessedAttendanceData([]);
       setUploadedFileName(null);
       return;
     }
@@ -168,6 +169,8 @@ export default function AttendancePage() {
           });
           setRawAttendanceData([]); 
           setUploadedFileName(null); 
+          localStorage.removeItem(rawDataKey); // Remove corrupted data
+          localStorage.removeItem(fileNameKey);
         }
       } else {
         setRawAttendanceData([]); 
@@ -181,18 +184,27 @@ export default function AttendancePage() {
   React.useEffect(() => {
     if (rawAttendanceData.length === 0 || !selectedYear || !selectedMonth || selectedYear === 0) {
       setProcessedAttendanceData([]);
+      setMissingInMasterList([]);
+      setMissingInAttendanceList([]);
       return;
     }
 
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) { 
         setProcessedAttendanceData([]);
+        setMissingInMasterList([]);
+        setMissingInAttendanceList([]);
         return;
     }
     const masterEmployeeCodes = new Set(employeeMasterList.map(emp => emp.code));
+    const attendanceEmployeeCodes = new Set(rawAttendanceData.map(emp => emp.code));
     
+    const currentMissingInMaster: EmployeeAttendanceData[] = [];
     const processedData = rawAttendanceData.map(emp => {
       const isMissingInMaster = !masterEmployeeCodes.has(emp.code);
+      if (isMissingInMaster) {
+        currentMissingInMaster.push(emp);
+      }
       if (!emp.doj) {
         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
@@ -201,7 +213,6 @@ export default function AttendancePage() {
       const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
       const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
 
-      // If the entire selected month is before the employee's DOJ, mark all days as '-'
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
@@ -212,14 +223,21 @@ export default function AttendancePage() {
       const newProcessedAttendance = rawDailyStatuses.map((status, dayIndex) => {
         const currentDateInLoop = new Date(selectedYear, monthIndex, dayIndex + 1);
         if (isBefore(currentDateInLoop, startOfDay(employeeStartDate))) {
-          return '-'; // Day is before DOJ
+          return '-'; 
         }
-        return status; // Use status as is from raw (already parsed from CSV)
+        return status; 
       });
       
       return { ...emp, processedAttendance: newProcessedAttendance, isMissingInMaster };
     });
     setProcessedAttendanceData(processedData);
+    setMissingInMasterList(currentMissingInMaster);
+
+    const currentMissingInAttendance = employeeMasterList.filter(
+        emp => emp.status === "Active" && !attendanceEmployeeCodes.has(emp.code)
+    );
+    setMissingInAttendanceList(currentMissingInAttendance);
+
   }, [selectedMonth, selectedYear, rawAttendanceData, employeeMasterList]);
 
   React.useEffect(() => {
@@ -279,7 +297,7 @@ export default function AttendancePage() {
 
         const headerLine = lines[0];
         const headerValues = headerLine.split(',');
-        const expectedBaseColumns = 6; 
+        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
         const actualDayColumnsInFile = headerValues.length - expectedBaseColumns;
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
 
@@ -306,15 +324,15 @@ export default function AttendancePage() {
             malformedRowCount++;
             return;
           }
-          const status = values[0]?.trim() || "Active";
+          const statusValue = values[0]?.trim() || "Active";
           const division = values[1]?.trim() || "N/A";
           const code = values[2]?.trim() || `TEMP_ID_${rowIndex}`;
           const name = values[3]?.trim() || "N/A";
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const hq = "N/A"; 
-          const grossMonthlySalary = 0; 
+          const hq = "N/A"; // Placeholder, not in this specific attendance CSV format
+          const grossMonthlySalary = 0; // Placeholder
 
           if (!code || !name || !designation || !doj ) { 
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) in attendance CSV: missing critical employee details.`);
@@ -329,8 +347,8 @@ export default function AttendancePage() {
           }
           encounteredCodes.add(code);
 
-          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusValue => {
-            const trimmedUpperStatus = statusValue.trim().toUpperCase();
+          const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusCsvValue => {
+            const trimmedUpperStatus = statusCsvValue.trim().toUpperCase();
             if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
               return 'A'; 
             }
@@ -338,7 +356,7 @@ export default function AttendancePage() {
           });
 
           newAttendanceData.push({
-            id: code, status, division, code, name, designation, hq, doj, grossMonthlySalary, attendance: dailyStatuses,
+            id: code, status: statusValue, division, code, name, designation, hq, doj, grossMonthlySalary, attendance: dailyStatuses,
           });
         });
         
@@ -354,9 +372,10 @@ export default function AttendancePage() {
                         localStorage.setItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY, JSON.stringify({month: uploadMonth, year: uploadYear}));
                         
                         if (uploadMonth === selectedMonth && uploadYear === selectedYear) {
-                            setRawAttendanceData(newAttendanceData);
+                            setRawAttendanceData(newAttendanceData); // Trigger re-process
                             setUploadedFileName(file.name);
                         } else {
+                            // This will trigger load useEffect for the new month/year
                             setSelectedMonth(uploadMonth); 
                             setSelectedYear(uploadYear);
                         }
@@ -534,7 +553,6 @@ export default function AttendancePage() {
         
         if (dialogClearMonth === selectedMonth && dialogClearYear === selectedYear) {
             setRawAttendanceData([]);
-            setProcessedAttendanceData([]); 
             setUploadedFileName(null); 
         }
         
@@ -566,7 +584,12 @@ export default function AttendancePage() {
   const handleOpenEditAttendanceDialog = (employeeCode: string) => {
     const employee = rawAttendanceData.find(emp => emp.code === employeeCode); 
     if (employee && selectedYear > 0 && selectedMonth) {
-      const daysInMonth = new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate();
+      const monthIndex = months.indexOf(selectedMonth);
+      if (monthIndex === -1) {
+        toast({ title: "Error", description: "Selected month is invalid.", variant: "destructive"});
+        return;
+      }
+      const daysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex));
       const currentRawAttendance = [...employee.attendance];
       while(currentRawAttendance.length < daysInMonth) {
         currentRawAttendance.push('A'); 
@@ -617,8 +640,14 @@ export default function AttendancePage() {
     setEditingAttendanceEmployee(null);
   };
 
-  const daysInSelectedViewMonth = (selectedYear && selectedMonth && selectedYear > 0) ? new Date(selectedYear, months.indexOf(selectedMonth) + 1, 0).getDate() : 0;
-  const daysInSelectedUploadMonth = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
+  const daysInSelectedViewMonth = (selectedYear && selectedMonth && selectedYear > 0 && months.indexOf(selectedMonth) !== -1) 
+    ? getDaysInMonth(new Date(selectedYear, months.indexOf(selectedMonth))) 
+    : 0;
+
+  const daysInSelectedUploadMonth = (uploadYear && uploadMonth && uploadYear > 0 && months.indexOf(uploadMonth) !== -1) 
+    ? getDaysInMonth(new Date(uploadYear, months.indexOf(uploadMonth))) 
+    : 31;
+
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
   const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-');
@@ -764,9 +793,10 @@ export default function AttendancePage() {
 
 
       <Tabs defaultValue="view" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-[450px]">
+        <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
           <TabsTrigger value="view">View & Filter Attendance</TabsTrigger>
           <TabsTrigger value="upload">Upload Attendance Data</TabsTrigger>
+          <TabsTrigger value="mismatch">Data Mismatch Report</TabsTrigger>
         </TabsList>
         <TabsContent value="view">
           <Card className="my-6 shadow-md hover:shadow-lg transition-shadow">
@@ -1039,6 +1069,89 @@ export default function AttendancePage() {
                 })()}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="mismatch">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 my-6">
+                <Card className="shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                        <CardTitle>Employees in Attendance, NOT in Master List</CardTitle>
+                        <CardDescription>
+                            These employees were found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''} but their codes are not in the Employee Master.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoadingState ? (
+                             <div className="text-center py-8 text-muted-foreground">Loading mismatch report...</div>
+                        ) : !selectedMonth || !selectedYear || selectedYear === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">Please select month and year to view mismatch report.</div>
+                        ) : missingInMasterList.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Code</TableHead>
+                                        <TableHead>Name (from Attendance)</TableHead>
+                                        <TableHead>Designation (from Attendance)</TableHead>
+                                        <TableHead>DOJ (from Attendance)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {missingInMasterList.map(emp => (
+                                        <TableRow key={`missing-master-${emp.code}`}>
+                                            <TableCell>{emp.code}</TableCell>
+                                            <TableCell>{emp.name}</TableCell>
+                                            <TableCell>{emp.designation}</TableCell>
+                                            <TableCell>{emp.doj}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No employees found in attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''} that are missing from the Employee Master list.</p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                        <CardTitle>Active Employees in Master, NOT in Attendance Sheet</CardTitle>
+                        <CardDescription>
+                            These "Active" employees from the Employee Master were not found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         {isLoadingState ? (
+                             <div className="text-center py-8 text-muted-foreground">Loading mismatch report...</div>
+                        ) : !selectedMonth || !selectedYear || selectedYear === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">Please select month and year to view mismatch report.</div>
+                        ) : missingInAttendanceList.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Code</TableHead>
+                                        <TableHead>Name (from Master)</TableHead>
+                                        <TableHead>Designation (from Master)</TableHead>
+                                        <TableHead>DOJ (from Master)</TableHead>
+                                        <TableHead>Status (from Master)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {missingInAttendanceList.map(emp => (
+                                        <TableRow key={`missing-att-${emp.id}`}>
+                                            <TableCell>{emp.code}</TableCell>
+                                            <TableCell>{emp.name}</TableCell>
+                                            <TableCell>{emp.designation}</TableCell>
+                                            <TableCell>{emp.doj}</TableCell>
+                                            <TableCell>{emp.status}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">All "Active" employees from the Employee Master were found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''} (or no active employees in master).</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
         </TabsContent>
       </Tabs>
     </>
