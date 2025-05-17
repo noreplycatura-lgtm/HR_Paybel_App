@@ -14,6 +14,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+
 import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
@@ -32,6 +37,35 @@ const LOCAL_STORAGE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_attendance_last_upload_context_v4";
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+
+const editEmployeeStatusFormSchema = z.object({
+  dor: z.string().refine((val) => {
+    if (!val) return false; // DOR is required if status is 'Left'
+    try {
+        const date = parseISO(val);
+        return isValid(date);
+    } catch {
+        return false;
+    }
+  }, { message: "Valid Date of Resignation (YYYY-MM-DD) is required"}),
+}).refine((data, ctx) => {
+  const { dor } = data;
+  // @ts-ignore // Accessing context set manually
+  const doj = ctx.path[0]?.doj; 
+  if (doj && dor && isValid(parseISO(doj)) && isValid(parseISO(dor))) {
+    if (isBefore(parseISO(dor), parseISO(doj))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "DOR cannot be before DOJ.",
+        path: ["dor"],
+      });
+      return false;
+    }
+  }
+  return true;
+});
+
+type EditEmployeeStatusFormValues = z.infer<typeof editEmployeeStatusFormSchema>;
 
 
 export default function AttendancePage() {
@@ -63,10 +97,17 @@ export default function AttendancePage() {
   const [editingAttendanceEmployee, setEditingAttendanceEmployee] = React.useState<EmployeeAttendanceData | null>(null);
   const [editableDailyStatuses, setEditableDailyStatuses] = React.useState<string[]>([]);
 
+  const [isEditEmployeeStatusDialogOpen, setIsEditEmployeeStatusDialogOpen] = React.useState(false);
+  const [editingEmployeeForStatus, setEditingEmployeeForStatus] = React.useState<EmployeeDetail | null>(null);
+
   // States for mismatch report
   const [missingInMasterList, setMissingInMasterList] = React.useState<EmployeeAttendanceData[]>([]);
   const [missingInAttendanceList, setMissingInAttendanceList] = React.useState<EmployeeDetail[]>([]);
 
+  const statusEditForm = useForm<EditEmployeeStatusFormValues>({
+    resolver: zodResolver(editEmployeeStatusFormSchema),
+    defaultValues: { dor: "" },
+  });
 
   const getDynamicLocalStorageKeys = (month: string, year: number) => {
     if (!month || year === 0) return { rawDataKey: null, fileNameKey: null };
@@ -125,7 +166,7 @@ export default function AttendancePage() {
               duration: 7000,
             });
             setEmployeeMasterList([]);
-            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Remove corrupted data
+            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); 
           }
         } else {
            setEmployeeMasterList([]); 
@@ -139,10 +180,10 @@ export default function AttendancePage() {
           duration: 7000,
         });
          setEmployeeMasterList([]);
-         localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Attempt to clear on major error
+         localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); 
       }
     }
-  }, [toast]);
+  }, [toast]); // Re-fetch if toast changes (unlikely, but good practice for hooks)
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
@@ -172,7 +213,7 @@ export default function AttendancePage() {
           });
           setRawAttendanceData([]); 
           setUploadedFileName(null); 
-          localStorage.removeItem(rawDataKey); // Remove corrupted data
+          localStorage.removeItem(rawDataKey); 
           localStorage.removeItem(fileNameKey);
         }
       } else {
@@ -243,8 +284,6 @@ export default function AttendancePage() {
       }
       try {
         const employeeDOJ = startOfDay(parseISO(emp.doj));
-        // Include if DOJ is on or before the end of the selected month.
-        // An employee is NOT expected in attendance if their DOJ is AFTER the selected month's end.
         return !isAfter(employeeDOJ, selectedMonthEndDate);
       } catch (e) {
         console.warn(`Invalid DOJ for employee ${emp.code} in master list when checking mismatch: ${emp.doj}`);
@@ -312,7 +351,7 @@ export default function AttendancePage() {
 
         const headerLine = lines[0];
         const headerValues = headerLine.split(',');
-        const expectedBaseColumns = 6; // Status, Division, Code, Name, Designation, DOJ
+        const expectedBaseColumns = 6; 
         const actualDayColumnsInFile = headerValues.length - expectedBaseColumns;
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
 
@@ -346,8 +385,8 @@ export default function AttendancePage() {
           const designation = values[4]?.trim() || "N/A";
           const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
           
-          const hq = "N/A"; // Placeholder, not in this specific attendance CSV format
-          const grossMonthlySalary = 0; // Placeholder
+          const hq = "N/A"; 
+          const grossMonthlySalary = 0; 
 
           if (!code || !name || !designation || !doj ) { 
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) in attendance CSV: missing critical employee details.`);
@@ -387,10 +426,9 @@ export default function AttendancePage() {
                         localStorage.setItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY, JSON.stringify({month: uploadMonth, year: uploadYear}));
                         
                         if (uploadMonth === selectedMonth && uploadYear === selectedYear) {
-                            setRawAttendanceData(newAttendanceData); // Trigger re-process
+                            setRawAttendanceData(newAttendanceData); 
                             setUploadedFileName(file.name);
                         } else {
-                            // This will trigger load useEffect for the new month/year
                             setSelectedMonth(uploadMonth); 
                             setSelectedYear(uploadYear);
                         }
@@ -655,6 +693,34 @@ export default function AttendancePage() {
     setEditingAttendanceEmployee(null);
   };
 
+  const handleOpenEditEmployeeStatusDialog = (employee: EmployeeDetail) => {
+    setEditingEmployeeForStatus(employee);
+    statusEditForm.reset({ dor: employee.dor || "" }); // Pre-fill DOR if available
+    setIsEditEmployeeStatusDialogOpen(true);
+  };
+
+  const handleSaveEmployeeStatus = (values: EditEmployeeStatusFormValues) => {
+    if (!editingEmployeeForStatus) return;
+
+    const updatedMasterList = employeeMasterList.map(emp =>
+      emp.id === editingEmployeeForStatus.id
+        ? { ...emp, status: "Left" as "Left" | "Active", dor: values.dor }
+        : emp
+    );
+    setEmployeeMasterList(updatedMasterList); // Update local state
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedMasterList));
+        toast({ title: "Employee Status Updated", description: `${editingEmployeeForStatus.name} marked as 'Left' with DOR ${values.dor}.` });
+      } catch (error) {
+        toast({ title: "Storage Error", description: "Could not update employee master in localStorage.", variant: "destructive" });
+      }
+    }
+    setIsEditEmployeeStatusDialogOpen(false);
+    setEditingEmployeeForStatus(null);
+  };
+
+
   const daysInSelectedViewMonth = (selectedYear && selectedMonth && selectedYear > 0 && months.indexOf(selectedMonth) !== -1) 
     ? getDaysInMonth(new Date(selectedYear, months.indexOf(selectedMonth))) 
     : 0;
@@ -803,6 +869,46 @@ export default function AttendancePage() {
             </DialogClose>
             <Button type="button" onClick={handleUpdateAttendance}>Update Attendance</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditEmployeeStatusDialogOpen} onOpenChange={(isOpen) => {
+        setIsEditEmployeeStatusDialogOpen(isOpen);
+        if (!isOpen) setEditingEmployeeForStatus(null);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Employee Status for {editingEmployeeForStatus?.name}</DialogTitle>
+            <DialogDescription>
+              Mark employee as 'Left' and set their Date of Resignation (DOR). This will update the Employee Master.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...statusEditForm}>
+            <form 
+              onSubmit={statusEditForm.handleSubmit(handleSaveEmployeeStatus)} 
+              className="space-y-4 py-4"
+            >
+              <FormField
+                control={statusEditForm.control}
+                name="dor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Resignation (DOR)</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 
@@ -1142,6 +1248,7 @@ export default function AttendancePage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead className="min-w-[60px]">Edit</TableHead>
                                         <TableHead>Code</TableHead>
                                         <TableHead>Name (from Master)</TableHead>
                                         <TableHead>Designation (from Master)</TableHead>
@@ -1152,6 +1259,11 @@ export default function AttendancePage() {
                                 <TableBody>
                                     {missingInAttendanceList.map(emp => (
                                         <TableRow key={`missing-att-${emp.id}`}>
+                                            <TableCell>
+                                                <Button variant="ghost" size="icon" onClick={() => handleOpenEditEmployeeStatusDialog(emp)} title={`Edit status for ${emp.name}`}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
                                             <TableCell>{emp.code}</TableCell>
                                             <TableCell>{emp.name}</TableCell>
                                             <TableCell>{emp.designation}</TableCell>
@@ -1172,3 +1284,5 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    
