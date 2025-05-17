@@ -25,7 +25,7 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
-const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1"; // For one-time clearing
+const TEMP_LEAVE_DATA_CLEARED_FLAG = "novita_temp_leave_data_cleared_v1"; 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -94,7 +94,6 @@ export default function LeavePage() {
     let loadedLeaveApplications: LeaveApplication[] = [];
 
     if (typeof window !== 'undefined') {
-      // One-time clearing logic (can be removed after one successful run per user/browser)
       const hasCleared = sessionStorage.getItem(TEMP_LEAVE_DATA_CLEARED_FLAG);
       if (!hasCleared) {
         try {
@@ -147,13 +146,12 @@ export default function LeavePage() {
       }
       setOpeningBalances(loadedOpeningBalances);
 
-      // Leave Applications are conceptual for calculation, no UI to add/manage them directly here for now
       try {
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
           const parsedApps = JSON.parse(storedLeaveApps);
           if (Array.isArray(parsedApps)) {
-            loadedLeaveApplications = parsedApps; // Use if formal leave app system exists
+            loadedLeaveApplications = parsedApps;
           } else {
             console.warn("Leave Mgt: Leave applications in localStorage is not an array. Defaulting to empty. Stored data might be corrupted.");
           }
@@ -161,10 +159,9 @@ export default function LeavePage() {
       } catch (error) {
         console.warn("Error loading leave applications from localStorage for Leave Mgt:", error);
       }
-      setLeaveApplications(loadedLeaveApplications); // For now, it will mostly be empty
+      setLeaveApplications(loadedLeaveApplications); 
     }
-    // Dependency array corrected for initial data load
-  }, [toast]);
+  }, []);
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
@@ -183,18 +180,17 @@ export default function LeavePage() {
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
 
     const newDisplayData = employees
-      .filter(emp => emp.status === "Active") // Only show active employees
+      .filter(emp => emp.status === "Active") 
       .map(emp => {
-        // Get accrued balances up to end of selected month (as if no leaves from attendance were taken yet)
+        
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, leaveApplications, openingBalances // Pass formal leave apps if any
+          emp, selectedYear, monthIndex, [], openingBalances 
         );
 
         let usedCLFromAttendance = 0;
         let usedSLFromAttendance = 0;
         let usedPLFromAttendance = 0;
 
-        // Get actual used leaves from attendance for the selected month
         if (typeof window !== 'undefined') {
           const { rawDataKey } = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
           if (rawDataKey) {
@@ -217,12 +213,10 @@ export default function LeavePage() {
           }
         }
         
-        // Final EOM balance for selected month = Accrued EOM - Used from Attendance in selected month
         const finalBalanceCL = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
         const finalSLBalance = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
         const finalBalancePL = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
 
-        // Calculate usage for the previous month
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
         let usedPLLastMonth = 0;
@@ -252,7 +246,6 @@ export default function LeavePage() {
           }
         }
         
-        // Calculate Opening Balance for Next Month
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndex = getMonth(nextMonthDateObject);
         const nextMonthYear = getYear(nextMonthDateObject);
@@ -274,9 +267,9 @@ export default function LeavePage() {
         let openingSLNextMonth = 0;
         const openingPLNextMonth = finalBalancePL + accrualPLNextMonth; 
 
-        if (nextMonthIndex === 3) { // April is month 3 (0-indexed)
-            openingCLNextMonth = 0 + accrualCLNextMonth; // Reset + next month's accrual
-            openingSLNextMonth = 0 + accrualSLNextMonth; // Reset + next month's accrual
+        if (nextMonthIndex === 3) { 
+            openingCLNextMonth = 0 + accrualCLNextMonth; 
+            openingSLNextMonth = 0 + accrualSLNextMonth; 
         } else {
             openingCLNextMonth = finalBalanceCL + accrualCLNextMonth;
             openingSLNextMonth = finalSLBalance + accrualSLNextMonth;
@@ -301,7 +294,6 @@ export default function LeavePage() {
     setDisplayData(newDisplayData);
     setSelectedEmployeeIds(new Set());
     setIsLoading(false);
-    // Dependency array includes all necessary states for re-calculation
   }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
@@ -327,7 +319,6 @@ export default function LeavePage() {
 
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
-    // Determine financial year start based on selectedMonth and selectedYear
     const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
     setEditingOBYear(currentFinancialYearStart);
 
@@ -482,7 +473,7 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>(); // To track employeeCode-financialYearStart uniqueness within the file
+            const employeeCodesInFile = new Set<string>(); 
             let skippedDuplicatesInFile = 0;
             let malformedRows = 0;
 
@@ -522,7 +513,6 @@ export default function LeavePage() {
             let message = "";
             if (newOpeningBalances.length > 0) {
                 message += `${newOpeningBalances.length} records processed from ${file.name}. `;
-                // Update existing records or add new ones
                 setOpeningBalances(prevBalances => {
                     const existingRecordsMap = new Map(prevBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
                     newOpeningBalances.forEach(nb => {
@@ -598,7 +588,6 @@ export default function LeavePage() {
         setIsDeleteSelectedOBDialogOpen(false);
         return;
     }
-    // Determine financial year start based on selectedMonth and selectedYear
     const financialYearToClear = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
 
     const updatedOpeningBalances = openingBalances.filter(ob =>
@@ -828,19 +817,19 @@ export default function LeavePage() {
                             const parts = emp.doj.split(/[-/.]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
-                                if (parseInt(parts[2]) > 1000) { // DD/MM/YYYY or MM/DD/YYYY
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try YYYY-MM-DD
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try YYYY-DD-MM
-                                } else if (parseInt(parts[0]) > 1000) { // YYYY-MM-DD or YYYY/MM/DD
-                                     reparsedDate = parseISO(emp.doj); // Already likely ISO or parseISO handles it
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
+                                } else if (parseInt(parts[0]) > 1000) { 
+                                     reparsedDate = parseISO(emp.doj); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj; // Fallback to original if still not parsable
+                            return emp.doj; 
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj; // Fallback to original on error
+                          return emp.doj; 
                         }
                       }
                       return 'N/A';
@@ -878,3 +867,6 @@ export default function LeavePage() {
     </>
   );
 }
+
+
+    
