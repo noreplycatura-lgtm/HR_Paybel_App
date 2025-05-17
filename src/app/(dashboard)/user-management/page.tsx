@@ -107,7 +107,7 @@ export default function UserManagementPage() {
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, [toast]);
+  }, []); // Corrected dependency array
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
