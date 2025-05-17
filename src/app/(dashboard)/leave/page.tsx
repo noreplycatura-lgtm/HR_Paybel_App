@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -69,6 +70,7 @@ export default function LeavePage() {
   const [editableOB_CL, setEditableOB_CL] = React.useState<number>(0);
   const [editableOB_SL, setEditableOB_SL] = React.useState<number>(0);
   const [editableOB_PL, setEditableOB_PL] = React.useState<number>(0);
+  const [isDeleteSelectedOBDialogOpen, setIsDeleteSelectedOBDialogOpen] = React.useState(false);
 
 
   React.useEffect(() => {
@@ -91,14 +93,14 @@ export default function LeavePage() {
           if (Array.isArray(parsedEmployees)) {
             loadedEmployees = parsedEmployees;
           } else {
-             console.error("Employee master data in localStorage is not an array. Using empty list.");
+             console.error("Leave Mgt: Employee master data in localStorage is not an array. Using empty list.");
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
         } else {
           toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
         }
       } catch (error) {
-        console.error("Error loading employee master data from localStorage:", error);
+        console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
         toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
       setEmployees(loadedEmployees);
@@ -110,13 +112,13 @@ export default function LeavePage() {
             if (Array.isArray(parsedOB)) {
                 loadedOpeningBalances = parsedOB;
             } else {
-                console.error("Opening balances in localStorage is not an array. Using empty list.");
+                console.error("Leave Mgt: Opening balances in localStorage is not an array. Using empty list.");
                 toast({ title: "Data Load Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
             }
         }
       } catch (error)
       {
-        console.error("Error loading opening balances from localStorage:", error);
+        console.error("Error loading opening balances from localStorage for Leave Mgt:", error);
         toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
       setOpeningBalances(loadedOpeningBalances);
@@ -490,6 +492,40 @@ export default function LeavePage() {
     URL.revokeObjectURL(url);
     toast({ title: "Template Downloaded", description: "opening_leave_balance_template.csv downloaded." });
   };
+
+  const handleDeleteSelectedOpeningBalances = () => {
+    if (selectedEmployeeIds.size === 0) {
+      toast({ title: "No Selection", description: "Please select employees to clear their opening balances.", variant: "destructive" });
+      return;
+    }
+    setIsDeleteSelectedOBDialogOpen(true);
+  };
+
+  const confirmDeleteSelectedOpeningBalances = () => {
+    if (!selectedMonth || selectedYear === 0) {
+        toast({ title: "Error", description: "Cannot determine financial year. Please select a valid month/year.", variant: "destructive" });
+        setIsDeleteSelectedOBDialogOpen(false);
+        return;
+    }
+    const financialYearToClear = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : selectedYear -1;
+    
+    const updatedOpeningBalances = openingBalances.filter(ob => 
+        !(selectedEmployeeIds.has(ob.employeeCode) && ob.financialYearStart === financialYearToClear)
+    );
+
+    setOpeningBalances(updatedOpeningBalances);
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+        } catch (storageError) {
+            console.error("Error saving updated opening balances to localStorage:", storageError);
+            toast({ title: "Storage Error", description: "Could not save updated opening balances locally.", variant: "destructive" });
+        }
+    }
+    toast({ title: "Opening Balances Cleared", description: `Opening balances for ${selectedEmployeeIds.size} selected employee(s) for FY ${financialYearToClear} have been cleared.` });
+    setSelectedEmployeeIds(new Set());
+    setIsDeleteSelectedOBDialogOpen(false);
+  };
   
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
   const activeEmployeesInDisplay = displayData.filter(emp => emp.status === "Active");
@@ -511,6 +547,9 @@ export default function LeavePage() {
         title="Leave Management Dashboard"
         description="View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after 5 months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month are sourced from attendance data; balances can go negative."
       >
+        <Button variant="destructive" onClick={handleDeleteSelectedOpeningBalances} disabled={selectedEmployeeIds.size === 0}>
+            <Trash2 className="mr-2 h-4 w-4" /> Clear Selected OB ({selectedEmployeeIds.size})
+        </Button>
         <FileUploadButton
             onFileUpload={handleOpeningBalanceUpload}
             buttonText="Upload Opening Balances (CSV)"
@@ -527,6 +566,24 @@ export default function LeavePage() {
             Download Report for Selected (CSV)
         </Button>
       </PageHeader>
+
+      <AlertDialog open={isDeleteSelectedOBDialogOpen} onOpenChange={setIsDeleteSelectedOBDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Clearing Opening Balances</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to clear the opening balances for {selectedEmployeeIds.size} selected employee(s) for the financial year corresponding to {selectedMonth} {selectedYear}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteSelectedOpeningBalances} variant="destructive">
+              Clear Opening Balances
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <Dialog open={isEditOpeningBalanceDialogOpen} onOpenChange={(isOpen) => {
           setIsEditOpeningBalanceDialogOpen(isOpen);
@@ -613,7 +670,8 @@ export default function LeavePage() {
                   <Checkbox
                     checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
                     onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
-                    aria-label="Select all rows"
+                    aria-label="Select all visible rows"
+                    disabled={activeEmployeesInDisplay.length === 0}
                   />
                 </TableHead>
                 <TableHead className="min-w-[60px]">Edit OB</TableHead>
@@ -664,7 +722,7 @@ export default function LeavePage() {
                         try {
                           const parsedDate = parseISO(emp.doj);
                           if (!isValid(parsedDate)) { 
-                            const parts = emp.doj.split(/[-/]/);
+                            const parts = emp.doj.split(/[-/.]/);
                             let reparsedDate = null;
                             if (parts.length === 3) {
                                 if (parseInt(parts[2]) > 1000) { 
@@ -708,3 +766,5 @@ export default function LeavePage() {
     </>
   );
 }
+
+
