@@ -40,7 +40,7 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 
 const editEmployeeStatusFormSchema = z.object({
   dor: z.string().refine((val) => {
-    if (!val) return false; // DOR is required if status is 'Left'
+    if (!val) return false; 
     try {
         const date = parseISO(val);
         return isValid(date);
@@ -50,7 +50,7 @@ const editEmployeeStatusFormSchema = z.object({
   }, { message: "Valid Date of Resignation (YYYY-MM-DD) is required"}),
 }).refine((data, ctx) => {
   const { dor } = data;
-  // @ts-ignore // Accessing context set manually
+  // @ts-ignore 
   const doj = ctx.path[0]?.doj; 
   if (doj && dor && isValid(parseISO(doj)) && isValid(parseISO(dor))) {
     if (isBefore(parseISO(dor), parseISO(doj))) {
@@ -100,7 +100,6 @@ export default function AttendancePage() {
   const [isEditEmployeeStatusDialogOpen, setIsEditEmployeeStatusDialogOpen] = React.useState(false);
   const [editingEmployeeForStatus, setEditingEmployeeForStatus] = React.useState<EmployeeDetail | null>(null);
 
-  // States for mismatch report
   const [missingInMasterList, setMissingInMasterList] = React.useState<EmployeeAttendanceData[]>([]);
   const [missingInAttendanceList, setMissingInAttendanceList] = React.useState<EmployeeDetail[]>([]);
 
@@ -137,7 +136,7 @@ export default function AttendancePage() {
                 initialSelectedMonth = lastContext.month || defaultMonthName;
                 initialSelectedYear = lastContext.year || defaultYear;
             } catch (e) {
-                console.error("Error parsing last upload context from localStorage:", e);
+                console.warn("Error parsing last upload context from localStorage:", e);
             }
         }
     }
@@ -158,15 +157,14 @@ export default function AttendancePage() {
           if (Array.isArray(parsedMaster)) {
             setEmployeeMasterList(parsedMaster);
           } else {
-            console.error("Employee master data in localStorage is not an array.");
+            console.error("Employee master data in localStorage is not an array. Using empty list.");
             toast({
               title: "Master Data Format Error",
-              description: "Stored employee master data is corrupted. Highlighting may be inaccurate. Using empty list.",
+              description: "Stored employee master data is corrupted. Highlighting may be inaccurate.",
               variant: "destructive",
               duration: 7000,
             });
             setEmployeeMasterList([]);
-            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); 
           }
         } else {
            setEmployeeMasterList([]); 
@@ -175,15 +173,14 @@ export default function AttendancePage() {
         console.error("Error loading employee master for attendance cross-check:", error);
         toast({
           title: "Master Data Load Error",
-          description: "Could not load employee master list. Highlighting may be inaccurate. Stored data might be corrupted. Using empty list.",
+          description: "Could not load employee master list. Highlighting may be inaccurate.",
           variant: "destructive",
           duration: 7000,
         });
          setEmployeeMasterList([]);
-         localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); 
       }
     }
-  }, [toast]); // Re-fetch if toast changes (unlikely, but good practice for hooks)
+  }, [toast]); 
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
@@ -207,7 +204,7 @@ export default function AttendancePage() {
           console.error(`Error parsing attendance data from localStorage for ${selectedMonth} ${selectedYear}:`, error);
           toast({
             title: "Data Load Error",
-            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. Stored data might be corrupted. Defaulting to empty.`,
+            description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. Stored data might be corrupted. Please re-upload.`,
             variant: "destructive",
             duration: 7000,
           });
@@ -252,11 +249,24 @@ export default function AttendancePage() {
       if (isMissingInMaster) {
         currentMissingInMaster.push(emp);
       }
-      if (!emp.doj || !isValid(parseISO(emp.doj))) {
-        return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
+
+      // Robust DOJ handling for processing
+      let employeeStartDate = new Date(1900, 0, 1); // Default to a very past date
+      if (emp.doj) {
+          try {
+              const parsedDoj = parseISO(emp.doj);
+              if (isValid(parsedDoj)) {
+                  employeeStartDate = parsedDoj;
+              } else {
+                  console.warn(`Invalid DOJ format "${emp.doj}" for employee ${emp.code} during processing. Defaulting to past date.`);
+              }
+          } catch (e) {
+              console.warn(`Error parsing DOJ "${emp.doj}" for employee ${emp.code} during processing. Defaulting to past date. Error: ${e}`);
+          }
+      } else {
+          console.warn(`Missing DOJ for employee ${emp.code} during processing. Defaulting to past date.`);
       }
-      
-      const employeeStartDate = parseISO(emp.doj);
+
 
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
@@ -292,7 +302,7 @@ export default function AttendancePage() {
     });
     setMissingInAttendanceList(currentMissingInAttendance);
 
-  }, [selectedMonth, selectedYear, rawAttendanceData, employeeMasterList]);
+  }, [rawAttendanceData, selectedYear, selectedMonth, employeeMasterList]);
 
   React.useEffect(() => {
     if (!searchTerm) {
@@ -372,23 +382,65 @@ export default function AttendancePage() {
         let malformedRowCount = 0;
 
         dataRows.forEach((row, rowIndex) => {
-          const values = row.split(',');
+          const values = row.split(',').map(v => v.trim());
           if (values.length < expectedBaseColumns + daysInUploadMonth) {
             console.warn(`Skipping row ${rowIndex + 1} in attendance CSV: insufficient columns. Expected ${expectedBaseColumns + daysInUploadMonth}, got ${values.length}`);
             malformedRowCount++;
             return;
           }
-          const statusValue = values[0]?.trim() || "Active";
-          const division = values[1]?.trim() || "N/A";
-          const code = values[2]?.trim() || `TEMP_ID_${rowIndex}`;
-          const name = values[3]?.trim() || "N/A";
-          const designation = values[4]?.trim() || "N/A";
-          const doj = values[5]?.trim() || new Date().toISOString().split('T')[0]; 
+          const statusValue = values[0] || "Active";
+          const division = values[1] || "N/A";
+          const code = values[2] || `TEMP_ID_${rowIndex}`;
+          const name = values[3] || "N/A";
+          const designation = values[4] || "N/A";
+          
+          const dojFromCsv = values[5];
+          let standardizedDoj = new Date(1900,0,1).toISOString().split('T')[0]; // Fallback
+          if (dojFromCsv) {
+            let parsedCsvDoj = parseISO(dojFromCsv); // Handles YYYY-MM-DD
+            if (isValid(parsedCsvDoj)) {
+                standardizedDoj = format(parsedCsvDoj, 'yyyy-MM-dd');
+            } else {
+                 // Attempt to parse DD/MM/YYYY or MM/DD/YYYY
+                const dateParts = dojFromCsv.match(/^(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})$/);
+                if (dateParts) {
+                    let day, month, year;
+                    const part1 = parseInt(dateParts[1]);
+                    const part2 = parseInt(dateParts[2]);
+                    const part3 = parseInt(dateParts[3]);
+
+                    if (part3 > 1000) { // YYYY is part 3
+                        year = part3;
+                        // Try MM/DD/YYYY
+                        if (part1 <= 12 && part2 <=31 && isValid(new Date(year, part1 - 1, part2))) {
+                           standardizedDoj = format(new Date(year, part1 - 1, part2), 'yyyy-MM-dd');
+                        } 
+                        // Try DD/MM/YYYY
+                        else if (part2 <= 12 && part1 <=31 && isValid(new Date(year, part2 - 1, part1))) {
+                           standardizedDoj = format(new Date(year, part2 - 1, part1), 'yyyy-MM-dd');
+                        }
+                    } else { // YY is part 3 (less common for DOJ, but handle)
+                        year = part3 + 2000;
+                         if (part1 <= 12 && part2 <=31 && isValid(new Date(year, part1 - 1, part2))) {
+                           standardizedDoj = format(new Date(year, part1 - 1, part2), 'yyyy-MM-dd');
+                        } 
+                        else if (part2 <= 12 && part1 <=31 && isValid(new Date(year, part2 - 1, part1))) {
+                           standardizedDoj = format(new Date(year, part2 - 1, part1), 'yyyy-MM-dd');
+                        }
+                    }
+                }
+                 if (standardizedDoj === new Date(1900,0,1).toISOString().split('T')[0]) { // If still fallback after attempts
+                    console.warn(`Could not parse DOJ "${dojFromCsv}" for employee ${code}. Using default 1900-01-01. Please use YYYY-MM-DD format in CSV.`);
+                 }
+            }
+          } else {
+             console.warn(`Missing DOJ for employee ${code}. Using default 1900-01-01.`);
+          }
           
           const hq = "N/A"; 
           const grossMonthlySalary = 0; 
 
-          if (!code || !name || !designation || !doj ) { 
+          if (!code || !name || !designation ) { 
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) in attendance CSV: missing critical employee details.`);
             malformedRowCount++;
             return;
@@ -410,7 +462,7 @@ export default function AttendancePage() {
           });
 
           newAttendanceData.push({
-            id: code, status: statusValue, division, code, name, designation, hq, doj, grossMonthlySalary, attendance: dailyStatuses,
+            id: code, status: statusValue, division, code, name, designation, hq, doj: standardizedDoj, grossMonthlySalary, attendance: dailyStatuses,
           });
         });
         
@@ -459,7 +511,7 @@ export default function AttendancePage() {
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure DOJ is in YYYY-MM-DD.", variant: "destructive", duration: 7000 });
       }
     };
 
@@ -695,7 +747,7 @@ export default function AttendancePage() {
 
   const handleOpenEditEmployeeStatusDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForStatus(employee);
-    statusEditForm.reset({ dor: employee.dor || "" }); // Pre-fill DOR if available
+    statusEditForm.reset({ dor: employee.dor || "" }); 
     setIsEditEmployeeStatusDialogOpen(true);
   };
 
@@ -707,7 +759,7 @@ export default function AttendancePage() {
         ? { ...emp, status: "Left" as "Left" | "Active", dor: values.dor }
         : emp
     );
-    setEmployeeMasterList(updatedMasterList); // Update local state
+    setEmployeeMasterList(updatedMasterList); 
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedMasterList));
@@ -1286,3 +1338,4 @@ export default function AttendancePage() {
 }
 
     
+
