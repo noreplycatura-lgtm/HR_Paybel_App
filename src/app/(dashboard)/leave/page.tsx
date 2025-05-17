@@ -53,8 +53,6 @@ const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
 export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
-  // Leave Applications are conceptual for calculation; no UI to add/remove them directly here in this version
-  // const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
@@ -84,7 +82,6 @@ export default function LeavePage() {
     setIsLoading(true);
     if (typeof window !== 'undefined') {
       let loadedEmployees: EmployeeDetail[] = [];
-      // let loadedLeaveApplications: LeaveApplication[] = []; // Not actively managed by UI for now
       let loadedOpeningBalances: OpeningLeaveBalance[] = [];
 
       try {
@@ -94,24 +91,17 @@ export default function LeavePage() {
           if (Array.isArray(parsedEmployees)) {
             loadedEmployees = parsedEmployees;
           } else {
-             console.error("Employee master data in localStorage is not an array.");
-             toast({ title: "Employee Data Error", description: "Stored employee master is corrupted. Using empty list.", variant: "destructive", duration: 7000});
+             console.error("Employee master data in localStorage is not an array. Using empty list.");
+             toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
         } else {
           toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted.", variant: "destructive", duration: 7000 });
+        toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
       setEmployees(loadedEmployees);
-
-      // Conceptual: load leave applications if a UI to manage them existed
-      // try {
-      //   const storedLeaveApplications = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-      //   if (storedLeaveApplications) loadedLeaveApplications = JSON.parse(storedLeaveApplications);
-      // } catch (error) { console.error("Error loading leave applications from localStorage:", error); toast({ title: "Data Load Error", description: "Could not load leave applications. Stored data might be corrupted.", variant: "destructive", duration: 7000 }); }
-      // setLeaveApplications(loadedLeaveApplications);
 
       try {
         const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
@@ -120,18 +110,18 @@ export default function LeavePage() {
             if (Array.isArray(parsedOB)) {
                 loadedOpeningBalances = parsedOB;
             } else {
-                console.error("Opening balances in localStorage is not an array.");
-                toast({ title: "Opening Balance Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+                console.error("Opening balances in localStorage is not an array. Using empty list.");
+                toast({ title: "Data Load Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
             }
         }
       } catch (error)
       {
         console.error("Error loading opening balances from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted.", variant: "destructive", duration: 7000 });
+        toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
       setOpeningBalances(loadedOpeningBalances);
     }
-    setIsLoading(false);
+    // Delay setting isLoading to false until after the next effect that depends on these loaded values has a chance to run
   }, [toast]);
 
   React.useEffect(() => {
@@ -143,7 +133,7 @@ export default function LeavePage() {
     
     setIsLoading(true); 
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) {
+    if (monthIndex === -1) { 
       setDisplayData([]);
       setIsLoading(false);
       return;
@@ -156,7 +146,7 @@ export default function LeavePage() {
           emp, 
           selectedYear, 
           monthIndex, 
-          [], // Pass empty array for formal leave applications
+          [], // Pass empty array for formal leave applications for now
           openingBalances
         );
 
@@ -185,7 +175,6 @@ export default function LeavePage() {
                 }
               } catch (e) {
                 console.warn(`Could not parse attendance for ${emp.code} in ${selectedMonth} ${selectedYear} for Leave Page: ${e}`);
-                // Do not toast for each employee; could be overwhelming.
               }
             }
           }
@@ -679,8 +668,8 @@ export default function LeavePage() {
                             let reparsedDate = null;
                             if (parts.length === 3) {
                                 if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(\`\${parts[2]}-\${parts[1]}-\${parts[0]}\`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(\`\${parts[2]}-\${parts[0]}-\${parts[1]}\`);
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
                                 } else if (parseInt(parts[0]) > 1000) { 
                                      reparsedDate = parseISO(emp.doj);
                                 }
@@ -719,5 +708,3 @@ export default function LeavePage() {
     </>
   );
 }
-
-    
