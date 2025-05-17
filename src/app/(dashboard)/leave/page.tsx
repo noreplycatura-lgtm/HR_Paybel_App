@@ -82,7 +82,35 @@ export default function LeavePage() {
 
   React.useEffect(() => {
     setIsLoading(true);
+    let didClearOB = false;
+    let didClearApps = false;
+
     if (typeof window !== 'undefined') {
+        // --- TEMPORARY CODE TO CLEAR LEAVE DATA AS PER USER REQUEST ---
+        // This will run once when the page loads next time.
+        // This code block should ideally be removed after it has served its purpose
+        // to avoid clearing data on every subsequent page load.
+        console.log("LeavePage: Checking if leave data needs to be cleared from localStorage...");
+        if (localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY)) {
+            localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+            didClearOB = true;
+            console.log("LeavePage: Opening balances cleared from localStorage.");
+        }
+        if (localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY)) {
+            localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+            didClearApps = true;
+            console.log("LeavePage: Leave applications cleared from localStorage.");
+        }
+        // --- END OF TEMPORARY CODE ---
+
+        if (didClearOB || didClearApps) {
+            toast({
+                title: "Leave Data Cleared",
+                description: "All opening leave balances and/or leave application history have been cleared. Please re-upload Jan 2025 balances if needed.",
+                duration: 9000,
+            });
+        }
+      
       let loadedEmployees: EmployeeDetail[] = [];
       let loadedOpeningBalances: OpeningLeaveBalance[] = [];
 
@@ -97,7 +125,8 @@ export default function LeavePage() {
              toast({ title: "Data Load Error", description: "Stored employee master data is corrupted. Using empty list.", variant: "destructive", duration: 7000});
           }
         } else {
-          toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
+          // toast({ title: "No Employee Data", description: "Employee master data not found. Please set up employees first.", variant: "destructive", duration: 7000 });
+          // Do not toast here if it's normal for it to be empty initially
         }
       } catch (error) {
         console.error("Error loading employee master data from localStorage for Leave Mgt:", error);
@@ -106,24 +135,24 @@ export default function LeavePage() {
       setEmployees(loadedEmployees);
 
       try {
-        const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+        const storedOpeningBalances = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY); // This will be null if cleared above
         if (storedOpeningBalances) {
             const parsedOB = JSON.parse(storedOpeningBalances);
             if (Array.isArray(parsedOB)) {
                 loadedOpeningBalances = parsedOB;
             } else {
                 console.error("Leave Mgt: Opening balances in localStorage is not an array. Using empty list.");
-                toast({ title: "Data Load Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+                // toast({ title: "Data Load Error", description: "Stored opening balances are corrupted. Using empty list.", variant: "destructive", duration: 7000 });
             }
         }
       } catch (error)
       {
         console.error("Error loading opening balances from localStorage for Leave Mgt:", error);
-        toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+        // toast({ title: "Data Load Error", description: "Could not load opening leave balances. Stored data might be corrupted. Using empty list.", variant: "destructive", duration: 7000 });
       }
-      setOpeningBalances(loadedOpeningBalances);
+      setOpeningBalances(loadedOpeningBalances); // Will be empty if cleared above
     }
-    // Delay setting isLoading to false until after the next effect that depends on these loaded values has a chance to run
+    // setIsLoading(false); // This will be set by the effect below
   }, [toast]);
 
   React.useEffect(() => {
@@ -192,7 +221,7 @@ export default function LeavePage() {
           usedSLInMonth: usedSLFromAttendance,
           usedPLInMonth: usedPLFromAttendance,
           balanceCLAtMonthEnd: finalBalanceCL,
-          balanceSLAtMonthEnd: finalBalanceSL,
+          balanceSLAtMonthEnd: finalSLBalance,
           balancePLAtMonthEnd: finalBalancePL,
         };
     });
@@ -768,3 +797,4 @@ export default function LeavePage() {
 }
 
 
+    
