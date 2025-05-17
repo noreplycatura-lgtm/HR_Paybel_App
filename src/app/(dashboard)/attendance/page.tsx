@@ -18,7 +18,7 @@ import { ATTENDANCE_STATUS_COLORS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth, getDaysInMonth } from "date-fns";
+import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth, getDaysInMonth, isAfter, isValid } from "date-fns";
 
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; // Raw daily statuses as uploaded/parsed
@@ -120,11 +120,12 @@ export default function AttendancePage() {
             console.error("Employee master data in localStorage is not an array.");
             toast({
               title: "Master Data Format Error",
-              description: "Stored employee master data is corrupted. Highlighting may be inaccurate.",
+              description: "Stored employee master data is corrupted. Highlighting may be inaccurate. Using empty list.",
               variant: "destructive",
               duration: 7000,
             });
             setEmployeeMasterList([]);
+            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Remove corrupted data
           }
         } else {
            setEmployeeMasterList([]); 
@@ -133,10 +134,12 @@ export default function AttendancePage() {
         console.error("Error loading employee master for attendance cross-check:", error);
         toast({
           title: "Master Data Load Error",
-          description: "Could not load employee master list. Highlighting may be inaccurate. Stored data might be corrupted.",
+          description: "Could not load employee master list. Highlighting may be inaccurate. Stored data might be corrupted. Using empty list.",
           variant: "destructive",
           duration: 7000,
         });
+         setEmployeeMasterList([]);
+         localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Attempt to clear on major error
       }
     }
   }, [toast]);
@@ -200,18 +203,19 @@ export default function AttendancePage() {
     const attendanceEmployeeCodes = new Set(rawAttendanceData.map(emp => emp.code));
     
     const currentMissingInMaster: EmployeeAttendanceData[] = [];
+    const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
+    const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
+
     const processedData = rawAttendanceData.map(emp => {
       const isMissingInMaster = !masterEmployeeCodes.has(emp.code);
       if (isMissingInMaster) {
         currentMissingInMaster.push(emp);
       }
-      if (!emp.doj) {
+      if (!emp.doj || !isValid(parseISO(emp.doj))) {
         return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
       
       const employeeStartDate = parseISO(emp.doj);
-      const selectedMonthStartDate = startOfDay(new Date(selectedYear, monthIndex, 1));
-      const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
 
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
@@ -233,9 +237,20 @@ export default function AttendancePage() {
     setProcessedAttendanceData(processedData);
     setMissingInMasterList(currentMissingInMaster);
 
-    const currentMissingInAttendance = employeeMasterList.filter(
-        emp => emp.status === "Active" && !attendanceEmployeeCodes.has(emp.code)
-    );
+    const currentMissingInAttendance = employeeMasterList.filter(emp => {
+      if (emp.status !== "Active" || attendanceEmployeeCodes.has(emp.code) || !emp.doj) {
+        return false;
+      }
+      try {
+        const employeeDOJ = startOfDay(parseISO(emp.doj));
+        // Include if DOJ is on or before the end of the selected month.
+        // An employee is NOT expected in attendance if their DOJ is AFTER the selected month's end.
+        return !isAfter(employeeDOJ, selectedMonthEndDate);
+      } catch (e) {
+        console.warn(`Invalid DOJ for employee ${emp.code} in master list when checking mismatch: ${emp.doj}`);
+        return false; 
+      }
+    });
     setMissingInAttendanceList(currentMissingInAttendance);
 
   }, [selectedMonth, selectedYear, rawAttendanceData, employeeMasterList]);
@@ -1157,5 +1172,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-    
