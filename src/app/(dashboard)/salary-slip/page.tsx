@@ -40,7 +40,7 @@ const COMPANY_DETAILS_MAP = {
     logoText: "Catura Shine Pharma",
     dataAiHint: "company logo pharma wellness"
   },
-  Default: { 
+  Default: {
     name: "Novita HR Portal", // Default fallback
     address: "123 Placeholder St, Placeholder City, PC 12345",
     logoText: "Novita",
@@ -55,7 +55,7 @@ export default function SalarySlipPage() {
   const [selectedEmployee, setSelectedEmployee] = React.useState<string | undefined>();
   const [selectedDivision, setSelectedDivision] = React.useState<string | undefined>();
   const [showSlip, setShowSlip] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false); 
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const handleGenerateSlip = () => {
     setIsLoading(true);
@@ -71,21 +71,21 @@ export default function SalarySlipPage() {
   };
 
   const employeeDetails = sampleEmployees.find(e => e.id === selectedEmployee);
-  const currentCompanyDetails = selectedDivision 
-    ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default 
+  const currentCompanyDetails = selectedDivision
+    ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
 
   const salaryDetails = {
     employeeId: employeeDetails?.id || "N/A",
     name: employeeDetails?.name || "N/A",
-    designation: "Software Engineer", 
-    department: "Technology", 
-    joinDate: "15 Jan 2022", 
-    bankAccount: "XXXXXX1234", 
-    pan: "ABCDE1234F", 
-    payDays: 30, 
-    lopDays: 0, 
+    designation: "Software Engineer",
+    department: "Technology",
+    joinDate: "15 Jan 2022",
+    bankAccount: "XXXXXX1234",
+    pan: "ABCDE1234F",
+    payDays: 30,
+    lopDays: 0,
     earnings: [
       { component: "Basic Salary", amount: 15010 },
       { component: "House Rent Allowance (HRA)", amount: 22495 },
@@ -266,11 +266,11 @@ export default function SalarySlipPage() {
 function convertToWords(num: number): string {
   const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
-  
+
   const inWords = (numToConvert: number): string => {
     let numStr = numToConvert.toString();
-    if (numStr.length > 9) return 'overflow'; 
-    
+    if (numStr.length > 9) return 'overflow';
+
     const n = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
     let str = '';
@@ -279,12 +279,12 @@ function convertToWords(num: number): string {
     str += (parseInt(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]).trim() + ' Thousand ' : '';
     str += (parseInt(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]).trim() + ' Hundred ' : '';
     str += (parseInt(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]).trim() : '';
-    return str.replace(/\s+/g, ' ').trim(); 
+    return str.replace(/\s+/g, ' ').trim();
   };
 
   if (num === 0) return "Zero";
 
-  const [wholePartStr, decimalPartStr] = num.toFixed(2).split('.');
+  const [wholePartStr, decimalPartStr = "00"] = num.toFixed(2).split('.');
   const wholePart = parseInt(wholePartStr);
   const decimalPart = parseInt(decimalPartStr);
 
@@ -295,3 +295,4 @@ function convertToWords(num: number): string {
   return words.trim() ? words.trim() : 'Zero';
 }
 
+    
