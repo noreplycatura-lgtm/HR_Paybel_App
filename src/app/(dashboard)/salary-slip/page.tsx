@@ -9,24 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { getDaysInMonth, parse } from "date-fns";
+import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
-const sampleEmployees = [
-  { id: "E001", name: "John Doe" },
-  { id: "E002", name: "Jane Smith" },
-  { id: "E003", name: "Mike Johnson" },
-];
+import type { EmployeeDetail } from "@/lib/hr-data";
+import { calculateMonthlySalaryComponents, type MonthlySalaryComponents } from "@/lib/salary-calculations";
+import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, calculateMonthsOfService, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL } from "@/lib/hr-calculations";
+import type { OpeningLeaveBalance } from "@/lib/hr-types";
+
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const currentYear = new Date().getFullYear();
-
-interface DateWithMonthName extends Date {
-  getMonthName(): string;
-}
-
-(Date.prototype as DateWithMonthName).getMonthName = function() {
-  return months[this.getMonth()];
-};
 
 const COMPANY_DETAILS_MAP = {
   FMCG: {
@@ -42,75 +34,250 @@ const COMPANY_DETAILS_MAP = {
     dataAiHint: "company logo pharma wellness"
   },
   Default: {
-    name: "Novita HR Portal", 
+    name: "Novita HR Portal",
     address: "123 Placeholder St, Placeholder City, PC 12345",
-    logoText: "Novita",
+    logoText: "Novita HR",
     dataAiHint: "company logo"
   }
 };
 
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+
+interface SalarySlipDataType {
+  employeeId: string;
+  name: string;
+  designation: string;
+  joinDate: string;
+  division: string;
+  totalDaysInMonth: number;
+  actualPayDays: number;
+  earnings: Array<{ component: string; amount: number }>;
+  deductions: Array<{ component: string; amount: number }>;
+  totalEarnings: number;
+  totalDeductions: number;
+  netSalary: number;
+  leaveUsedThisMonth: { cl: number; sl: number; pl: number };
+  leaveBalanceNextMonth: { cl: number; sl: number; pl: number };
+  bankName?: string; // Kept as optional for now
+  accountNumber?: string; // Kept as optional for now
+  panNumber?: string; // Kept as optional for now
+  department?: string; // Kept as optional for now
+}
+
+interface MonthlyEmployeeAttendance {
+  code: string;
+  attendance: string[];
+}
+
+interface EditableSalaryFields {
+  arrears?: number;
+  tds?: number;
+  loan?: number;
+  salaryAdvance?: number;
+  otherDeduction?: number;
+}
+
 
 export default function SalarySlipPage() {
-  const [selectedMonth, setSelectedMonth] = React.useState<string | undefined>( (new Date() as DateWithMonthName).getMonthName());
-  const [selectedYear, setSelectedYear] = React.useState<string | undefined>(currentYear.toString());
-  const [selectedEmployee, setSelectedEmployee] = React.useState<string | undefined>();
+  const { toast } = useToast();
+  const [currentYear, setCurrentYear] = React.useState(new Date().getFullYear());
+  const [availableYears, setAvailableYears] = React.useState<number[]>([]);
+
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(months[new Date().getMonth()]);
+  const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
+  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | undefined>();
   const [selectedDivision, setSelectedDivision] = React.useState<string | undefined>();
+  
+  const [allEmployees, setAllEmployees] = React.useState<EmployeeDetail[]>([]);
+  const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
+
+  const [slipData, setSlipData] = React.useState<SalarySlipDataType | null>(null);
   const [showSlip, setShowSlip] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
 
-  const handleGenerateSlip = () => {
-    setIsLoading(true);
-    if (selectedMonth && selectedYear && selectedEmployee && selectedDivision) {
-      setTimeout(() => {
-        setShowSlip(true);
-        setIsLoading(false);
-      }, 500);
-    } else {
-      alert("Please select month, year, employee, and division.");
-      setIsLoading(false);
+  React.useEffect(() => {
+    const year = new Date().getFullYear();
+    setCurrentYear(year);
+    setAvailableYears(Array.from({ length: 5 }, (_, i) => year - i));
+    setSelectedYear(year);
+  }, []);
+
+  React.useEffect(() => {
+    setIsLoadingEmployees(true);
+    if (typeof window !== 'undefined') {
+      try {
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployeesStr) {
+          const parsed = JSON.parse(storedEmployeesStr);
+          setAllEmployees(Array.isArray(parsed) ? parsed : []);
+        }
+        const storedOBStr = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+        if (storedOBStr) {
+          const parsedOB = JSON.parse(storedOBStr);
+          setOpeningBalances(Array.isArray(parsedOB) ? parsedOB : []);
+        }
+      } catch (error) {
+        console.error("Error loading initial data for salary slip:", error);
+        toast({ title: "Data Load Error", description: "Could not load employee or opening balance data.", variant: "destructive" });
+      }
     }
+    setIsLoadingEmployees(false);
+  }, [toast]);
+
+
+  const handleGenerateSlip = async () => {
+    if (!selectedMonth || !selectedYear || !selectedEmployeeId || !selectedDivision) {
+      toast({ title: "Selection Missing", description: "Please select month, year, division, and employee.", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    setShowSlip(false); // Hide previous slip if any
+
+    const employee = allEmployees.find(e => e.id === selectedEmployeeId);
+    if (!employee) {
+      toast({ title: "Employee Not Found", description: "Selected employee details could not be found.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
+    const monthIndex = months.indexOf(selectedMonth);
+    if (monthIndex === -1) {
+      toast({ title: "Invalid Month", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
+    // Fetch Attendance Data for selected month/year
+    let attendanceForMonth: MonthlyEmployeeAttendance | undefined;
+    if (typeof window !== 'undefined') {
+      const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+      const storedAttendanceData = localStorage.getItem(attendanceKey);
+      if (storedAttendanceData) {
+        try {
+          const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
+          attendanceForMonth = allMonthAttendance.find(att => att.code === employee.code);
+        } catch (e) {
+          console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
+        }
+      }
+    }
+
+    if (!attendanceForMonth) {
+      toast({ title: "Attendance Data Missing", description: `No attendance data found for ${employee.name} for ${selectedMonth} ${selectedYear}. Slip cannot be generated.`, variant: "destructive", duration: 7000 });
+      setIsLoading(false);
+      return;
+    }
+
+    // Fetch Salary Edits for selected month/year
+    let salaryEdits: EditableSalaryFields = {};
+    if (typeof window !== 'undefined') {
+      const editsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+      const storedEditsStr = localStorage.getItem(editsKey);
+      if (storedEditsStr) {
+        try {
+          const allEdits: Record<string, EditableSalaryFields> = JSON.parse(storedEditsStr);
+          salaryEdits = allEdits[employee.id] || {};
+        } catch (e) { console.warn(`Could not parse salary edits for ${selectedMonth} ${selectedYear}: ${e}`); }
+      }
+    }
+
+    const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
+    const dailyStatuses = attendanceForMonth.attendance.slice(0, totalDaysInMonthValue);
+
+    let actualPayDays = 0;
+    let usedCLInMonth = 0, usedSLInMonth = 0, usedPLInMonth = 0;
+    dailyStatuses.forEach(status => {
+      if (status === 'P' || status === 'W' || status === 'PH') actualPayDays++;
+      else if (status === 'CL') { actualPayDays++; usedCLInMonth++; }
+      else if (status === 'SL') { actualPayDays++; usedSLInMonth++; }
+      else if (status === 'PL') { actualPayDays++; usedPLInMonth++; }
+      else if (status === 'HD') actualPayDays += 0.5;
+    });
+    actualPayDays = Math.min(actualPayDays, totalDaysInMonthValue);
+
+    const monthlyComp = calculateMonthlySalaryComponents(employee.grossMonthlySalary);
+    const payFactor = totalDaysInMonthValue > 0 ? actualPayDays / totalDaysInMonthValue : 0;
+
+    const earningsList = [
+      { component: "Basic Salary", amount: monthlyComp.basic * payFactor },
+      { component: "House Rent Allowance (HRA)", amount: monthlyComp.hra * payFactor },
+      { component: "Conveyance Allowance (CA)", amount: monthlyComp.ca * payFactor },
+      { component: "Medical Allowance", amount: monthlyComp.medical * payFactor },
+      { component: "Other Allowance", amount: monthlyComp.otherAllowance * payFactor },
+      { component: "Arrears", amount: salaryEdits.arrears ?? 0 },
+    ];
+    const calculatedTotalEarnings = earningsList.reduce((sum, item) => sum + item.amount, 0);
+
+    const deductionsList = [
+      { component: "Provident Fund (PF)", amount: 0 }, // Placeholder
+      { component: "Professional Tax (PT)", amount: 0 }, // Placeholder
+      { component: "ESIC", amount: 0 }, // Placeholder
+      { component: "Income Tax (TDS)", amount: salaryEdits.tds ?? 0 },
+      { component: "Loan", amount: salaryEdits.loan ?? 0 },
+      { component: "Salary Advance", amount: salaryEdits.salaryAdvance ?? 0 },
+      { component: "Other Deduction", amount: salaryEdits.otherDeduction ?? 0 },
+    ];
+    const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
+    const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
+
+    // Calculate Leave Balance (Next Month Available)
+    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(employee, selectedYear, monthIndex, [], openingBalances);
+    
+    let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
+    const nextMonthDateObject = addMonths(startOfMonth(new Date(selectedYear, monthIndex, 1)), 1);
+    const nextMonthIdx = getMonth(nextMonthDateObject);
+    const nextYr = getYear(nextMonthDateObject);
+    const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
+    const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+
+    if (nextMonthIdx === 3) { // April - FY reset
+      const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
+      nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
+      nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
+      // PL Carries over fully from previous month's EOM balance, then accrual is added
+      nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+      if (obForNextFY && obForNextFY.openingPL !== undefined ) { // If specific OB for PL for new FY, it overrides carry-over
+         nextMonthOpeningPL = obForNextFY.openingPL + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+      }
+    } else {
+      nextMonthOpeningCL = leaveDetailsEOM.balanceCLAtMonthEnd + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
+      nextMonthOpeningSL = leaveDetailsEOM.balanceSLAtMonthEnd + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
+      nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+    }
+
+
+    setSlipData({
+      employeeId: employee.code,
+      name: employee.name,
+      designation: employee.designation,
+      joinDate: employee.doj && isValid(parseISO(employee.doj)) ? format(parseISO(employee.doj), "dd MMM yyyy") : employee.doj || "N/A",
+      division: employee.division,
+      totalDaysInMonth: totalDaysInMonthValue,
+      actualPayDays: actualPayDays,
+      earnings: earningsList,
+      deductions: deductionsList,
+      totalEarnings: calculatedTotalEarnings,
+      totalDeductions: calculatedTotalDeductions,
+      netSalary: calculatedNetSalary,
+      leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
+      leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
+    });
+
+    setShowSlip(true);
+    setIsLoading(false);
   };
 
-  const employeeDetails = sampleEmployees.find(e => e.id === selectedEmployee);
   const currentCompanyDetails = selectedDivision
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
-  let totalDaysInMonth = 30; // Default
-  if (selectedMonth && selectedYear) {
-    const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex !== -1) {
-      const dateForMonth = new Date(parseInt(selectedYear), monthIndex, 1);
-      totalDaysInMonth = getDaysInMonth(dateForMonth);
-    }
+  if (isLoadingEmployees) {
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
-
-  const salaryDetails = {
-    employeeId: employeeDetails?.id || "N/A",
-    name: employeeDetails?.name || "N/A",
-    designation: "Software Engineer",
-    joinDate: "15 Jan 2022",
-    actualPayDays: 28, // Placeholder for actual paid days
-    daysLOP: 2, // Placeholder for LOP days
-    earnings: [
-      { component: "Basic Salary", amount: 15010 },
-      { component: "House Rent Allowance (HRA)", amount: 22495 },
-      { component: "Conveyance Allowance (CA)", amount: 8998 },
-      { component: "Medical Allowance", amount: 6748.50 },
-      { component: "Other Allowance", amount: 6748.50 },
-    ],
-    deductions: [
-      { component: "Provident Fund (PF)", amount: 1800 },
-      { component: "Professional Tax (PT)", amount: 200 },
-      { component: "Income Tax (TDS)", amount: 3500 },
-    ],
-    leaveUsedThisMonth: { cl: 1, sl: 0, pl: 1 }, // Placeholder
-    leaveBalanceNextMonth: { cl: 4, sl: 3, pl: 9 }, // Placeholder
-  };
-  const totalEarnings = salaryDetails.earnings.reduce((sum, item) => sum + item.amount, 0);
-  const totalDeductions = salaryDetails.deductions.reduce((sum, item) => sum + item.amount, 0);
-  const netSalary = totalEarnings - totalDeductions;
-
 
   return (
     <>
@@ -129,12 +296,12 @@ export default function SalarySlipPage() {
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedYear} onValueChange={setSelectedYear} >
+          <Select value={selectedYear ? selectedYear.toString() : ""} onValueChange={(val) => setSelectedYear(parseInt(val))}>
              <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
             </SelectTrigger>
             <SelectContent>
-                {[currentYear, currentYear-1, currentYear-2].map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
+                {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
@@ -146,17 +313,17 @@ export default function SalarySlipPage() {
               <SelectItem value="Wellness">Wellness Division</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee} >
+          <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} >
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select Employee" />
             </SelectTrigger>
             <SelectContent>
-              {sampleEmployees.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.id})</SelectItem>)}
+              {allEmployees.filter(emp => emp.status === "Active").map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>)}
             </SelectContent>
           </Select>
           <Button
             onClick={handleGenerateSlip}
-            disabled={!selectedMonth || !selectedEmployee || !selectedYear || !selectedDivision || isLoading}
+            disabled={!selectedMonth || !selectedEmployeeId || !selectedYear || !selectedDivision || isLoading}
           >
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
              Generate Slip
@@ -164,7 +331,7 @@ export default function SalarySlipPage() {
         </CardContent>
       </Card>
 
-      {showSlip && employeeDetails && (
+      {showSlip && slipData && (
         <Card className="shadow-xl" id="salary-slip-preview">
           <CardHeader className="bg-muted/30 p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
@@ -190,20 +357,21 @@ export default function SalarySlipPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-sm">
               <div>
                 <h3 className="font-semibold mb-2">Employee Details</h3>
-                <p><strong>Name:</strong> {salaryDetails.name}</p>
-                <p><strong>Employee ID:</strong> {salaryDetails.employeeId}</p>
-                <p><strong>Designation:</strong> {salaryDetails.designation}</p>
-                <p><strong>Date of Joining:</strong> {salaryDetails.joinDate}</p>
+                <p><strong>Name:</strong> {slipData.name}</p>
+                <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
+                <p><strong>Designation:</strong> {slipData.designation}</p>
+                <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
+                <p><strong>Division:</strong> {slipData.division}</p>
               </div>
               <div>
                 <h3 className="font-semibold mb-2">Pay Details</h3>
-                <p><strong>Total Days:</strong> {totalDaysInMonth}</p>
-                <p><strong>Pay Days:</strong> {salaryDetails.actualPayDays}</p>
+                <p><strong>Total Days:</strong> {slipData.totalDaysInMonth}</p>
+                <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
                  <Separator className="my-2" />
                 <h3 className="font-semibold mb-1 mt-2">Leave Used (This Month)</h3>
-                <p>CL: {salaryDetails.leaveUsedThisMonth.cl} | SL: {salaryDetails.leaveUsedThisMonth.sl} | PL: {salaryDetails.leaveUsedThisMonth.pl}</p>
+                <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
                 <h3 className="font-semibold mb-1 mt-2">Leave Balance (Next Month Available)</h3>
-                <p>CL: {salaryDetails.leaveBalanceNextMonth.cl} | SL: {salaryDetails.leaveBalanceNextMonth.sl} | PL: {salaryDetails.leaveBalanceNextMonth.pl}</p>
+                <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
               </div>
             </div>
 
@@ -212,28 +380,28 @@ export default function SalarySlipPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
               <div>
                 <h3 className="font-semibold text-lg mb-2">Earnings</h3>
-                {salaryDetails.earnings.map(item => (
+                {slipData.earnings.map(item => (
                   <div key={item.component} className="flex justify-between py-1 border-b border-dashed">
                     <span>{item.component}</span>
-                    <span>₹{item.amount.toFixed(2)}</span>
+                    <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-bold mt-2 pt-1">
                   <span>Total Earnings</span>
-                  <span>₹{totalEarnings.toFixed(2)}</span>
+                  <span>₹{slipData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
               <div>
                 <h3 className="font-semibold text-lg mb-2">Deductions</h3>
-                {salaryDetails.deductions.map(item => (
+                {slipData.deductions.map(item => (
                   <div key={item.component} className="flex justify-between py-1 border-b border-dashed">
                     <span>{item.component}</span>
-                    <span>₹{item.amount.toFixed(2)}</span>
+                    <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-bold mt-2 pt-1">
                   <span>Total Deductions</span>
-                  <span>₹{totalDeductions.toFixed(2)}</span>
+                  <span>₹{slipData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
@@ -241,8 +409,8 @@ export default function SalarySlipPage() {
             <Separator className="my-6" />
 
             <div className="text-right">
-              <p className="text-lg font-bold">Net Salary: ₹{netSalary.toFixed(2)}</p>
-              <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(netSalary)} Rupees Only</p>
+              <p className="text-lg font-bold">Net Salary: ₹{slipData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(slipData.netSalary)} Rupees Only</p>
             </div>
 
             <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
@@ -254,12 +422,17 @@ export default function SalarySlipPage() {
           </CardFooter>
         </Card>
       )}
-       {!showSlip && (
+       {!showSlip && !isLoading && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
             <p>Please select month, year, division, and employee to generate the salary slip.</p>
           </CardContent>
         </Card>
+      )}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
       )}
     </>
   );
@@ -271,7 +444,7 @@ function convertToWords(num: number): string {
 
   const inWords = (numToConvert: number): string => {
     let numStr = numToConvert.toString();
-    if (numStr.length > 9) return 'overflow'; // Handle numbers too large
+    if (numStr.length > 9) return 'overflow'; 
 
     const n = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
@@ -281,21 +454,23 @@ function convertToWords(num: number): string {
     str += (parseInt(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]).trim() + ' Thousand ' : '';
     str += (parseInt(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]).trim() + ' Hundred ' : '';
     str += (parseInt(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]).trim() : '';
-    return str.replace(/\s+/g, ' ').trim(); // Clean up extra spaces
+    return str.replace(/\s+/g, ' ').trim();
   };
 
   if (num === 0) return "Zero";
-
-  const [wholePartStr, decimalPartStr = "00"] = num.toFixed(2).split('.');
+  
+  const roundedNum = parseFloat(num.toFixed(2)); // Round to 2 decimal places
+  const [wholePartStr, decimalPartStr = "00"] = roundedNum.toString().split('.');
   const wholePart = parseInt(wholePartStr);
   const decimalPart = parseInt(decimalPartStr);
 
   let words = inWords(wholePart);
   if (decimalPart > 0) {
-    words += (words ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
-  } else if (!words) { // Case for 0.00
+    words += (words && words !== "Zero" ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
+  } else if (!words) {
     words = "Zero";
   }
   return words.trim() ? words.trim() : 'Zero';
 }
 
+    
