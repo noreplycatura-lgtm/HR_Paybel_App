@@ -20,24 +20,39 @@ import type { OpeningLeaveBalance } from "@/lib/hr-types";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const COMPANY_DETAILS_MAP = {
+interface CompanyDetail {
+  name: string;
+  address: string;
+  logoText: string;
+  dataAiHint: string;
+  logoWidth: number;
+  logoHeight: number;
+}
+
+const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
   FMCG: {
     name: "Novita Healthcare",
     address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
     logoText: "Novita",
-    dataAiHint: "company logo healthcare"
+    dataAiHint: "company logo healthcare",
+    logoWidth: 150,
+    logoHeight: 50,
   },
   Wellness: {
     name: "Catura Shine Pharma LLP.",
     address: "Sco 10, Sector 26, Dhakoli, Zirakpur, Punjab 160104.",
     logoText: "Catura Shine Pharma",
-    dataAiHint: "company logo pharma wellness"
+    dataAiHint: "company logo pharma wellness",
+    logoWidth: 180,
+    logoHeight: 55,
   },
   Default: {
     name: "Novita HR Portal",
     address: "123 Placeholder St, Placeholder City, PC 12345",
     logoText: "Novita HR",
-    dataAiHint: "company logo"
+    dataAiHint: "company logo",
+    logoWidth: 150,
+    logoHeight: 50,
   }
 };
 
@@ -111,15 +126,21 @@ export default function SalarySlipPage() {
         if (storedEmployeesStr) {
           const parsed = JSON.parse(storedEmployeesStr);
           setAllEmployees(Array.isArray(parsed) ? parsed : []);
+        } else {
+          setAllEmployees([]);
         }
         const storedOBStr = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOBStr) {
           const parsedOB = JSON.parse(storedOBStr);
           setOpeningBalances(Array.isArray(parsedOB) ? parsedOB : []);
+        } else {
+          setOpeningBalances([]);
         }
       } catch (error) {
         console.error("Error loading initial data for salary slip:", error);
         toast({ title: "Data Load Error", description: "Could not load employee or opening balance data.", variant: "destructive" });
+        setAllEmployees([]);
+        setOpeningBalances([]);
       }
     }
     setIsLoadingEmployees(false);
@@ -129,13 +150,16 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivision);
       setFilteredEmployeesForSlip(filtered);
-      // Reset selected employee if they are not in the new filtered list
       if (selectedEmployeeId && !filtered.find(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
+        setSlipData(null); 
+        setShowSlip(false);
       }
     } else {
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
+      setSlipData(null);
+      setShowSlip(false);
     }
   }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
@@ -163,6 +187,7 @@ export default function SalarySlipPage() {
     }
 
     let attendanceForMonth: MonthlyEmployeeAttendance | undefined;
+    let attendanceStatuses: string[] = [];
     if (typeof window !== 'undefined') {
       const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
       const storedAttendanceData = localStorage.getItem(attendanceKey);
@@ -170,6 +195,9 @@ export default function SalarySlipPage() {
         try {
           const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
           attendanceForMonth = allMonthAttendance.find(att => att.code === employee.code);
+          if (attendanceForMonth) {
+            attendanceStatuses = attendanceForMonth.attendance;
+          }
         } catch (e) {
           console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
         }
@@ -195,7 +223,7 @@ export default function SalarySlipPage() {
     }
 
     const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
-    const dailyStatuses = attendanceForMonth.attendance.slice(0, totalDaysInMonthValue);
+    const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
 
     let actualPayDays = 0;
     let usedCLInMonth = 0, usedSLInMonth = 0, usedPLInMonth = 0;
@@ -246,10 +274,12 @@ export default function SalarySlipPage() {
       const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
       nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
       if (obForNextFY && obForNextFY.openingPL !== undefined ) { 
-         nextMonthOpeningPL = obForNextFY.openingPL + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+         basePLForNextFY = obForNextFY.openingPL;
       }
+      nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+
     } else {
       nextMonthOpeningCL = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
@@ -350,10 +380,10 @@ export default function SalarySlipPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
               <div>
                 <Image
-                  src={`https://placehold.co/150x50.png?text=${encodeURIComponent(currentCompanyDetails.logoText)}`}
+                  src={`https://placehold.co/${currentCompanyDetails.logoWidth}x${currentCompanyDetails.logoHeight}.png?text=${encodeURIComponent(currentCompanyDetails.logoText)}`}
                   alt={`${currentCompanyDetails.name} Logo`}
-                  width={150}
-                  height={50}
+                  width={currentCompanyDetails.logoWidth}
+                  height={currentCompanyDetails.logoHeight}
                   className="mb-2"
                   data-ai-hint={currentCompanyDetails.dataAiHint}
                 />
@@ -435,14 +465,14 @@ export default function SalarySlipPage() {
           </CardFooter>
         </Card>
       )}
-       {!showSlip && !isLoading && (
+       {!showSlip && !isLoading && !isLoadingEmployees && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
             <p>Please select month, year, division, and employee to generate the salary slip.</p>
           </CardContent>
         </Card>
       )}
-      {isLoading && (
+      {(isLoading || isLoadingEmployees) && (
         <div className="flex items-center justify-center py-12">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -475,12 +505,12 @@ function convertToWords(num: number): string {
   const roundedNum = parseFloat(num.toFixed(2)); 
   const [wholePartStr, decimalPartStr = "00"] = roundedNum.toString().split('.');
   const wholePart = parseInt(wholePartStr);
-  const decimalPart = parseInt(decimalPartStr.padEnd(2, '0')); // Ensure two decimal places
+  const decimalPart = parseInt(decimalPartStr.padEnd(2, '0'));
 
   let words = inWords(wholePart);
   if (decimalPart > 0) {
     words += (words && words !== "Zero" ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
-  } else if (!words || words === "Zero") { // if whole part is zero and decimal is zero
+  } else if (!words || words === "Zero") {
     words = "Zero";
   }
   return words.trim() ? words.trim() : 'Zero';
