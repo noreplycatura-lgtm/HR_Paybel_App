@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,8 @@ export default function PerformanceDeductionPage() {
   const [isLoadingData, setIsLoadingData] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [deductionToDelete, setDeductionToDelete] = React.useState<PerformanceDeductionEntry | null>(null);
+  const [selectedDeductionIds, setSelectedDeductionIds] = React.useState<Set<string>>(new Set());
+  const [isDeleteSelectedDialogOpen, setIsDeleteSelectedDialogOpen] = React.useState(false);
   
   const [currentActionYear, setCurrentActionYear] = React.useState<number>(new Date().getFullYear());
 
@@ -72,15 +75,22 @@ export default function PerformanceDeductionPage() {
         if (storedEmployees) {
           const parsed = JSON.parse(storedEmployees);
           setEmployeeMasterList(Array.isArray(parsed) ? parsed : []);
+        } else {
+           setEmployeeMasterList([]);
+           toast({ title: "Employee Data Missing", description: "Employee master data not found. Please add employees in Employee Master.", variant: "destructive", duration: 7000 });
         }
         const storedDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
         if (storedDeductions) {
           const parsedDeductions = JSON.parse(storedDeductions);
           setPerformanceDeductions(Array.isArray(parsedDeductions) ? parsedDeductions : []);
+        } else {
+          setPerformanceDeductions([]);
         }
       } catch (error) {
         console.error("Error loading data for performance deduction page:", error);
         toast({ title: "Data Load Error", description: "Could not load initial data.", variant: "destructive" });
+        setEmployeeMasterList([]);
+        setPerformanceDeductions([]);
       }
     }
     setIsLoadingData(false);
@@ -107,7 +117,7 @@ export default function PerformanceDeductionPage() {
     }
 
     const newDeduction: PerformanceDeductionEntry = {
-      id: `${values.employeeCode}-${values.month}-${values.year}`, // Simple ID, assumes one deduction per emp/month/year
+      id: `${values.employeeCode}-${values.month}-${values.year}`, 
       employeeCode: values.employeeCode,
       employeeName: selectedEmployee.name,
       designation: selectedEmployee.designation,
@@ -132,7 +142,7 @@ export default function PerformanceDeductionPage() {
     const headers = ["Code", "Name", "Designation", "Amount", "Month", "Year"];
     const csvRows: string[][] = [headers];
 
-    employeeMasterList.forEach(emp => {
+    employeeMasterList.filter(emp => emp.status === "Active").forEach(emp => {
       csvRows.push([`"${emp.code}"`, `"${emp.name}"`, `"${emp.designation}"`, "", "", ""]);
     });
 
@@ -174,12 +184,14 @@ export default function PerformanceDeductionPage() {
         const dataRows = lines.slice(1);
         const newUploadedDeductions: PerformanceDeductionEntry[] = [];
         let skippedCount = 0;
+        let updatedCount = 0;
+        let addedCount = 0;
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',');
-          const code = values[headersFromFile.indexOf("code")]?.trim();
-          const name = values[headersFromFile.indexOf("name")]?.trim(); // For record, not strictly for matching
-          const designation = values[headersFromFile.indexOf("designation")]?.trim(); // For record
+          const code = values[headersFromFile.indexOf("code")]?.trim().replace(/"/g, '');
+          const name = values[headersFromFile.indexOf("name")]?.trim().replace(/"/g, ''); 
+          const designation = values[headersFromFile.indexOf("designation")]?.trim().replace(/"/g, ''); 
           const amountStr = values[headersFromFile.indexOf("amount")]?.trim();
           const monthStr = values[headersFromFile.indexOf("month")]?.trim();
           const yearStr = values[headersFromFile.indexOf("year")]?.trim();
@@ -187,7 +199,7 @@ export default function PerformanceDeductionPage() {
           const amount = parseFloat(amountStr);
           const year = parseInt(yearStr);
 
-          if (!code || !monthStr || isNaN(year) || isNaN(amount) || amount <= 0 || !months.some(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0,3)))) {
+          if (!code || !monthStr || isNaN(year) || year < 1900 || year > 2200 || isNaN(amount) || amount <= 0 || !months.some(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0,3)))) {
             console.warn(`Skipping row ${rowIndex + 1} in CSV: invalid or missing data (Code: ${code}, Amount: ${amountStr}, Month: ${monthStr}, Year: ${yearStr}).`);
             skippedCount++;
             return;
@@ -202,7 +214,7 @@ export default function PerformanceDeductionPage() {
             return;
           }
 
-          newUploadedDeductions.push({
+          const deductionEntry: PerformanceDeductionEntry = {
             id: `${code}-${matchedMonth}-${year}`,
             employeeCode: code,
             employeeName: employeeDetails.name, 
@@ -210,18 +222,26 @@ export default function PerformanceDeductionPage() {
             month: matchedMonth,
             year: year,
             amount: amount,
-          });
+          };
+          
+          const existingIndex = performanceDeductions.findIndex(d => d.id === deductionEntry.id);
+          if (existingIndex > -1) {
+            updatedCount++;
+          } else {
+            addedCount++;
+          }
+          newUploadedDeductions.push(deductionEntry);
         });
 
         if (newUploadedDeductions.length > 0) {
-          const updatedDeductionsMap = new Map(performanceDeductions.map(d => [`${d.employeeCode}-${d.month}-${d.year}`, d]));
+          const updatedDeductionsMap = new Map(performanceDeductions.map(d => [d.id, d]));
           newUploadedDeductions.forEach(nd => {
-            updatedDeductionsMap.set(`${nd.employeeCode}-${nd.month}-${nd.year}`, nd);
+            updatedDeductionsMap.set(nd.id, nd);
           });
           const finalDeductions = Array.from(updatedDeductionsMap.values());
           setPerformanceDeductions(finalDeductions);
           saveDeductionsToLocalStorage(finalDeductions);
-          toast({ title: "Deductions Uploaded", description: `${newUploadedDeductions.length} deduction records processed from CSV. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}` });
+          toast({ title: "Deductions Uploaded", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}` });
         } else {
           toast({ title: "No Valid Data", description: `No valid deduction records found in the uploaded CSV. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
         }
@@ -246,11 +266,52 @@ export default function PerformanceDeductionPage() {
     toast({ title: "Deduction Deleted", description: `Deduction for ${deductionToDelete.employeeName} for ${deductionToDelete.month} ${deductionToDelete.year} deleted.`, variant: "destructive" });
     setDeductionToDelete(null);
   };
+
+  const handleSelectDeduction = (deductionId: string, checked: boolean) => {
+    setSelectedDeductionIds(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (checked) {
+        newSelected.add(deductionId);
+      } else {
+        newSelected.delete(deductionId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAllDeductions = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      const allVisibleDeductionIds = performanceDeductions.map(d => d.id);
+      setSelectedDeductionIds(new Set(allVisibleDeductionIds));
+    } else {
+      setSelectedDeductionIds(new Set());
+    }
+  };
+  
+  const handleDeleteSelectedDeductions = () => {
+    if (selectedDeductionIds.size === 0) {
+      toast({ title: "No Deductions Selected", description: "Please select deductions to delete.", variant: "destructive" });
+      return;
+    }
+    setIsDeleteSelectedDialogOpen(true);
+  };
+
+  const confirmDeleteSelectedDeductions = () => {
+    const updatedDeductions = performanceDeductions.filter(d => !selectedDeductionIds.has(d.id));
+    setPerformanceDeductions(updatedDeductions);
+    saveDeductionsToLocalStorage(updatedDeductions);
+    toast({ title: "Deductions Deleted", description: `${selectedDeductionIds.size} deduction(s) deleted.`, variant: "destructive" });
+    setSelectedDeductionIds(new Set());
+    setIsDeleteSelectedDialogOpen(false);
+  };
   
   const availableYears = React.useMemo(() => {
     const currentYr = new Date().getFullYear();
     return Array.from({ length: 5 }, (_, i) => currentYr - i);
   }, []);
+
+  const isAllSelected = performanceDeductions.length > 0 && selectedDeductionIds.size === performanceDeductions.length;
+  const isIndeterminate = selectedDeductionIds.size > 0 && selectedDeductionIds.size < performanceDeductions.length;
 
 
   if (isLoadingData) {
@@ -259,7 +320,15 @@ export default function PerformanceDeductionPage() {
 
   return (
     <>
-      <PageHeader title="Performance Deductions Management" description="Manage employee performance-related salary deductions." />
+      <PageHeader title="Performance Deductions Management" description="Manage employee performance-related salary deductions.">
+        <Button
+          variant="destructive"
+          onClick={handleDeleteSelectedDeductions}
+          disabled={selectedDeductionIds.size === 0}
+        >
+          <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedDeductionIds.size})
+        </Button>
+      </PageHeader>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <Card className="shadow-md hover:shadow-lg transition-shadow">
@@ -364,6 +433,7 @@ export default function PerformanceDeductionPage() {
                 onFileUpload={handleUploadDeductionsCSV}
                 buttonText="Upload Deductions CSV"
                 acceptedFileTypes=".csv"
+                icon={<Upload className="mr-2 h-4 w-4" />}
               />
               <Button variant="link" onClick={handleDownloadTemplate} className="p-0 h-auto">
                 <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
@@ -382,21 +452,35 @@ export default function PerformanceDeductionPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Designation</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Amount (₹)</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
+                        onCheckedChange={(checkedState) => handleSelectAllDeductions(checkedState as boolean)}
+                        aria-label="Select all visible deductions"
+                        disabled={performanceDeductions.length === 0}
+                      />
+                    </TableHead>
+                    <TableHead className="min-w-[80px]">Code</TableHead>
+                    <TableHead className="min-w-[150px]">Name</TableHead>
+                    <TableHead className="min-w-[150px]">Designation</TableHead>
+                    <TableHead className="min-w-[100px]">Period</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Amount (₹)</TableHead>
+                    <TableHead className="text-center min-w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {performanceDeductions.length > 0 ? (
                     performanceDeductions.sort((a,b) => b.year - a.year || months.indexOf(b.month) - months.indexOf(a.month)).map((deduction) => (
-                      <TableRow key={deduction.id}>
+                      <TableRow key={deduction.id} data-state={selectedDeductionIds.has(deduction.id) ? "selected" : ""}>
                         <TableCell>
-                          <div className="font-medium">{deduction.employeeName}</div>
-                          <div className="text-xs text-muted-foreground">{deduction.employeeCode}</div>
+                          <Checkbox
+                            checked={selectedDeductionIds.has(deduction.id)}
+                            onCheckedChange={(checked) => handleSelectDeduction(deduction.id, !!checked)}
+                            aria-label={`Select deduction for ${deduction.employeeName}`}
+                          />
                         </TableCell>
+                        <TableCell>{deduction.employeeCode}</TableCell>
+                        <TableCell>{deduction.employeeName}</TableCell>
                         <TableCell>{deduction.designation}</TableCell>
                         <TableCell>{deduction.month} {deduction.year}</TableCell>
                         <TableCell className="text-right">{deduction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -409,7 +493,7 @@ export default function PerformanceDeductionPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         No performance deductions recorded yet.
                       </TableCell>
                     </TableRow>
@@ -437,6 +521,25 @@ export default function PerformanceDeductionPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={isDeleteSelectedDialogOpen} onOpenChange={setIsDeleteSelectedDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedDeductionIds.size} selected performance deduction(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteSelectedDeductions} variant="destructive">
+              Delete Selected
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
+
+    
