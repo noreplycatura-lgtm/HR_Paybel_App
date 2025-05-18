@@ -40,7 +40,7 @@ const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
   },
   Wellness: {
     name: "Catura Shine Pharma LLP.",
-    address: "Sco 10, Sector 26, Dhakoli, Zirakpur, Punjab 160104.",
+    address: "35,FF, JP Estate, Sanathal Changodar Highway, Navapura,\nTa- Sanand, Dist-Ahmedabad Gujrat (382210).",
     logoText: "Catura Shine Pharma",
     dataAiHint: "company logo pharma wellness",
     logoWidth: 180,
@@ -160,13 +160,16 @@ export default function SalarySlipPage() {
         setSlipData(null); 
         setShowSlip(false);
       }
-    } else {
+    } else if (selectedDivision) { // if division selected but no employees (or allEmployees is empty)
       setFilteredEmployeesForSlip([]);
-       if (selectedDivision) { 
-        setSelectedEmployeeId(undefined);
-        setSlipData(null);
-        setShowSlip(false);
-      }
+      setSelectedEmployeeId(undefined);
+      setSlipData(null);
+      setShowSlip(false);
+    } else { // No division selected
+      setFilteredEmployeesForSlip([]);
+      setSelectedEmployeeId(undefined);
+      setSlipData(null);
+      setShowSlip(false);
     }
   }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
@@ -232,30 +235,30 @@ export default function SalarySlipPage() {
     const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
     const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
 
-    let actualPayDays = 0;
+    let actualPayDaysValue = 0;
     let usedCLInMonth = 0, usedSLInMonth = 0, usedPLInMonth = 0;
     let absentDaysCount = 0;
     let weekOffsCount = 0;
     let paidHolidaysCount = 0;
 
     dailyStatuses.forEach(status => {
-      if (status === 'P' || status === 'W' || status === 'PH') actualPayDays++;
-      else if (status === 'CL') { actualPayDays++; usedCLInMonth++; }
-      else if (status === 'SL') { actualPayDays++; usedSLInMonth++; }
-      else if (status === 'PL') { actualPayDays++; usedPLInMonth++; }
-      else if (status === 'HD') actualPayDays += 0.5;
+      if (status === 'P' || status === 'W' || status === 'PH') actualPayDaysValue++;
+      else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
+      else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
+      else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
+      else if (status === 'HD') actualPayDaysValue += 0.5;
 
       if (status === 'A') absentDaysCount += 1;
       else if (status === 'HD') absentDaysCount += 0.5; 
       else if (status === 'W') weekOffsCount += 1;
       else if (status === 'PH') paidHolidaysCount += 1;
     });
-    actualPayDays = Math.min(actualPayDays, totalDaysInMonthValue);
+    actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
     const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
 
 
     const monthlyComp = calculateMonthlySalaryComponents(employee.grossMonthlySalary);
-    const payFactor = totalDaysInMonthValue > 0 ? actualPayDays / totalDaysInMonthValue : 0;
+    const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
 
     const earningsList = [
       { component: "Basic Salary", amount: monthlyComp.basic * payFactor },
@@ -312,7 +315,7 @@ export default function SalarySlipPage() {
       joinDate: employee.doj && isValid(parseISO(employee.doj)) ? format(parseISO(employee.doj), "dd MMM yyyy") : employee.doj || "N/A",
       division: employee.division,
       totalDaysInMonth: totalDaysInMonthValue,
-      actualPayDays: actualPayDays,
+      actualPayDays: actualPayDaysValue,
       earnings: earningsList,
       deductions: deductionsList,
       totalEarnings: calculatedTotalEarnings,
@@ -432,7 +435,7 @@ export default function SalarySlipPage() {
                 <p><strong>Designation:</strong> {slipData.designation}</p>
                 <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
                 <p><strong>Division:</strong> {slipData.division}</p>
-
+                
                 <Separator className="my-4" /> 
 
                 <h3 className="font-semibold mb-2">Pay Details</h3>
@@ -552,3 +555,6 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
+
+
+    
