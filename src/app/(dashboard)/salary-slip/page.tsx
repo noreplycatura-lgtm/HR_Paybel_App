@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Download, Eye, Loader2 } from "lucide-react";
+import { Download, Eye, Loader2, Printer, XCircle } from "lucide-react";
 import Image from "next/image";
 import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -123,6 +123,8 @@ export default function SalarySlipPage() {
 
 
   const [slipData, setSlipData] = React.useState<SalarySlipDataType | null>(null);
+  const [bulkSlipsData, setBulkSlipsData] = React.useState<SalarySlipDataType[]>([]);
+  const [isBulkPrintingView, setIsBulkPrintingView] = React.useState(false);
   const [showSlip, setShowSlip] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
@@ -176,7 +178,6 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivision);
       setFilteredEmployeesForSlip(filtered);
-      // If currently selected employee is not in the new filtered list, reset it
       if (selectedEmployeeId && !filtered.find(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
         setSlipData(null); 
@@ -188,40 +189,24 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     } else { 
-      // No division selected, clear employee list and selection
       setFilteredEmployeesForSlip([]); 
       setSelectedEmployeeId(undefined); 
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees]);
+  }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
-
-  const handleGenerateSlip = async () => {
-    if (!selectedMonth || !selectedYear || !selectedEmployeeId || !selectedDivision) {
-      toast({ title: "Selection Missing", description: "Please select month, year, division, and employee.", variant: "destructive" });
-      return;
-    }
-    setIsLoading(true);
-    setShowSlip(false); 
-
-    const employee = allEmployees.find(e => e.id === selectedEmployeeId);
-    if (!employee) {
-      toast({ title: "Employee Not Found", description: "Selected employee details could not be found.", variant: "destructive" });
-      setIsLoading(false);
-      return;
-    }
-
-    const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) {
-      toast({ title: "Invalid Month", variant: "destructive" });
-      setIsLoading(false);
-      return;
-    }
+  const generateSlipDataForEmployee = (
+    employee: EmployeeDetail,
+    month: string,
+    year: number
+  ): SalarySlipDataType | null => {
+    const monthIndex = months.indexOf(month);
+    if (monthIndex === -1) return null;
 
     let attendanceStatuses: string[] = [];
     if (typeof window !== 'undefined') {
-      const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+      const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`;
       const storedAttendanceData = localStorage.getItem(attendanceKey);
       if (storedAttendanceData) {
         try {
@@ -229,38 +214,40 @@ export default function SalarySlipPage() {
           const attendanceForMonth = allMonthAttendance.find(att => att.code === employee.code);
           if (attendanceForMonth) {
             attendanceStatuses = attendanceForMonth.attendance;
+          } else {
+            return null; // No attendance for this employee this month
           }
         } catch (e) {
-          console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
-          toast({ title: "Attendance Data Error", description: `Could not parse attendance for ${selectedMonth} ${selectedYear}. Slip may be inaccurate.`, variant: "destructive" });
+          console.warn(`Could not parse attendance for ${month} ${year}: ${e}`);
+          return null; 
         }
+      } else {
+         return null; // No attendance file for this month
       }
     }
 
-    if (attendanceStatuses.length === 0) { 
-      toast({ title: "Attendance Data Missing", description: `No attendance data found for ${employee.name} for ${selectedMonth} ${selectedYear}. Slip cannot be generated.`, variant: "destructive", duration: 7000 });
-      setIsLoading(false);
-      return;
+    if (attendanceStatuses.length === 0) {
+      return null;
     }
 
     let salaryEdits: EditableSalaryFields = {};
     if (typeof window !== 'undefined') {
-      const editsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+      const editsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${month}_${year}`;
       const storedEditsStr = localStorage.getItem(editsKey);
       if (storedEditsStr) {
         try {
           const allEdits: Record<string, EditableSalaryFields> = JSON.parse(storedEditsStr);
           salaryEdits = allEdits[employee.id] || {};
-        } catch (e) { console.warn(`Could not parse salary edits for ${selectedMonth} ${selectedYear}: ${e}`); }
+        } catch (e) { console.warn(`Could not parse salary edits for ${month} ${year}: ${e}`); }
       }
     }
     
     const performanceDeductionEntry = allPerformanceDeductions.find(
-      pd => pd.employeeCode === employee.code && pd.month === selectedMonth && pd.year === selectedYear
+      pd => pd.employeeCode === employee.code && pd.month === month && pd.year === year
     );
     const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
 
-    const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
+    const totalDaysInMonthValue = getDaysInMonth(new Date(year, monthIndex));
     const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
 
     let actualPayDaysValue = 0;
@@ -283,7 +270,6 @@ export default function SalarySlipPage() {
     });
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
     const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
-
 
     const monthlyComp = calculateMonthlySalaryComponents(employee.grossMonthlySalary);
     const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
@@ -313,23 +299,24 @@ export default function SalarySlipPage() {
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
 
-    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(employee, selectedYear, monthIndex, [], openingBalances);
+    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(employee, year, monthIndex, [], openingBalances);
     
     let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
-    const nextMonthDateObject = addMonths(startOfMonth(new Date(selectedYear, monthIndex, 1)), 1);
+    const nextMonthDateObject = addMonths(startOfMonth(new Date(year, monthIndex, 1)), 1);
     const nextMonthIdx = getMonth(nextMonthDateObject);
     const nextYr = getYear(nextMonthDateObject);
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+    
+    const openingBalanceForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
 
     if (nextMonthIdx === 3) { 
-      const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
-      nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
-      nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
+      nextMonthOpeningCL = (openingBalanceForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
+      nextMonthOpeningSL = (openingBalanceForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
       
       let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; 
-      if (obForNextFY && obForNextFY.openingPL !== undefined ) { 
-         basePLForNextFY = obForNextFY.openingPL;
+      if (openingBalanceForNextFY && openingBalanceForNextFY.openingPL !== undefined ) { 
+         basePLForNextFY = openingBalanceForNextFY.openingPL;
       }
       nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
 
@@ -340,7 +327,7 @@ export default function SalarySlipPage() {
     }
 
 
-    setSlipData({
+    return {
       employeeId: employee.code,
       name: employee.name,
       designation: employee.designation,
@@ -359,9 +346,34 @@ export default function SalarySlipPage() {
       weekOffs: weekOffsCount,
       paidHolidays: paidHolidaysCount,
       totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
-    });
+    };
+  };
 
-    setShowSlip(true);
+
+  const handleGenerateSlip = async () => {
+    if (!selectedMonth || !selectedYear || !selectedEmployeeId || !selectedDivision) {
+      toast({ title: "Selection Missing", description: "Please select month, year, division, and employee.", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    setShowSlip(false); 
+
+    const employee = allEmployees.find(e => e.id === selectedEmployeeId);
+    if (!employee) {
+      toast({ title: "Employee Not Found", description: "Selected employee details could not be found.", variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+    
+    const generatedData = generateSlipDataForEmployee(employee, selectedMonth, selectedYear);
+    if (generatedData) {
+      setSlipData(generatedData);
+      setShowSlip(true);
+    } else {
+      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Attendance data might be missing or corrupted.`, variant: "destructive" });
+      setSlipData(null);
+      setShowSlip(false);
+    }
     setIsLoading(false);
   };
 
@@ -372,7 +384,10 @@ export default function SalarySlipPage() {
     }
     setIsLoading(true);
 
-    const employeesForSummary = allEmployees.filter(emp => emp.division === selectedDivision);
+    const employeesForSummary = allEmployees
+      .filter(emp => emp.division === selectedDivision)
+      .sort((a, b) => a.code.localeCompare(b.code)); // Sort by employee code
+
     if (employeesForSummary.length === 0) {
       toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division.`, variant: "destructive" });
       setIsLoading(false);
@@ -385,67 +400,19 @@ export default function SalarySlipPage() {
 
     let processedCount = 0;
     employeesForSummary.forEach(emp => {
-      const monthIndex = months.indexOf(selectedMonth);
-      if (monthIndex === -1) return;
-
-      let attendanceStatuses: string[] = [];
-      let attendanceForMonth: MonthlyEmployeeAttendance | undefined;
-
-      if (typeof window !== 'undefined') {
-        const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
-        const storedAttendanceData = localStorage.getItem(attendanceKey);
-        if (storedAttendanceData) {
-          try {
-            const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
-            attendanceForMonth = allMonthAttendance.find(att => att.code === emp.code);
-            if (attendanceForMonth) attendanceStatuses = attendanceForMonth.attendance;
-          } catch (e) { /* ignore */ }
-        }
+      const slipSummaryData = generateSlipDataForEmployee(emp, selectedMonth, selectedYear);
+      if (slipSummaryData) {
+         csvRows.push([
+          emp.code,
+          emp.name,
+          emp.designation,
+          emp.grossMonthlySalary.toFixed(2),
+          slipSummaryData.totalEarnings.toFixed(2),
+          slipSummaryData.totalDeductions.toFixed(2),
+          slipSummaryData.netSalary.toFixed(2)
+        ]);
+        processedCount++;
       }
-      
-      if(!attendanceForMonth) return; 
-
-
-      let salaryEdits: EditableSalaryFields = {};
-      if (typeof window !== 'undefined') {
-        const editsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
-        const storedEditsStr = localStorage.getItem(editsKey);
-        if (storedEditsStr) {
-          try {
-            const allEdits: Record<string, EditableSalaryFields> = JSON.parse(storedEditsStr);
-            salaryEdits = allEdits[emp.id] || {};
-          } catch (e) { /* ignore */ }
-        }
-      }
-      const performanceDeductionEntry = allPerformanceDeductions.find(pd => pd.employeeCode === emp.code && pd.month === selectedMonth && pd.year === selectedYear);
-      const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-
-      const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
-      const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
-      let actualPayDaysValue = 0;
-      dailyStatuses.forEach(status => {
-        if (status === 'P' || status === 'W' || status === 'PH' || status === 'CL' || status === 'SL' || status === 'PL') actualPayDaysValue++;
-        else if (status === 'HD') actualPayDaysValue += 0.5;
-      });
-      actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
-
-      const monthlyComp = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
-      const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
-      const totalEarnings = (monthlyComp.basic + monthlyComp.hra + monthlyComp.ca + monthlyComp.medical + monthlyComp.otherAllowance) * payFactor + (salaryEdits.arrears ?? 0);
-      const totalOtherDeductionOnSlip = (salaryEdits.manualOtherDeduction ?? 0) + performanceDeductionAmount;
-      const totalDeductions = (salaryEdits.tds ?? 0) + (salaryEdits.loan ?? 0) + (salaryEdits.salaryAdvance ?? 0) + totalOtherDeductionOnSlip;
-      const netSalary = totalEarnings - totalDeductions;
-
-      csvRows.push([
-        emp.code,
-        emp.name,
-        emp.designation,
-        emp.grossMonthlySalary.toFixed(2),
-        totalEarnings.toFixed(2),
-        totalDeductions.toFixed(2),
-        netSalary.toFixed(2)
-      ]);
-      processedCount++;
     });
     
     if (processedCount === 0) {
@@ -468,18 +435,70 @@ export default function SalarySlipPage() {
     toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} division (${selectedMonth} ${selectedYear}) generated.` });
     setIsLoading(false);
   };
-
-  const handleDownloadAllSlipsPrototype = () => {
-     if (!selectedMonth || !selectedYear || !selectedDivision) {
+  
+  const handlePrintAllSlips = () => {
+    if (!selectedMonth || !selectedYear || !selectedDivision) {
       toast({ title: "Selection Missing", description: "Please select month, year, and division.", variant: "destructive" });
       return;
     }
-    toast({
-      title: "Multi-Slip PDF Download (Prototype)",
-      description: "Direct download of all individual salary slips as PDFs is not yet implemented. Please use 'Download All Summaries (CSV)' for bulk data.",
-      duration: 9000,
+    setIsLoading(true);
+    setShowSlip(false);
+    setSlipData(null);
+
+    const employeesToPrint = allEmployees
+        .filter(emp => emp.division === selectedDivision)
+        .sort((a, b) => a.code.localeCompare(b.code)); // Sort by employee code
+
+    if (employeesToPrint.length === 0) {
+      toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division to print slips.`, variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
+    const generatedSlips: SalarySlipDataType[] = [];
+    let countWithAttendance = 0;
+    employeesToPrint.forEach(emp => {
+      const sData = generateSlipDataForEmployee(emp, selectedMonth, selectedYear);
+      if (sData) {
+        generatedSlips.push(sData);
+        countWithAttendance++;
+      }
     });
+
+    if (countWithAttendance === 0) {
+      toast({ title: "No Slips Generated", description: `No employees in ${selectedDivision} had attendance data for ${selectedMonth} ${selectedYear}. Cannot print slips.`, variant: "destructive", duration: 7000 });
+      setIsLoading(false);
+      return;
+    }
+
+    setBulkSlipsData(generatedSlips);
+    setIsBulkPrintingView(true);
+    // useEffect will handle calling window.print()
   };
+
+  React.useEffect(() => {
+    if (isBulkPrintingView && bulkSlipsData.length > 0) {
+      const timer = setTimeout(() => {
+        try {
+          window.print();
+          toast({
+            title: "Print Initiated",
+            description: "Use your browser's 'Save as PDF' option. Click 'Close Bulk View' to return.",
+            duration: 9000,
+          });
+        } catch (e) {
+          console.error("Error calling window.print():", e);
+          toast({
+            title: "Print Error",
+            description: "Could not open print dialog. Please check browser console.",
+            variant: "destructive",
+          });
+        }
+      }, 500); // Delay to allow DOM to update
+      return () => clearTimeout(timer);
+    }
+  }, [isBulkPrintingView, bulkSlipsData, toast]);
+
 
   const currentCompanyDetails = selectedDivision
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
@@ -494,6 +513,131 @@ export default function SalarySlipPage() {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
+  if (isBulkPrintingView) {
+    return (
+      <div id="salary-slip-printable-area">
+        <Button
+          onClick={() => {
+            setIsBulkPrintingView(false);
+            setBulkSlipsData([]);
+            setIsLoading(false);
+          }}
+          variant="outline"
+          className="fixed top-4 right-4 no-print z-[101]"
+        >
+          <XCircle className="mr-2 h-4 w-4" /> Close Bulk View
+        </Button>
+        {bulkSlipsData.map((sData, index) => {
+          const empDivisionCompanyDetails = sData.division 
+             ? COMPANY_DETAILS_MAP[sData.division as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
+             : COMPANY_DETAILS_MAP.Default;
+
+          const slipNextMonthDate = selectedMonth && selectedYear > 0 ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
+          const slipNextMonthName = format(slipNextMonthDate, "MMMM");
+          const slipNextMonthYearNum = getYear(slipNextMonthDate);
+
+          return (
+            <Card key={`bulk-slip-${sData.employeeId}-${index}`} className={`shadow-xl salary-slip-page ${index > 0 ? 'print-page-break-before' : ''} mb-4`}>
+              <CardHeader className="bg-muted/30 p-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                  <div>
+                    <Image
+                      src={`https://placehold.co/${empDivisionCompanyDetails.logoWidth}x${empDivisionCompanyDetails.logoHeight}.png?text=${encodeURIComponent(empDivisionCompanyDetails.logoText)}`}
+                      alt={`${empDivisionCompanyDetails.name} Logo`}
+                      width={empDivisionCompanyDetails.logoWidth}
+                      height={empDivisionCompanyDetails.logoHeight}
+                      className="mb-2"
+                      data-ai-hint={empDivisionCompanyDetails.dataAiHint}
+                    />
+                    <p className="text-sm font-semibold">{empDivisionCompanyDetails.name}</p>
+                    <p className="text-xs text-muted-foreground whitespace-pre-line">{empDivisionCompanyDetails.address}</p>
+                  </div>
+                  <div className="text-right mt-4 sm:mt-0">
+                    <CardTitle className="text-2xl">Salary Slip</CardTitle>
+                    <CardDescription>For {selectedMonth} {selectedYear}</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+                    {/* Column 1: Employee & Pay Details */}
+                    <div>
+                        <h3 className="font-semibold mb-2">Employee Details</h3>
+                        <p><strong>Name:</strong> {sData.name}</p>
+                        <p><strong>Employee ID:</strong> {sData.employeeId}</p>
+                        <p><strong>Designation:</strong> {sData.designation}</p>
+                        <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
+                        <p><strong>Division:</strong> {sData.division}</p>
+                        <Separator className="my-4" />
+                        <h3 className="font-semibold mb-2">Pay Details</h3>
+                        <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
+                        <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
+                    </div>
+                    {/* Column 2: Attendance & Leave Summary */}
+                    <div>
+                        <h3 className="font-semibold mb-2">Attendance Summary</h3>
+                        <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
+                        <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
+                        <p><strong>Paid Holidays:</strong> {sData.paidHolidays}</p>
+                        <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
+                        <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                        <Separator className="my-4" />
+                        <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
+                        <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
+                        
+                        <Separator className="my-4" />
+                        <h3 className="font-semibold mb-2">Leave Balance (Opening {slipNextMonthName} {slipNextMonthYearNum})</h3>
+                        <p>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
+                    </div>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  <div>
+                    <h3 className="font-semibold text-lg mb-2">Earnings</h3>
+                    {sData.earnings.map(item => (
+                      <div key={item.component} className="flex justify-between py-1 border-b border-dashed">
+                        <span>{item.component}</span>
+                        <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between font-bold mt-2 pt-1">
+                      <span>Total Earnings</span>
+                      <span>₹{sData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg mb-2">Deductions</h3>
+                    {sData.deductions.map(item => (
+                      <div key={item.component} className="flex justify-between py-1 border-b border-dashed">
+                        <span>{item.component}</span>
+                        <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between font-bold mt-2 pt-1">
+                      <span>Total Deductions</span>
+                      <span>₹{sData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator className="my-6" />
+
+                <div className="text-right">
+                  <p className="text-lg font-bold">Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(sData.netSalary)} Rupees Only</p>
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees.">
@@ -502,16 +646,16 @@ export default function SalarySlipPage() {
             disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
             variant="outline"
           >
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isLoading && bulkSlipsData.length === 0 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
              Download All Summaries (CSV)
           </Button>
           <Button
-            onClick={handleDownloadAllSlipsPrototype}
+            onClick={handlePrintAllSlips}
             disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
             variant="outline"
           >
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-            Download All Slips (PDF - Prototype)
+            {isLoading && bulkSlipsData.length > 0 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+            Print All Slips (PDF)
           </Button>
       </PageHeader>
 
@@ -563,7 +707,7 @@ export default function SalarySlipPage() {
             onClick={handleGenerateSlip}
             disabled={!selectedMonth || !selectedEmployeeId || !selectedYear || !selectedDivision || isLoading}
           >
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+            {isLoading && !bulkSlipsData.length ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
              Generate Slip
           </Button>
         </CardContent>
@@ -593,33 +737,35 @@ export default function SalarySlipPage() {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-              <div>
-                <h3 className="font-semibold mb-2">Employee Details</h3>
-                <p><strong>Name:</strong> {slipData.name}</p>
-                <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
-                <p><strong>Designation:</strong> {slipData.designation}</p>
-                <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
-                <p><strong>Division:</strong> {slipData.division}</p>
-                <Separator className="my-4" />
-                <h3 className="font-semibold mb-2">Pay Details</h3>
-                <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
-                <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Attendance Summary</h3>
-                <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
-                <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
-                <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
-                <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                <p className="invisible">&nbsp;</p> {}
-                <Separator className="my-4" />
-                <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
-                <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-                
-                <Separator className="my-4" />
-                <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
-                <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
-              </div>
+                {/* Column 1: Employee & Pay Details */}
+                <div>
+                    <h3 className="font-semibold mb-2">Employee Details</h3>
+                    <p><strong>Name:</strong> {slipData.name}</p>
+                    <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
+                    <p><strong>Designation:</strong> {slipData.designation}</p>
+                    <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
+                    <p><strong>Division:</strong> {slipData.division}</p>
+                    <Separator className="my-4" />
+                    <h3 className="font-semibold mb-2">Pay Details</h3>
+                    <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
+                    <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
+                </div>
+                {/* Column 2: Attendance & Leave Summary */}
+                <div>
+                    <h3 className="font-semibold mb-2">Attendance Summary</h3>
+                    <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
+                    <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
+                    <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
+                    <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
+                     <p className="invisible">&nbsp;</p> 
+                    <Separator className="my-4" />
+                    <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
+                    <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
+                    
+                    <Separator className="my-4" />
+                    <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
+                    <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
+                </div>
             </div>
 
             <Separator className="my-4" />
@@ -685,14 +831,14 @@ export default function SalarySlipPage() {
           </CardFooter>
         </Card>
       )}
-       {!showSlip && !isLoading && !isLoadingEmployees && (
+       {!showSlip && !isLoading && !isLoadingEmployees && !isBulkPrintingView && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
             <p>Please select month, year, division, and employee to generate the salary slip.</p>
           </CardContent>
         </Card>
       )}
-      {(isLoading || isLoadingEmployees) && (
+      {(isLoading || isLoadingEmployees) && !isBulkPrintingView && (
         <div className="flex items-center justify-center py-12">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -735,3 +881,5 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
+
+    
