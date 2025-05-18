@@ -217,7 +217,6 @@ export default function SalarySlipPage() {
       return;
     }
 
-    let attendanceForMonth: MonthlyEmployeeAttendance | undefined;
     let attendanceStatuses: string[] = [];
     if (typeof window !== 'undefined') {
       const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
@@ -225,7 +224,7 @@ export default function SalarySlipPage() {
       if (storedAttendanceData) {
         try {
           const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
-          attendanceForMonth = allMonthAttendance.find(att => att.code === employee.code);
+          const attendanceForMonth = allMonthAttendance.find(att => att.code === employee.code);
           if (attendanceForMonth) {
             attendanceStatuses = attendanceForMonth.attendance;
           }
@@ -236,7 +235,7 @@ export default function SalarySlipPage() {
       }
     }
 
-    if (!attendanceForMonth && attendanceStatuses.length === 0) { // Check if statuses were populated
+    if (attendanceStatuses.length === 0) { 
       toast({ title: "Attendance Data Missing", description: `No attendance data found for ${employee.name} for ${selectedMonth} ${selectedYear}. Slip cannot be generated.`, variant: "destructive", duration: 7000 });
       setIsLoading(false);
       return;
@@ -388,19 +387,21 @@ export default function SalarySlipPage() {
       if (monthIndex === -1) return;
 
       let attendanceStatuses: string[] = [];
+      let attendanceForMonth: MonthlyEmployeeAttendance | undefined;
+
       if (typeof window !== 'undefined') {
         const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
         const storedAttendanceData = localStorage.getItem(attendanceKey);
         if (storedAttendanceData) {
           try {
             const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
-            const empAttendance = allMonthAttendance.find(att => att.code === emp.code);
-            if (empAttendance) attendanceStatuses = empAttendance.attendance;
+            attendanceForMonth = allMonthAttendance.find(att => att.code === emp.code);
+            if (attendanceForMonth) attendanceStatuses = attendanceForMonth.attendance;
           } catch (e) { /* ignore */ }
         }
       }
       
-      if(attendanceStatuses.length === 0 && !allMonthAttendance.find(att => att.code === emp.code)) return;
+      if(!attendanceForMonth) return; // Skip employee if no attendance data for this month
 
 
       let salaryEdits: EditableSalaryFields = {};
@@ -462,8 +463,20 @@ export default function SalarySlipPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} for ${selectedMonth} ${selectedYear} generated.` });
+    toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} division (${selectedMonth} ${selectedYear}) generated.` });
     setIsLoading(false);
+  };
+
+  const handleDownloadAllSlipsPrototype = () => {
+     if (!selectedMonth || !selectedYear || !selectedDivision) {
+      toast({ title: "Selection Missing", description: "Please select month, year, and division.", variant: "destructive" });
+      return;
+    }
+    toast({
+      title: "Multi-Slip PDF Download (Prototype)",
+      description: "Direct download of all individual salary slips as PDFs is not yet implemented. Please use 'Download All Summaries (CSV)' for bulk data. You can generate and print/save individual slips one by one.",
+      duration: 9000,
+    });
   };
 
   const currentCompanyDetails = selectedDivision
@@ -482,13 +495,21 @@ export default function SalarySlipPage() {
   return (
     <>
       <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees.">
-        <Button
+          <Button
             onClick={handleDownloadAllSummaries}
             disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
             variant="outline"
           >
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
              Download All Summaries (CSV)
+          </Button>
+          <Button
+            onClick={handleDownloadAllSlipsPrototype}
+            disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
+            variant="outline"
+          >
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Download All Slips (PDF - Prototype)
           </Button>
       </PageHeader>
 
@@ -588,7 +609,8 @@ export default function SalarySlipPage() {
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                 <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                <p className="invisible">&nbsp;</p> {}
+
                 <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -712,7 +734,3 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
-    
-
-    
