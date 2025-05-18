@@ -37,8 +37,8 @@ const COMPANY_DETAILS_MAP = {
   Wellness: {
     name: "Catura Shine Pharma LLP.",
     address: "Sco 10, Sector 26, Dhakoli, Zirakpur, Punjab 160104.",
-    logoText: "Catura",
-    dataAiHint: "company logo pharma"
+    logoText: "Catura Shine Pharma",
+    dataAiHint: "company logo pharma wellness"
   },
   Default: { 
     name: "Novita HR Portal", // Default fallback
@@ -165,7 +165,7 @@ export default function SalarySlipPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
               <div>
                 <Image
-                  src={`https://placehold.co/150x50.png?text=${currentCompanyDetails.logoText}`}
+                  src={`https://placehold.co/150x50.png?text=${encodeURIComponent(currentCompanyDetails.logoText)}`}
                   alt={`${currentCompanyDetails.name} Logo`}
                   width={150}
                   height={50}
@@ -266,22 +266,21 @@ export default function SalarySlipPage() {
 function convertToWords(num: number): string {
   const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
-
-  function inWords (numToConvert: number): string {
-      if (numToConvert === 0) return ''; // Handle zero explicitly for parts
-      let numStr = numToConvert.toString();
-      if (numStr.length > 9) return 'overflow'; 
-
-      const n = ('000000000' + numStr).substr(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
-      if (!n) return '';
-      let str = '';
-      str += (parseInt(n[1]) != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
-      str += (parseInt(n[2]) != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
-      str += (parseInt(n[3]) != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
-      str += (parseInt(n[4]) != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
-      str += (parseInt(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
-      return str.trim();
-  }
+  
+  const inWords = (numToConvert: number): string => {
+    let numStr = numToConvert.toString();
+    if (numStr.length > 9) return 'overflow'; 
+    
+    const n = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return '';
+    let str = '';
+    str += (parseInt(n[1]) !== 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]).trim() + ' Crore ' : '';
+    str += (parseInt(n[2]) !== 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]).trim() + ' Lakh ' : '';
+    str += (parseInt(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]).trim() + ' Thousand ' : '';
+    str += (parseInt(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]).trim() + ' Hundred ' : '';
+    str += (parseInt(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]).trim() : '';
+    return str.replace(/\s+/g, ' ').trim(); 
+  };
 
   if (num === 0) return "Zero";
 
@@ -291,10 +290,8 @@ function convertToWords(num: number): string {
 
   let words = inWords(wholePart);
   if (decimalPart > 0) {
-    words += (words ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise ';
+    words += (words ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
   }
-  return words.trim() || 'Zero';
+  return words.trim() ? words.trim() : 'Zero';
 }
 
-
-    
