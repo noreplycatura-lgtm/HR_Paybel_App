@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2 } from "lucide-react";
-import { COMPANY_NAME } from "@/lib/constants";
 import Image from "next/image";
 
 const sampleEmployees = [
@@ -28,40 +27,65 @@ interface DateWithMonthName extends Date {
   return months[this.getMonth()];
 };
 
+const COMPANY_DETAILS_MAP = {
+  FMCG: {
+    name: "Novita Healthcare",
+    address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
+    logoText: "Novita",
+    dataAiHint: "company logo healthcare"
+  },
+  Wellness: {
+    name: "Catura Shine Pharma LLP.",
+    address: "Sco 10, Sector 26, Dhakoli, Zirakpur, Punjab 160104.",
+    logoText: "Catura",
+    dataAiHint: "company logo pharma"
+  },
+  Default: { 
+    name: "Novita HR Portal", // Default fallback
+    address: "123 Placeholder St, Placeholder City, PC 12345",
+    logoText: "Novita",
+    dataAiHint: "company logo"
+  }
+};
+
 
 export default function SalarySlipPage() {
   const [selectedMonth, setSelectedMonth] = React.useState<string | undefined>( (new Date() as DateWithMonthName).getMonthName());
   const [selectedYear, setSelectedYear] = React.useState<string | undefined>(currentYear.toString());
   const [selectedEmployee, setSelectedEmployee] = React.useState<string | undefined>();
+  const [selectedDivision, setSelectedDivision] = React.useState<string | undefined>();
   const [showSlip, setShowSlip] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false); // For button click
+  const [isLoading, setIsLoading] = React.useState(false); 
 
   const handleGenerateSlip = () => {
     setIsLoading(true);
-    if (selectedMonth && selectedYear && selectedEmployee) {
-      // Simulate generation delay
+    if (selectedMonth && selectedYear && selectedEmployee && selectedDivision) {
       setTimeout(() => {
         setShowSlip(true);
         setIsLoading(false);
       }, 500);
     } else {
-      alert("Please select month, year, and employee.");
+      alert("Please select month, year, employee, and division.");
       setIsLoading(false);
     }
   };
 
   const employeeDetails = sampleEmployees.find(e => e.id === selectedEmployee);
+  const currentCompanyDetails = selectedDivision 
+    ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default 
+    : COMPANY_DETAILS_MAP.Default;
+
 
   const salaryDetails = {
     employeeId: employeeDetails?.id || "N/A",
     name: employeeDetails?.name || "N/A",
-    designation: "Software Engineer", // Placeholder
-    department: "Technology", // Placeholder
-    joinDate: "15 Jan 2022", // Placeholder
-    bankAccount: "XXXXXX1234", // Placeholder
-    pan: "ABCDE1234F", // Placeholder
-    payDays: 30, // Placeholder
-    lopDays: 0, // Placeholder
+    designation: "Software Engineer", 
+    department: "Technology", 
+    joinDate: "15 Jan 2022", 
+    bankAccount: "XXXXXX1234", 
+    pan: "ABCDE1234F", 
+    payDays: 30, 
+    lopDays: 0, 
     earnings: [
       { component: "Basic Salary", amount: 15010 },
       { component: "House Rent Allowance (HRA)", amount: 22495 },
@@ -91,7 +115,7 @@ export default function SalarySlipPage() {
         <CardHeader>
           <CardTitle>Select Criteria</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-4">
+        <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
           <Select value={selectedMonth} onValueChange={setSelectedMonth} >
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select Month" />
@@ -108,6 +132,15 @@ export default function SalarySlipPage() {
                 {[currentYear, currentYear-1, currentYear-2].map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
+           <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+            <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectValue placeholder="Select Division" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="FMCG">FMCG Division</SelectItem>
+              <SelectItem value="Wellness">Wellness Division</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={selectedEmployee} onValueChange={setSelectedEmployee} >
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select Employee" />
@@ -118,7 +151,7 @@ export default function SalarySlipPage() {
           </Select>
           <Button
             onClick={handleGenerateSlip}
-            disabled={!selectedMonth || !selectedEmployee || !selectedYear || isLoading}
+            disabled={!selectedMonth || !selectedEmployee || !selectedYear || !selectedDivision || isLoading}
           >
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
              Generate Slip
@@ -132,15 +165,15 @@ export default function SalarySlipPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
               <div>
                 <Image
-                  src="https://placehold.co/150x50.png?text=Novita"
-                  alt={`${COMPANY_NAME} Logo`}
+                  src={`https://placehold.co/150x50.png?text=${currentCompanyDetails.logoText}`}
+                  alt={`${currentCompanyDetails.name} Logo`}
                   width={150}
                   height={50}
                   className="mb-2"
-                  data-ai-hint="company logo"
+                  data-ai-hint={currentCompanyDetails.dataAiHint}
                 />
-                <p className="text-sm text-muted-foreground">{COMPANY_NAME}</p>
-                <p className="text-xs text-muted-foreground">123 Health St, Wellness City, HC 54321</p>
+                <p className="text-sm font-semibold">{currentCompanyDetails.name}</p>
+                <p className="text-xs text-muted-foreground whitespace-pre-line">{currentCompanyDetails.address}</p>
               </div>
               <div className="text-right mt-4 sm:mt-0">
                 <CardTitle className="text-2xl">Salary Slip</CardTitle>
@@ -222,7 +255,7 @@ export default function SalarySlipPage() {
        {!showSlip && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
-            <p>Please select month, year, and employee to generate the salary slip.</p>
+            <p>Please select month, year, division, and employee to generate the salary slip.</p>
           </CardContent>
         </Card>
       )}
@@ -235,8 +268,10 @@ function convertToWords(num: number): string {
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
 
   function inWords (numToConvert: number): string {
+      if (numToConvert === 0) return ''; // Handle zero explicitly for parts
       let numStr = numToConvert.toString();
-      if (numStr.length > 9) return 'overflow'; // Check for overflow
+      if (numStr.length > 9) return 'overflow'; 
+
       const n = ('000000000' + numStr).substr(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
       if (!n) return '';
       let str = '';
@@ -245,8 +280,10 @@ function convertToWords(num: number): string {
       str += (parseInt(n[3]) != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
       str += (parseInt(n[4]) != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
       str += (parseInt(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
-      return str;
+      return str.trim();
   }
+
+  if (num === 0) return "Zero";
 
   const [wholePartStr, decimalPartStr] = num.toFixed(2).split('.');
   const wholePart = parseInt(wholePartStr);
@@ -254,7 +291,10 @@ function convertToWords(num: number): string {
 
   let words = inWords(wholePart);
   if (decimalPart > 0) {
-    words += 'and ' + inWords(decimalPart) + 'Paise ';
+    words += (words ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise ';
   }
-  return words.trim() || 'Zero'; // Handle case for 0
+  return words.trim() || 'Zero';
 }
+
+
+    
