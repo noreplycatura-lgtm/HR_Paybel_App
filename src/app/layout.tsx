@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Novita HR Portal',
-  description: 'Human Resource Management System for Novita Healthcare Pvt. Ltd.',
+  title: 'HR Payroll App',
+  description: 'Human Resource Management System',
 };
 
 export default function RootLayout({

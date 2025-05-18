@@ -1,8 +1,8 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, CalendarCheck, Briefcase, Wrench, FileText, BarChart3, Users, Sheet, UserCog } from 'lucide-react';
+import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarChart3, UserCog } from 'lucide-react';
 
-export const APP_NAME = 'Novita HR Portal';
+export const APP_NAME = 'HR Payroll App';
 export const COMPANY_NAME = 'Novita Healthcare Pvt. Ltd.';
 
 export interface NavItem {
@@ -66,4 +66,3 @@ export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
   PL: 'bg-amber-100 text-amber-700',  // Paid Leave
   '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
 };
-
