@@ -427,8 +427,8 @@ export default function SalarySlipPage() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-sm">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+              <div> {/* Column 1 */}
                 <h3 className="font-semibold mb-2">Employee Details</h3>
                 <p><strong>Name:</strong> {slipData.name}</p>
                 <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
@@ -442,7 +442,7 @@ export default function SalarySlipPage() {
                 <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
               </div>
-              <div>
+              <div> {/* Column 2 */}
                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
@@ -451,9 +451,9 @@ export default function SalarySlipPage() {
                 
                 <Separator className="my-4" />
 
-                <h3 className="font-semibold mb-1 mt-2">Leave Used ({selectedMonth} {selectedYear})</h3>
+                <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-                <h3 className="font-semibold mb-1 mt-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
+                <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
                 <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
               </div>
             </div>
