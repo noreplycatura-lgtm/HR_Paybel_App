@@ -34,14 +34,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Briefcase,
   },
   {
-    title: 'Performance Deduction',
-    href: '/performance-deduction',
-    icon: TrendingDownIcon,
-  },
-  {
     title: 'Salary Sheet',
     href: '/salary-sheet',
     icon: Sheet,
+  },
+  {
+    title: 'Performance Deduction',
+    href: '/performance-deduction',
+    icon: TrendingDownIcon,
   },
   {
     title: 'Salary Slip',
@@ -71,3 +71,4 @@ export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
   PL: 'bg-amber-100 text-amber-700',  // Paid Leave
   '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
 };
+
