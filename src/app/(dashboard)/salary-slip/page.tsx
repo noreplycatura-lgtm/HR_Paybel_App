@@ -175,6 +175,7 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivision);
       setFilteredEmployeesForSlip(filtered);
+      // Reset selected employee if not in new filtered list
       if (selectedEmployeeId && !filtered.find(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
         setSlipData(null); 
@@ -185,9 +186,9 @@ export default function SalarySlipPage() {
       setSelectedEmployeeId(undefined);
       setSlipData(null);
       setShowSlip(false);
-    } else { 
-      setFilteredEmployeesForSlip([]);
-      setSelectedEmployeeId(undefined);
+    } else { // No division selected
+      setFilteredEmployeesForSlip([]); // Clear employee list
+      setSelectedEmployeeId(undefined); // Clear selected employee
       setSlipData(null);
       setShowSlip(false);
     }
@@ -319,17 +320,18 @@ export default function SalarySlipPage() {
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
-    if (nextMonthIdx === 3) { 
+    if (nextMonthIdx === 3) { // April - Financial Year Reset
       const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
       nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; // Start with current EOM PL
-      if (obForNextFY && obForNextFY.openingPL !== undefined ) { 
-         basePLForNextFY = obForNextFY.openingPL; // Override with new FY opening PL if provided
+      // PL: Start with EOM balance of current month, add next month's accrual. If OB for new FY is present, use that instead of EOM.
+      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; // PL at EOM of selected month
+      if (obForNextFY && obForNextFY.openingPL !== undefined ) { // If specific OB for new FY for PL, it overrides carried forward
+         basePLForNextFY = obForNextFY.openingPL;
       }
       nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
 
-    } else {
+    } else { // Not April
       nextMonthOpeningCL = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
       nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
@@ -583,3 +585,5 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
+
+    
