@@ -17,6 +17,7 @@ import { format, parseISO, isValid, getDaysInMonth } from "date-fns";
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -25,33 +26,30 @@ interface SalarySheetEntry extends EmployeeDetail {
   totalDaysInMonth: number;
   daysPaid: number;
   weekOffs: number;
-  daysAbsent: number; // Represents Absent-2 (A+HD)
+  daysAbsent: number; 
   monthlyBasic: number;
   monthlyHRA: number;
   monthlyCA: number;
   monthlyOtherAllowance: number;
   monthlyMedical: number;
-  // Actual (pro-rata) earnings
   actualBasic: number;
   actualHRA: number;
   actualCA: number;
   actualOtherAllowance: number;
   actualMedical: number;
-  // Editable fields
   arrears: number;
   tds: number;
   loan: number;
   salaryAdvance: number;
-  otherDeduction: number;
-  // Calculated Deductions (placeholders for now)
+  manualOtherDeduction: number; // For manually entered other deductions
+  performanceDeduction: number; // For deductions from performance deduction page
   esic: number; 
   professionalTax: number;
   providentFund: number;
-  // Summary
   totalAllowance: number;
   totalDeduction: number;
   netPaid: number;
-  employeeStatus: "Active" | "Left"; // For CSV export logic
+  employeeStatus: "Active" | "Left";
 }
 
 interface MonthlyEmployeeAttendance {
@@ -64,7 +62,15 @@ interface EditableSalaryFields {
   tds?: number;
   loan?: number;
   salaryAdvance?: number;
-  otherDeduction?: number;
+  manualOtherDeduction?: number; // Renamed from otherDeduction
+}
+
+interface PerformanceDeductionEntry {
+  id: string;
+  employeeCode: string;
+  month: string;
+  year: number;
+  amount: number;
 }
 
 
@@ -87,13 +93,14 @@ export default function SalarySheetPage() {
   const [salarySheetData, setSalarySheetData] = React.useState<SalarySheetEntry[]>([]);
   const [filteredSalarySheetData, setFilteredSalarySheetData] = React.useState<SalarySheetEntry[]>([]);
   const [rawAttendanceForPeriod, setRawAttendanceForPeriod] = React.useState<MonthlyEmployeeAttendance[]>([]);
+  const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
   
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
   const [searchTerm, setSearchTerm] = React.useState('');
   
-  const [isLoading, setIsLoading] = React.useState(true); // General page loading (initial filters)
+  const [isLoading, setIsLoading] = React.useState(true); 
   const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
   const [isLoadingCalculations, setIsLoadingCalculations] = React.useState(false);
 
@@ -103,7 +110,7 @@ export default function SalarySheetPage() {
     setCurrentYearState(currentYear);
     setSelectedMonth(months[now.getMonth()]);
     setSelectedYear(currentYear);
-    setIsLoading(false); // Filters are now set
+    setIsLoading(false); 
   }, []);
 
   React.useEffect(() => {
@@ -118,15 +125,23 @@ export default function SalarySheetPage() {
           setAllEmployees([]);
            toast({ 
             title: "Employee Data Missing", 
-            description: "Employee master data not found in local storage. Please add employees in the Employee Master tab first.", 
+            description: "Employee master data not found. Please add employees in Employee Master.", 
             variant: "destructive",
             duration: 7000 
           });
         }
+        const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        if (storedPerfDeductions) {
+            const parsed = JSON.parse(storedPerfDeductions);
+            setAllPerformanceDeductions(Array.isArray(parsed) ? parsed : []);
+        } else {
+            setAllPerformanceDeductions([]);
+        }
       } catch (error) {
         setAllEmployees([]);
-        toast({ title: "Data Load Error", description: "Could not load employee master data. It might be corrupted.", variant: "destructive", duration: 7000 });
-        console.error("Error loading employee master from localStorage:", error);
+        setAllPerformanceDeductions([]);
+        toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions.", variant: "destructive", duration: 7000 });
+        console.error("Error loading initial data from localStorage:", error);
       }
     }
     setIsLoadingEmployees(false);
@@ -134,7 +149,7 @@ export default function SalarySheetPage() {
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear) {
-        setRawAttendanceForPeriod([]); // Reset when month/year changes
+        setRawAttendanceForPeriod([]); 
     }
   }, [selectedMonth, selectedYear]);
 
@@ -169,17 +184,13 @@ export default function SalarySheetPage() {
                         attendanceForMonth = parsedAttendance;
                     } else {
                         console.warn(`Attendance data for ${selectedMonth} ${selectedYear} is not an array.`);
-                        toast({ title: "Attendance Data Format Issue", description: `Stored attendance for ${selectedMonth} ${selectedYear} is corrupted. Salary sheet calculations may be incomplete.`, variant: "destructive", duration: 7000 });
                     }
                 } catch (e) {
                     console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
-                    toast({ title: "Attendance Data Issue", description: `Could not load attendance for ${selectedMonth} ${selectedYear}. Salary sheet calculations might be incomplete. Please upload attendance.`, variant: "destructive", duration: 7000 });
                 }
-            } else {
-                 toast({ title: "No Attendance Data", description: `Attendance data for ${selectedMonth} ${selectedYear} not found. Salary sheet calculations will be affected. Please upload attendance.`, variant: "destructive", duration: 7000 });
             }
         }
-        setRawAttendanceForPeriod(attendanceForMonth); // Update state for JSX access
+        setRawAttendanceForPeriod(attendanceForMonth); 
 
         const editsKey = getSalaryEditsStorageKey(selectedMonth, selectedYear);
         if (editsKey) {
@@ -189,7 +200,6 @@ export default function SalarySheetPage() {
               storedEdits = JSON.parse(storedEditsStr);
             } catch (e) {
               console.warn(`Could not parse stored salary edits for ${selectedMonth} ${selectedYear}: ${e}`);
-              toast({ title: "Salary Edit Data Issue", description: "Could not load previously saved manual salary edits.", variant: "destructive"});
             }
           }
         }
@@ -241,13 +251,20 @@ export default function SalarySheetPage() {
         const tds = empEdits.tds ?? 0;
         const loan = empEdits.loan ?? 0;
         const salaryAdvance = empEdits.salaryAdvance ?? 0;
-        const otherDeduction = empEdits.otherDeduction ?? 0;
+        const manualOtherDeductionVal = empEdits.manualOtherDeduction ?? 0;
+
+        const performanceDeductionEntry = allPerformanceDeductions.find(
+          pd => pd.employeeCode === emp.code && pd.month === selectedMonth && pd.year === selectedYear
+        );
+        const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
         
+        const totalOtherDeductionVal = manualOtherDeductionVal + performanceDeductionAmount;
+
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         const esic = 0; 
         const professionalTax = 0; 
         const providentFund = 0; 
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + otherDeduction;
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionVal;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
@@ -270,7 +287,8 @@ export default function SalarySheetPage() {
           tds,
           loan,
           salaryAdvance,
-          otherDeduction,
+          manualOtherDeduction: manualOtherDeductionVal,
+          performanceDeduction: performanceDeductionAmount,
           totalAllowance,
           esic,
           professionalTax,
@@ -284,7 +302,7 @@ export default function SalarySheetPage() {
 
     setSalarySheetData(newSalarySheetData);
     setIsLoadingCalculations(false);
-  }, [allEmployees, selectedMonth, selectedYear, isLoading, isLoadingEmployees, toast]);
+  }, [allEmployees, selectedMonth, selectedYear, isLoading, isLoadingEmployees, toast, allPerformanceDeductions]);
 
 
   React.useEffect(() => {
@@ -302,15 +320,17 @@ export default function SalarySheetPage() {
   }, [salarySheetData, searchTerm]);
 
   const handleEditableInputChange = (employeeId: string, fieldName: keyof EditableSalaryFields, value: string) => {
+    const numericValue = parseFloat(value) || 0;
+    
     setSalarySheetData(prevData => {
       const newData = prevData.map(emp => {
         if (emp.id === employeeId) {
-          const numericValue = parseFloat(value) || 0;
           const updatedEmp = { ...emp, [fieldName]: numericValue };
 
           // Recalculate dependent fields
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
-          const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund + updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance + updatedEmp.otherDeduction;
+          const totalOtherDeductionVal = (fieldName === 'manualOtherDeduction' ? numericValue : updatedEmp.manualOtherDeduction) + updatedEmp.performanceDeduction;
+          const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund + updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance + totalOtherDeductionVal;
           const newNetPaid = newTotalAllowance - newTotalDeduction;
           
           return {
@@ -336,13 +356,12 @@ export default function SalarySheetPage() {
             }
         } catch (e) {
             console.warn(`Error parsing existing salary edits for ${selectedMonth} ${selectedYear}: ${e}`);
-             toast({ title: "Warning", description: "Could not load previous salary edits. Starting fresh for this session.", variant: "destructive" });
         }
         
         if (!currentEdits[employeeId]) {
           currentEdits[employeeId] = {};
         }
-        currentEdits[employeeId]![fieldName] = parseFloat(value) || 0;
+        currentEdits[employeeId]![fieldName] = numericValue;
         
         try {
           localStorage.setItem(editsKey, JSON.stringify(currentEdits));
@@ -357,7 +376,7 @@ export default function SalarySheetPage() {
 
   const handleDownloadSheet = () => {
     if (salarySheetData.length === 0) { 
-      toast({ title: "No Data", description: "No salary data to download for the selected period. Ensure employees and attendance are available.", variant: "destructive" });
+      toast({ title: "No Data", description: "No salary data for selected period.", variant: "destructive" });
       return;
     }
 
@@ -368,14 +387,16 @@ export default function SalarySheetPage() {
       "Monthly Gross",
       "Actual Basic", "Actual HRA", "Actual CA", "Actual Other Allowance", "Actual Medical",
       "Arrears", "Total Allowance",
-      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Other Deduction",
+      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Manual Other Ded.", "Performance Ded.", "Total Other Ded.",
       "Total Deduction", "Net Paid"
     ];
 
     const csvRows = [headers.join(',')];
     
+    // Use salarySheetData directly as it contains all employees (Active & Left) processed for the month
     salarySheetData.forEach(emp => { 
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
+      const totalOtherDeductionForEmp = emp.manualOtherDeduction + emp.performanceDeduction;
       const row = [
         emp.employeeStatus, emp.division || "N/A", emp.code, emp.name, emp.designation, emp.hq || "N/A", dojFormatted,
         emp.totalDaysInMonth.toString(), emp.daysPaid.toFixed(1), emp.weekOffs.toString(), emp.daysAbsent.toFixed(1),
@@ -383,7 +404,7 @@ export default function SalarySheetPage() {
         emp.grossMonthlySalary.toFixed(2),
         emp.actualBasic.toFixed(2), emp.actualHRA.toFixed(2), emp.actualCA.toFixed(2), emp.actualOtherAllowance.toFixed(2), emp.actualMedical.toFixed(2),
         emp.arrears.toFixed(2), emp.totalAllowance.toFixed(2),
-        emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.otherDeduction.toFixed(2),
+        emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.manualOtherDeduction.toFixed(2), emp.performanceDeduction.toFixed(2), totalOtherDeductionForEmp.toFixed(2),
         emp.totalDeduction.toFixed(2), emp.netPaid.toFixed(2),
       ].map(val => `"${String(val).replace(/"/g, '""')}"`); 
       csvRows.push(row.join(','));
@@ -409,7 +430,9 @@ export default function SalarySheetPage() {
         tds: salarySheetData.reduce((sum, emp) => sum + emp.tds, 0),
         loan: salarySheetData.reduce((sum, emp) => sum + emp.loan, 0),
         salaryAdvance: salarySheetData.reduce((sum, emp) => sum + emp.salaryAdvance, 0),
-        otherDeduction: salarySheetData.reduce((sum, emp) => sum + emp.otherDeduction, 0),
+        manualOtherDeduction: salarySheetData.reduce((sum, emp) => sum + emp.manualOtherDeduction, 0),
+        performanceDeduction: salarySheetData.reduce((sum, emp) => sum + emp.performanceDeduction, 0),
+        totalOtherDeduction: salarySheetData.reduce((sum, emp) => sum + (emp.manualOtherDeduction + emp.performanceDeduction), 0),
         totalDeduction: salarySheetData.reduce((sum, emp) => sum + emp.totalDeduction, 0),
         netPaid: salarySheetData.reduce((sum, emp) => sum + emp.netPaid, 0),
     };
@@ -417,28 +440,11 @@ export default function SalarySheetPage() {
     const totalRow = [
         "", "", "", "", "", "", "TOTALS:",
         "", "", "", "", 
-        totals.monthlyBasic.toFixed(2),
-        totals.monthlyHRA.toFixed(2),
-        totals.monthlyCA.toFixed(2),
-        totals.monthlyOtherAllowance.toFixed(2),
-        totals.monthlyMedical.toFixed(2),
-        totals.grossMonthlySalary.toFixed(2),
-        totals.actualBasic.toFixed(2),
-        totals.actualHRA.toFixed(2),
-        totals.actualCA.toFixed(2),
-        totals.actualOtherAllowance.toFixed(2),
-        totals.actualMedical.toFixed(2),
-        totals.arrears.toFixed(2),
-        totals.totalAllowance.toFixed(2),
-        totals.esic.toFixed(2),
-        totals.professionalTax.toFixed(2),
-        totals.providentFund.toFixed(2),
-        totals.tds.toFixed(2),
-        totals.loan.toFixed(2),
-        totals.salaryAdvance.toFixed(2),
-        totals.otherDeduction.toFixed(2),
-        totals.totalDeduction.toFixed(2),
-        totals.netPaid.toFixed(2),
+        totals.monthlyBasic.toFixed(2), totals.monthlyHRA.toFixed(2), totals.monthlyCA.toFixed(2), totals.monthlyOtherAllowance.toFixed(2), totals.monthlyMedical.toFixed(2), totals.grossMonthlySalary.toFixed(2),
+        totals.actualBasic.toFixed(2), totals.actualHRA.toFixed(2), totals.actualCA.toFixed(2), totals.actualOtherAllowance.toFixed(2), totals.actualMedical.toFixed(2),
+        totals.arrears.toFixed(2), totals.totalAllowance.toFixed(2),
+        totals.esic.toFixed(2), totals.professionalTax.toFixed(2), totals.providentFund.toFixed(2), totals.tds.toFixed(2), totals.loan.toFixed(2), totals.salaryAdvance.toFixed(2), totals.manualOtherDeduction.toFixed(2), totals.performanceDeduction.toFixed(2), totals.totalOtherDeduction.toFixed(2),
+        totals.totalDeduction.toFixed(2), totals.netPaid.toFixed(2),
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
     csvRows.push(totalRow.join(','));
 
@@ -513,7 +519,7 @@ export default function SalarySheetPage() {
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
-          <CardDescription>Displaying active employees with attendance data for the selected month. Download includes all employees (Active & Left) with attendance. Ensure attendance is uploaded for accurate 'Day Paid' calculations. Arrears, TDS, Loan, Salary Advance, and Other Deductions are editable.</CardDescription>
+          <CardDescription>Displaying active employees with attendance. Download includes all employees. Manual Other Deduction and Performance Deduction (from Performance Deduction tab) are summed into the final Other Deduction. ESIC, PT, PF are placeholders (0).</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {isLoadingCalculations ? (
@@ -524,43 +530,37 @@ export default function SalarySheetPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* a-f */}
                   <TableHead className="min-w-[120px]">Division</TableHead>
                   <TableHead className="min-w-[80px]">Code</TableHead>
                   <TableHead className="min-w-[150px]">Name</TableHead>
                   <TableHead className="min-w-[150px]">Designation</TableHead>
                   <TableHead className="min-w-[100px]">HQ</TableHead>
                   <TableHead className="min-w-[100px]">DOJ</TableHead>
-                  {/* g-j */}
                   <TableHead className="text-center min-w-[80px]">Total Days</TableHead>
                   <TableHead className="text-center min-w-[80px]">Day Paid</TableHead>
                   <TableHead className="text-center min-w-[80px]">Week Off</TableHead>
                   <TableHead className="text-center min-w-[80px]">Day Absent</TableHead>
-                  {/* k-p */}
                   <TableHead className="text-right min-w-[100px]">M_Basic (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_HRA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_CA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_Other (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_Medical (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">M_Gross (₹)</TableHead>
-                  {/* q-u */}
                   <TableHead className="text-right min-w-[100px]">Actual_Basic (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_HRA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_CA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_Other (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_Medical (₹)</TableHead>
-                  {/* v-w */}
                   <TableHead className="text-right min-w-[100px]">Arrears (₹)</TableHead>
                   <TableHead className="text-right min-w-[120px]">Total Earning (₹)</TableHead>
-                  {/* x-ad */}
                   <TableHead className="text-right min-w-[100px]">ESIC (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Prof. Tax (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">PF (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">TDS (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Loan (₹)</TableHead>
                   <TableHead className="text-right min-w-[120px]">Salary Adv (₹)</TableHead>
-                  <TableHead className="text-right min-w-[120px]">Other Ded (₹)</TableHead>
-                  {/* ae-af */}
+                  <TableHead className="text-right min-w-[120px]">Manual Other Ded (₹)</TableHead>
+                  <TableHead className="text-right min-w-[140px]">Performance Ded (₹)</TableHead>
                   <TableHead className="text-right min-w-[120px]">Total Ded (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px] font-semibold">Net Paid (₹)</TableHead>
                 </TableRow>
@@ -574,30 +574,25 @@ export default function SalarySheetPage() {
                     <TableCell>{emp.designation}</TableCell>
                     <TableCell>{emp.hq || "N/A"}</TableCell>
                     <TableCell>{emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd MMM yyyy') : emp.doj || "N/A"}</TableCell>
-                    
                     <TableCell className="text-center">{emp.totalDaysInMonth}</TableCell>
                     <TableCell className="text-center">{emp.daysPaid.toFixed(1)}</TableCell>
                     <TableCell className="text-center">{emp.weekOffs}</TableCell>
                     <TableCell className="text-center">{emp.daysAbsent.toFixed(1)}</TableCell>
-
                     <TableCell className="text-right">{emp.monthlyBasic.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.monthlyHRA.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.monthlyCA.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.monthlyOtherAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.monthlyMedical.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    
                     <TableCell className="text-right">{emp.actualBasic.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.actualHRA.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.actualCA.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.actualOtherAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.actualMedical.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    
                     <TableCell>
                       <Input type="number" defaultValue={emp.arrears} onChange={(e) => handleEditableInputChange(emp.id, 'arrears', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell className="text-right">{emp.totalAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    
                     <TableCell className="text-right">{emp.esic.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.professionalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.providentFund.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -611,9 +606,9 @@ export default function SalarySheetPage() {
                       <Input type="number" defaultValue={emp.salaryAdvance} onChange={(e) => handleEditableInputChange(emp.id, 'salaryAdvance', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
                     <TableCell>
-                      <Input type="number" defaultValue={emp.otherDeduction} onChange={(e) => handleEditableInputChange(emp.id, 'otherDeduction', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                      <Input type="number" defaultValue={emp.manualOtherDeduction} onChange={(e) => handleEditableInputChange(emp.id, 'manualOtherDeduction', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>
-                    
+                    <TableCell className="text-right">{emp.performanceDeduction.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.totalDeduction.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-semibold">{emp.netPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                   </TableRow>
@@ -624,31 +619,27 @@ export default function SalarySheetPage() {
                     <TableCell colSpan={10} className="text-right font-semibold">
                         {searchTerm ? `Filtered Active Employees Totals:` : `Total Active Employees Displayed Totals:`}
                     </TableCell>
-                    {/* Sums for k-p */}
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.monthlyBasic, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.monthlyHRA, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.monthlyCA, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.monthlyOtherAllowance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.monthlyMedical, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.grossMonthlySalary, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    {/* Sums for q-u */}
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.actualBasic, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.actualHRA, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.actualCA, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.actualOtherAllowance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.actualMedical, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    {/* Sums for v-w */}
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.arrears, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.totalAllowance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    {/* Sums for x-ad */}
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.esic, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.professionalTax, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.providentFund, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.tds, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.loan, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.salaryAdvance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.otherDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    {/* Sums for ae-af */}
+                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.manualOtherDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.performanceDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.totalDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.netPaid, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
@@ -657,7 +648,7 @@ export default function SalarySheetPage() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               {isLoadingCalculations ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /> :
-               allEmployees.length === 0 ? "No employees found in Employee Master. Please add employees first." :
+               allEmployees.length === 0 ? "No employees found. Please add employees in Employee Master." :
                !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet." :
                salarySheetData.length === 0 && rawAttendanceForPeriod.length === 0 ? "No attendance data found for the selected month. Please upload attendance first." :
                salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 ? "No employees from master list have attendance data for the selected month." :
@@ -670,7 +661,3 @@ export default function SalarySheetPage() {
     </>
   );
 }
-
-    
-
-    

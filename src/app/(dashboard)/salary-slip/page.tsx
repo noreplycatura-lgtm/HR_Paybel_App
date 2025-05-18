@@ -60,6 +60,8 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+
 
 interface SalarySlipDataType {
   employeeId: string;
@@ -92,7 +94,15 @@ interface EditableSalaryFields {
   tds?: number;
   loan?: number;
   salaryAdvance?: number;
-  otherDeduction?: number;
+  manualOtherDeduction?: number;
+}
+
+interface PerformanceDeductionEntry {
+  id: string;
+  employeeCode: string;
+  month: string;
+  year: number;
+  amount: number;
 }
 
 
@@ -109,6 +119,8 @@ export default function SalarySlipPage() {
   const [allEmployees, setAllEmployees] = React.useState<EmployeeDetail[]>([]);
   const [filteredEmployeesForSlip, setFilteredEmployeesForSlip] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
+  const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
+
 
   const [slipData, setSlipData] = React.useState<SalarySlipDataType | null>(null);
   const [showSlip, setShowSlip] = React.useState(false);
@@ -141,11 +153,19 @@ export default function SalarySlipPage() {
         } else {
           setOpeningBalances([]);
         }
+         const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        if (storedPerfDeductions) {
+            const parsed = JSON.parse(storedPerfDeductions);
+            setAllPerformanceDeductions(Array.isArray(parsed) ? parsed : []);
+        } else {
+            setAllPerformanceDeductions([]);
+        }
       } catch (error) {
         console.error("Error loading initial data for salary slip:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee or opening balance data.", variant: "destructive" });
+        toast({ title: "Data Load Error", description: "Could not load employee, opening balance, or performance deduction data.", variant: "destructive" });
         setAllEmployees([]);
         setOpeningBalances([]);
+        setAllPerformanceDeductions([]);
       }
     }
     setIsLoadingEmployees(false);
@@ -231,6 +251,11 @@ export default function SalarySlipPage() {
         } catch (e) { console.warn(`Could not parse salary edits for ${selectedMonth} ${selectedYear}: ${e}`); }
       }
     }
+    
+    const performanceDeductionEntry = allPerformanceDeductions.find(
+      pd => pd.employeeCode === employee.code && pd.month === selectedMonth && pd.year === selectedYear
+    );
+    const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
 
     const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
     const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
@@ -269,6 +294,9 @@ export default function SalarySlipPage() {
       { component: "Arrears", amount: salaryEdits.arrears ?? 0 },
     ];
     const calculatedTotalEarnings = earningsList.reduce((sum, item) => sum + item.amount, 0);
+    
+    const manualOtherDeductionVal = salaryEdits.manualOtherDeduction ?? 0;
+    const totalOtherDeductionOnSlip = manualOtherDeductionVal + performanceDeductionAmount;
 
     const deductionsList = [
       { component: "Provident Fund (PF)", amount: 0 }, 
@@ -277,7 +305,7 @@ export default function SalarySlipPage() {
       { component: "Income Tax (TDS)", amount: salaryEdits.tds ?? 0 },
       { component: "Loan", amount: salaryEdits.loan ?? 0 },
       { component: "Salary Advance", amount: salaryEdits.salaryAdvance ?? 0 },
-      { component: "Other Deduction", amount: salaryEdits.otherDeduction ?? 0 },
+      { component: "Other Deduction", amount: totalOtherDeductionOnSlip },
     ];
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
@@ -295,9 +323,9 @@ export default function SalarySlipPage() {
       const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
       nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
+      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; // Start with current EOM PL
       if (obForNextFY && obForNextFY.openingPL !== undefined ) { 
-         basePLForNextFY = obForNextFY.openingPL;
+         basePLForNextFY = obForNextFY.openingPL; // Override with new FY opening PL if provided
       }
       nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
 
@@ -443,7 +471,7 @@ export default function SalarySlipPage() {
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
               </div>
               <div> {/* Column 2 */}
-                <h3 className="font-semibold mb-2">Attendance Summary</h3>
+                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
@@ -555,5 +583,3 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
-    
