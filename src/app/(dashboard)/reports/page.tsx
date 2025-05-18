@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Loader2 } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import type { OpeningLeaveBalance } from "@/lib/hr-types";
+import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import { format, parseISO, isValid, getDaysInMonth, getMonth, getYear, startOfMonth, addMonths, isBefore, isEqual, endOfMonth, differenceInCalendarMonths } from "date-fns";
@@ -20,6 +20,7 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -33,7 +34,7 @@ interface EditableSalaryFields {
   tds?: number;
   loan?: number;
   salaryAdvance?: number;
-  otherDeduction?: number;
+  manualOtherDeduction?: number;
 }
 
 const getDynamicAttendanceStorageKey = (month: string, year: number) => {
@@ -51,6 +52,8 @@ export default function ReportsPage() {
   const { toast } = useToast();
   const [employeeMasterList, setEmployeeMasterList] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
+  const [allLeaveApplications, setAllLeaveApplications] = React.useState<LeaveApplication[]>([]);
+
   const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
   const [isGeneratingReport, setIsGeneratingReport] = React.useState(false);
 
@@ -100,11 +103,19 @@ export default function ReportsPage() {
         } else {
             setOpeningBalances([]);
         }
+        const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveAppsStr) {
+          const parsedApps = JSON.parse(storedLeaveAppsStr);
+          setAllLeaveApplications(Array.isArray(parsedApps) ? parsedApps : []);
+        } else {
+          setAllLeaveApplications([]);
+        }
       } catch (error) {
         console.error("Error loading data for reports page:", error);
         toast({ title: "Error loading initial data", description: "Could not load employee master or opening balances.", variant: "destructive"});
         setEmployeeMasterList([]);
         setOpeningBalances([]);
+        setAllLeaveApplications([]);
       }
     }
     setIsLoadingEmployees(false);
@@ -138,8 +149,8 @@ export default function ReportsPage() {
         return;
     }
     toast({
-      title: "Report Generation (Prototype)",
-      description: "Comprehensive Employee Report (DOJ to DOR) generation is a complex feature planned for the future and is not yet fully implemented in this prototype.",
+      title: "Comprehensive Employee Report: Feature Under Development",
+      description: "This feature is planned for a future update. Full data compilation (attendance, salary, leave) over extended periods is not yet available in this prototype.",
       duration: 7000,
     });
   };
@@ -163,7 +174,7 @@ export default function ReportsPage() {
     csvRows.push(headers);
 
     let currentDateIterator = startOfMonth(parseISO(employee.doj));
-    const reportEndDate = endOfMonth(new Date()); // Up to end of current month
+    const reportEndDate = endOfMonth(new Date()); 
 
     try {
         while (isBefore(currentDateIterator, reportEndDate) || isEqual(currentDateIterator, reportEndDate)) {
@@ -198,11 +209,10 @@ export default function ReportsPage() {
                 employee,
                 currentReportYearValue,
                 getMonth(currentDateIterator),
-                [], // Pass empty array for leave applications for this report type
+                allLeaveApplications.filter(app => app.employeeId === employee.id), // Pass filtered apps
                 openingBalances
             );
             
-            // Balances from calculation are EOM, so directly use them after adjusting for this month's usage.
             const finalCLBalance = leaveDetails.balanceCLAtMonthEnd - usedCLInMonth;
             const finalSLBalance = leaveDetails.balanceSLAtMonthEnd - usedSLInMonth;
             const finalPLBalance = leaveDetails.balancePLAtMonthEnd - usedPLInMonth;
@@ -360,7 +370,7 @@ export default function ReportsPage() {
             const tdsValue = empEdits.tds ?? 0;
             const loanValue = empEdits.loan ?? 0;
             const salaryAdvanceValue = empEdits.salaryAdvance ?? 0;
-            const otherDeductionValue = empEdits.otherDeduction ?? 0;
+            const otherDeductionValue = empEdits.manualOtherDeduction ?? 0;
             
             const totalAllowanceValue = actualBasicPay + actualHRAPay + actualCAPay + actualMedicalPay + actualOtherAllowancePay + arrearsValue;
             const esicValue = 0, professionalTaxValue = 0, providentFundValue = 0; // Placeholders
@@ -484,7 +494,7 @@ export default function ReportsPage() {
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle>Comprehensive Employee Report</CardTitle>
-            <CardDescription>Attendance, salary, and leave details for an employee over a period. (Prototype - Full report generation not yet implemented)</CardDescription>
+            <CardDescription>Attendance, salary, and leave details for an employee over a period.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
