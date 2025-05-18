@@ -176,6 +176,7 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivision);
       setFilteredEmployeesForSlip(filtered);
+      // If currently selected employee is not in the new filtered list, reset it
       if (selectedEmployeeId && !filtered.find(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
         setSlipData(null); 
@@ -187,12 +188,13 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     } else { 
+      // No division selected, clear employee list and selection
       setFilteredEmployeesForSlip([]); 
       setSelectedEmployeeId(undefined); 
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]);
+  }, [selectedDivision, allEmployees]);
 
 
   const handleGenerateSlip = async () => {
@@ -401,7 +403,7 @@ export default function SalarySlipPage() {
         }
       }
       
-      if(!attendanceForMonth) return; // Skip employee if no attendance data for this month
+      if(!attendanceForMonth) return; 
 
 
       let salaryEdits: EditableSalaryFields = {};
@@ -474,7 +476,7 @@ export default function SalarySlipPage() {
     }
     toast({
       title: "Multi-Slip PDF Download (Prototype)",
-      description: "Direct download of all individual salary slips as PDFs is not yet implemented. Please use 'Download All Summaries (CSV)' for bulk data. You can generate and print/save individual slips one by one.",
+      description: "Direct download of all individual salary slips as PDFs is not yet implemented. Please use 'Download All Summaries (CSV)' for bulk data.",
       duration: 9000,
     });
   };
@@ -610,7 +612,6 @@ export default function SalarySlipPage() {
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
                 <p className="invisible">&nbsp;</p> {}
-
                 <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
