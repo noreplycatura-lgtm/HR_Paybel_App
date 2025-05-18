@@ -175,7 +175,6 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivision);
       setFilteredEmployeesForSlip(filtered);
-      // Reset selected employee if not in new filtered list
       if (selectedEmployeeId && !filtered.find(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
         setSlipData(null); 
@@ -186,9 +185,9 @@ export default function SalarySlipPage() {
       setSelectedEmployeeId(undefined);
       setSlipData(null);
       setShowSlip(false);
-    } else { // No division selected
-      setFilteredEmployeesForSlip([]); // Clear employee list
-      setSelectedEmployeeId(undefined); // Clear selected employee
+    } else { 
+      setFilteredEmployeesForSlip([]); 
+      setSelectedEmployeeId(undefined); 
       setSlipData(null);
       setShowSlip(false);
     }
@@ -320,18 +319,18 @@ export default function SalarySlipPage() {
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
-    if (nextMonthIdx === 3) { // April - Financial Year Reset
+    if (nextMonthIdx === 3) { 
       const obForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
       nextMonthOpeningCL = (obForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = (obForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      // PL: Start with EOM balance of current month, add next month's accrual. If OB for new FY is present, use that instead of EOM.
-      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; // PL at EOM of selected month
-      if (obForNextFY && obForNextFY.openingPL !== undefined ) { // If specific OB for new FY for PL, it overrides carried forward
+      
+      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; 
+      if (obForNextFY && obForNextFY.openingPL !== undefined ) { 
          basePLForNextFY = obForNextFY.openingPL;
       }
       nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
 
-    } else { // Not April
+    } else { 
       nextMonthOpeningCL = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
       nextMonthOpeningSL = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
       nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
@@ -458,7 +457,8 @@ export default function SalarySlipPage() {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-              <div> {/* Column 1 */}
+              {/* Column 1 */}
+              <div>
                 <h3 className="font-semibold mb-2">Employee Details</h3>
                 <p><strong>Name:</strong> {slipData.name}</p>
                 <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
@@ -467,22 +467,25 @@ export default function SalarySlipPage() {
                 <p><strong>Division:</strong> {slipData.division}</p>
                 
                 <Separator className="my-4" /> 
-
                 <h3 className="font-semibold mb-2">Pay Details</h3>
                 <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
               </div>
-              <div> {/* Column 2 */}
-                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
+              {/* Column 2 */}
+              <div>
+                <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                
-                <Separator className="my-4" />
+                <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
 
+
+                <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
+                
+                <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
                 <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
               </div>
