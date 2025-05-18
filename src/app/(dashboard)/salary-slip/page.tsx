@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth } from "date-fns";
+import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
 import type { EmployeeDetail } from "@/lib/hr-data";
@@ -160,12 +160,12 @@ export default function SalarySlipPage() {
         setSlipData(null); 
         setShowSlip(false);
       }
-    } else if (selectedDivision) { // if division selected but no employees (or allEmployees is empty)
+    } else if (selectedDivision) { 
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
       setSlipData(null);
       setShowSlip(false);
-    } else { // No division selected
+    } else { 
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
       setSlipData(null);
@@ -441,16 +441,16 @@ export default function SalarySlipPage() {
                 <h3 className="font-semibold mb-2">Pay Details</h3>
                 <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
-                
-                <Separator className="my-2" />
-                
+              </div>
+              <div>
                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-              </div>
-              <div>
+                
+                <Separator className="my-4" />
+
                 <h3 className="font-semibold mb-1 mt-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
                 <h3 className="font-semibold mb-1 mt-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
@@ -555,6 +555,5 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
 
     
