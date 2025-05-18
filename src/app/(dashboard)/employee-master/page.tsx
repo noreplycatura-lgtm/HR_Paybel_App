@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -18,11 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { sampleEmployees, type EmployeeDetail } from "@/lib/hr-data";
+import type { EmployeeDetail } from "@/lib/hr-data"; // sampleEmployees will not be directly used for initial data
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+// Firestore interaction would happen here, not localStorage
+// const FIRESTORE_EMPLOYEE_COLLECTION_NAME = "employees"; 
 
 const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -72,10 +72,10 @@ const employeeFormSchema = z.object({
         }
     }
     if (data.revisedGrossMonthlySalary && data.revisedGrossMonthlySalary > 0 && (!data.salaryEffectiveDate || data.salaryEffectiveDate.trim() === "")) {
-      return false; // If revised salary is set, effective date is required
+      return false; 
     }
     if ((!data.revisedGrossMonthlySalary || data.revisedGrossMonthlySalary === 0) && (data.salaryEffectiveDate && data.salaryEffectiveDate.trim() !== "")) {
-      return false; // If effective date is set, revised salary is required
+      return false; 
     }
     if (data.salaryEffectiveDate && data.doj && isValid(parseISO(data.salaryEffectiveDate)) && isValid(parseISO(data.doj))) {
         if (isBefore(parseISO(data.salaryEffectiveDate), parseISO(data.doj))) {
@@ -111,9 +111,9 @@ type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
-  const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
+  const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]); // Initialize with empty array
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = React.useState(false);
-  const [isLoadingData, setIsLoadingData] = React.useState(true);
+  const [isLoadingData, setIsLoadingData] = React.useState(true); // Will be true until Firestore data is fetched
   const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null);
   const [filterTerm, setFilterTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "Active" | "Left">("all");
@@ -125,17 +125,9 @@ export default function EmployeeMasterPage() {
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: {
-      code: "",
-      name: "",
-      designation: "",
-      doj: "",
-      status: "Active",
-      division: "",
-      hq: "",
-      dor: "",
-      grossMonthlySalary: 0,
-      revisedGrossMonthlySalary: undefined,
-      salaryEffectiveDate: "",
+      code: "", name: "", designation: "", doj: "", status: "Active",
+      division: "", hq: "", dor: "", grossMonthlySalary: 0,
+      revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
     },
   });
 
@@ -149,52 +141,37 @@ export default function EmployeeMasterPage() {
 
   React.useEffect(() => {
     setIsLoadingData(true);
-    if (typeof window !== 'undefined') {
-      let loadedEmployees: EmployeeDetail[] = [];
-      try {
-        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployeesStr) {
-          const parsedData = JSON.parse(storedEmployeesStr);
-          if (Array.isArray(parsedData)) {
-            loadedEmployees = parsedData.map(emp => ({
-              ...emp,
-              revisedGrossMonthlySalary: emp.revisedGrossMonthlySalary || undefined,
-              salaryEffectiveDate: emp.salaryEffectiveDate || "",
-            }));
-          } else {
-            console.warn("Employee master data in localStorage is corrupted or not an array. Initializing with sample data and resetting storage.");
-            toast({ title: "Data Load Warning", description: "Stored employee master data might be corrupted. Using sample employees.", variant: "destructive", duration: 7000 });
-            loadedEmployees = [...sampleEmployees];
-            saveEmployeesToLocalStorage([...sampleEmployees]);
-          }
-        } else {
-          loadedEmployees = [...sampleEmployees];
-          saveEmployeesToLocalStorage([...sampleEmployees]);
-          toast({ title: "Using Sample Data", description: "No existing employee data found. Loaded sample employees.", duration: 5000 });
-        }
-      } catch (error) {
-        console.error("Error loading or parsing employees from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master data. Stored data might be corrupted. Using sample employees and resetting storage.", variant: "destructive", duration: 7000 });
-        loadedEmployees = [...sampleEmployees];
-        saveEmployeesToLocalStorage([...sampleEmployees]);
-      }
-      setEmployees(loadedEmployees);
-    }
-    setIsLoadingData(false);
+    // TODO: Implement fetching employees from Firestore here
+    // For now, it will remain empty.
+    // Example:
+    // const fetchEmployees = async () => {
+    //   // const querySnapshot = await getDocs(collection(db, FIRESTORE_EMPLOYEE_COLLECTION_NAME));
+    //   // const firestoreEmployees = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EmployeeDetail));
+    //   // setEmployees(firestoreEmployees);
+    //   setEmployees([]); // Simulate empty Firestore
+    //   setIsLoadingData(false);
+    // };
+    // fetchEmployees();
+    setEmployees([]); // Start with empty list
+    setIsLoadingData(false); 
+    toast({
+        title: "Data Source Changed",
+        description: "Employee data would now be fetched from Firestore. Currently showing empty as no data source is connected.",
+        duration: 7000,
+    });
   }, [toast]);
 
-  const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedEmployees));
-      } catch (error) {
-        console.error("Error saving employees to localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not save employee data locally.", variant: "destructive" });
-      }
-    }
+  // This function would conceptually save to Firestore
+  const conceptualSaveEmployeesToFirestore = async (updatedEmployees: EmployeeDetail[]) => {
+    // In a real app, you'd iterate and update/add documents in Firestore.
+    // For this prototype, we'll just update the local state.
+    console.log("Conceptually saving employees to Firestore:", updatedEmployees);
+    // For example:
+    // await writeBatch operations or individual setDoc/addDoc calls
+    // toast({ title: "Data saved to Firestore (simulated)" });
   };
 
-  const onSubmit = (values: EmployeeFormValues) => {
+  const onSubmit = async (values: EmployeeFormValues) => {
     let submissionValues = { ...values };
     if (submissionValues.status === "Active") {
       submissionValues.dor = "";
@@ -204,14 +181,13 @@ export default function EmployeeMasterPage() {
       submissionValues.salaryEffectiveDate = "";
     }
 
-
     if (editingEmployeeId) {
       const updatedEmployees = employees.map(emp =>
         emp.id === editingEmployeeId ? { ...emp, ...submissionValues, id: editingEmployeeId } : emp
       );
       setEmployees(updatedEmployees);
-      saveEmployeesToLocalStorage(updatedEmployees);
-      toast({ title: "Employee Updated", description: `${submissionValues.name}'s details have been updated.` });
+      await conceptualSaveEmployeesToFirestore(updatedEmployees); // Conceptual save
+      toast({ title: "Employee Updated", description: `${submissionValues.name}'s details have been updated (in local state).` });
     } else {
       const existingEmployee = employees.find(emp => emp.code === submissionValues.code);
       if (existingEmployee) {
@@ -224,7 +200,7 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code,
+        id: submissionValues.code, // Use code as ID, or Firestore would generate one
         ...submissionValues,
         dor: submissionValues.dor || undefined,
         revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
@@ -232,8 +208,8 @@ export default function EmployeeMasterPage() {
       };
       const updatedEmployees = [...employees, newEmployee];
       setEmployees(updatedEmployees);
-      saveEmployeesToLocalStorage(updatedEmployees);
-      toast({ title: "Employee Added", description: `${submissionValues.name} has been added to the master list.` });
+      await conceptualSaveEmployeesToFirestore(updatedEmployees); // Conceptual save
+      toast({ title: "Employee Added", description: `${submissionValues.name} has been added to the master list (in local state).` });
     }
     setIsEmployeeFormOpen(false);
     setEditingEmployeeId(null);
@@ -270,11 +246,11 @@ export default function EmployeeMasterPage() {
     setEmployeeToDelete(employee);
   };
 
-  const confirmDeleteSingleEmployee = () => {
+  const confirmDeleteSingleEmployee = async () => {
     if (!employeeToDelete) return;
     const updatedEmployees = employees.filter(emp => emp.id !== employeeToDelete.id);
     setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
+    await conceptualSaveEmployeesToFirestore(updatedEmployees); // Conceptual save (or delete in Firestore)
     setSelectedEmployeeIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(employeeToDelete.id);
@@ -282,7 +258,7 @@ export default function EmployeeMasterPage() {
     });
     toast({
         title: "Employee Removed",
-        description: `${employeeToDelete.name} has been removed from the list.`,
+        description: `${employeeToDelete.name} has been removed from the list (in local state).`,
         variant: "destructive"
     });
     setEmployeeToDelete(null);
@@ -291,7 +267,7 @@ export default function EmployeeMasterPage() {
 
   const handleUploadEmployees = (file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       if (!text) {
         toast({ title: "Error Reading File", description: "Could not read the file content.", variant: "destructive" });
@@ -326,15 +302,14 @@ export default function EmployeeMasterPage() {
         const idxRevisedGrossSalary = getIndex("revisedgrossmonthlysalary");
         const idxSalaryEffectiveDate = getIndex("salaryeffectivedate");
 
-
         const dataRows = lines.slice(1);
-        let uploadedEmployees: EmployeeDetail[] = [];
+        let newUploadedEmployees: EmployeeDetail[] = [];
         const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
         let skippedForDuplicateInCsv = 0;
         let malformedRows = 0;
         let addedCount = 0;
-        let updatedCount = 0;
+        let updatedCount = 0; // Or skipped if you decide not to update existing ones via CSV
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
@@ -369,7 +344,6 @@ export default function EmployeeMasterPage() {
             status = "Active"; 
             console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
           }
-
           if (status === "Active") dor = "";
 
           if (codesInCsv.has(code)) {
@@ -378,6 +352,13 @@ export default function EmployeeMasterPage() {
             return;
           }
           codesInCsv.add(code);
+          
+          if (currentEmployeesMap.has(code)) { // Check against existing master
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list. Update via Edit.`);
+            updatedCount++; // Or count as skipped existing
+            return;
+          }
+
 
           let formattedDoj = doj;
           if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { 
@@ -398,34 +379,21 @@ export default function EmployeeMasterPage() {
             revisedGrossMonthlySalary: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0) ? revisedGrossMonthlySalary : undefined,
             salaryEffectiveDate: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0 && formattedSalaryEffectiveDate) ? formattedSalaryEffectiveDate : "",
           };
-
-          if (currentEmployeesMap.has(code)) {
-            uploadedEmployees.push(employeeData);
-            updatedCount++;
-          } else {
-            uploadedEmployees.push(employeeData);
-            addedCount++;
-          }
+          newUploadedEmployees.push(employeeData);
+          addedCount++;
         });
 
         let message = "";
-        if (addedCount > 0 || updatedCount > 0) {
-            const newEmployeesMap = new Map(uploadedEmployees.map(emp => [emp.code, emp]));
-            const combinedEmployees = employees.map(emp => newEmployeesMap.get(emp.code) || emp); 
-            uploadedEmployees.forEach(upEmp => { 
-                if (!employees.some(e => e.code === upEmp.code)) {
-                    combinedEmployees.push(upEmp);
-                }
-            });
-            
+        if (newUploadedEmployees.length > 0) {
+            const combinedEmployees = [...employees, ...newUploadedEmployees];
             setEmployees(combinedEmployees);
-            saveEmployeesToLocalStorage(combinedEmployees);
-            if (addedCount > 0) message += `${addedCount} new employee(s) added. `;
-            if (updatedCount > 0) message += `${updatedCount} existing employee(s) updated. `;
+            await conceptualSaveEmployeesToFirestore(combinedEmployees); // Conceptual save
+            message += `${newUploadedEmployees.length} new employee(s) added from ${file.name} (in local state). `;
         } else {
-            message += `No new employees were added or updated from ${file.name}. `;
+            message += `No new employees were added from ${file.name}. `;
         }
 
+        if (updatedCount > 0) message += `${updatedCount} row(s) skipped as employee code already exists in master. `;
         if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
         if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to missing or invalid data. `;
 
@@ -433,7 +401,7 @@ export default function EmployeeMasterPage() {
           title: "Employee Upload Processed",
           description: message.trim(),
           duration: 9000,
-          variant: (addedCount > 0 || updatedCount > 0) ? "default" : "destructive",
+          variant: newUploadedEmployees.length > 0 ? "default" : "destructive",
         });
 
       } catch (error) {
@@ -521,11 +489,11 @@ export default function EmployeeMasterPage() {
     }
   };
 
-  const confirmDeleteSelectedEmployees = () => {
+  const confirmDeleteSelectedEmployees = async () => {
     const updatedEmployees = employees.filter(emp => !selectedEmployeeIds.has(emp.id));
     setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
-    toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted.`, variant: "destructive" });
+    await conceptualSaveEmployeesToFirestore(updatedEmployees); // Conceptual save (delete in Firestore)
+    toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted (in local state).`, variant: "destructive" });
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
   };
@@ -546,7 +514,7 @@ export default function EmployeeMasterPage() {
     <>
       <PageHeader
         title="Employee Master"
-        description={`View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary, Revised Salary, Effective Date.`}
+        description={`View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary, Revised Salary, Effective Date. (Data is illustrative and not persisted to a backend).`}
       >
         <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0} title="Delete selected employees">
             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedEmployeeIds.size})
@@ -733,23 +701,22 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) {
-                             // Attempt to parse common non-ISO formats if parseISO fails
                             const parts = employee.doj.split(/[-/.]/);
                             let reparsedDate = null;
-                             if (parts.length === 3) { // Basic check for D-M-Y or M-D-Y
-                                if (parseInt(parts[2]) > 1000) { // Assuming YYYY at the end
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try DD-MM-YYYY
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try MM-DD-YYYY
-                                } else if (parseInt(parts[0]) > 1000) { // Assuming YYYY at the start
-                                     reparsedDate = parseISO(employee.doj); // Let parseISO try again with original if YYYY is at start
+                             if (parts.length === 3) { 
+                                if (parseInt(parts[2]) > 1000) { 
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
+                                } else if (parseInt(parts[0]) > 1000) { 
+                                     reparsedDate = parseISO(employee.doj); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj; // Fallback to original string if all parsing fails
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd-MMM-yy");
                         } catch (e) {
-                          return employee.doj; // Fallback on any error
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -824,7 +791,7 @@ export default function EmployeeMasterPage() {
               {filteredEmployees.length === 0 && !isLoadingData && (
                 <TableRow>
                   <TableCell colSpan={13} className="text-center text-muted-foreground">
-                    {filterTerm || statusFilter !== "all" ? "No employees match your filters." : (employees.length === 0 ? "No employee data available. Use 'Add New Employee' or 'Upload Employees'." : "No employees found.")}
+                    {employees.length === 0 ? "No employee data. (Data would be fetched from Firestore)." : "No employees match your filters."}
                   </TableCell>
                 </TableRow>
               )}
