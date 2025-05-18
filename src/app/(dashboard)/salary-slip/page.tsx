@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, calculateMonthsOfService, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL } from "@/lib/hr-calculations";
-import type { OpeningLeaveBalance } from "@/lib/hr-types";
+import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -60,6 +60,7 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 
 
@@ -119,6 +120,7 @@ export default function SalarySlipPage() {
   const [allEmployees, setAllEmployees] = React.useState<EmployeeDetail[]>([]);
   const [filteredEmployeesForSlip, setFilteredEmployeesForSlip] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
+  const [allLeaveApplications, setAllLeaveApplications] = React.useState<LeaveApplication[]>([]);
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
 
 
@@ -156,18 +158,27 @@ export default function SalarySlipPage() {
         } else {
           setOpeningBalances([]);
         }
-         const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveAppsStr) {
+          const parsedApps = JSON.parse(storedLeaveAppsStr);
+          setAllLeaveApplications(Array.isArray(parsedApps) ? parsedApps : []);
+        } else {
+          setAllLeaveApplications([]);
+        }
+        const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
         if (storedPerfDeductions) {
             const parsed = JSON.parse(storedPerfDeductions);
             setAllPerformanceDeductions(Array.isArray(parsed) ? parsed : []);
         } else {
             setAllPerformanceDeductions([]);
         }
+
       } catch (error) {
         console.error("Error loading initial data for salary slip:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee, opening balance, or performance deduction data.", variant: "destructive" });
+        toast({ title: "Data Load Error", description: "Could not load initial data.", variant: "destructive" });
         setAllEmployees([]);
         setOpeningBalances([]);
+        setAllLeaveApplications([]);
         setAllPerformanceDeductions([]);
       }
     }
@@ -194,7 +205,7 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]);
+  }, [selectedDivision, allEmployees]);
 
   const generateSlipDataForEmployee = (
     employee: EmployeeDetail,
@@ -202,7 +213,7 @@ export default function SalarySlipPage() {
     year: number
   ): SalarySlipDataType | null => {
     const monthIndex = months.indexOf(month);
-    if (monthIndex === -1) return null;
+    if (monthIndex === -1 || !employee.doj) return null;
 
     let attendanceStatuses: string[] = [];
     if (typeof window !== 'undefined') {
@@ -215,14 +226,14 @@ export default function SalarySlipPage() {
           if (attendanceForMonth) {
             attendanceStatuses = attendanceForMonth.attendance;
           } else {
-            return null; // No attendance for this employee this month
+            return null; 
           }
         } catch (e) {
           console.warn(`Could not parse attendance for ${month} ${year}: ${e}`);
           return null; 
         }
       } else {
-         return null; // No attendance file for this month
+         return null; 
       }
     }
 
@@ -299,31 +310,44 @@ export default function SalarySlipPage() {
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
 
-    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(employee, year, monthIndex, [], openingBalances);
+    // For leave balances, call the main calculation function
+    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
+        employee, 
+        year, 
+        monthIndex, 
+        allLeaveApplications.filter(app => app.employeeId === employee.id), // Pass only relevant apps
+        openingBalances.filter(ob => ob.employeeCode === employee.code) // Pass only relevant OBs
+    );
     
+    // Calculate Next Month's Opening Balances
     let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
     const nextMonthDateObject = addMonths(startOfMonth(new Date(year, monthIndex, 1)), 1);
     const nextMonthIdx = getMonth(nextMonthDateObject);
     const nextYr = getYear(nextMonthDateObject);
+    
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
     
     const openingBalanceForNextFY = openingBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
 
-    if (nextMonthIdx === 3) { 
-      nextMonthOpeningCL = (openingBalanceForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
-      nextMonthOpeningSL = (openingBalanceForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      
-      let basePLForNextFY = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth; 
-      if (openingBalanceForNextFY && openingBalanceForNextFY.openingPL !== undefined ) { 
-         basePLForNextFY = openingBalanceForNextFY.openingPL;
-      }
-      nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+    const closingBalanceCLForSelectedMonth = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth; // Adjust for current month usage
+    const closingBalanceSLForSelectedMonth = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth;
+    const closingBalancePLForSelectedMonth = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
 
-    } else { 
-      nextMonthOpeningCL = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
-      nextMonthOpeningSL = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-      nextMonthOpeningPL = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+    if (nextMonthIdx === 3) { // If next month is April, CL/SL reset
+        nextMonthOpeningCL = (openingBalanceForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0); 
+        nextMonthOpeningSL = (openingBalanceForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0); 
+        
+        let basePLForNextFY = closingBalancePLForSelectedMonth; // Carry forward previous month's closing PL
+        if (openingBalanceForNextFY && openingBalanceForNextFY.openingPL !== undefined ) { 
+           basePLForNextFY = openingBalanceForNextFY.openingPL; // If OB for new FY exists, it overrides carry-forward
+        }
+        nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+
+    } else { // Not April
+        nextMonthOpeningCL = closingBalanceCLForSelectedMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
+        nextMonthOpeningSL = closingBalanceSLForSelectedMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
+        nextMonthOpeningPL = closingBalancePLForSelectedMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
     }
 
 
@@ -370,7 +394,7 @@ export default function SalarySlipPage() {
       setSlipData(generatedData);
       setShowSlip(true);
     } else {
-      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Attendance data might be missing or corrupted.`, variant: "destructive" });
+      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Attendance data might be missing or corrupted for ${selectedMonth} ${selectedYear}.`, variant: "destructive" });
       setSlipData(null);
       setShowSlip(false);
     }
@@ -386,7 +410,7 @@ export default function SalarySlipPage() {
 
     const employeesForSummary = allEmployees
       .filter(emp => emp.division === selectedDivision)
-      .sort((a, b) => a.code.localeCompare(b.code)); // Sort by employee code
+      .sort((a, b) => a.code.localeCompare(b.code)); 
 
     if (employeesForSummary.length === 0) {
       toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division.`, variant: "destructive" });
@@ -395,7 +419,7 @@ export default function SalarySlipPage() {
     }
 
     const csvRows: string[][] = [];
-    const headers = ["Employee Code", "Name", "Designation", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"];
+    const headers = ["Employee (Code-Name-Designation)", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"];
     csvRows.push(headers);
 
     let processedCount = 0;
@@ -403,9 +427,7 @@ export default function SalarySlipPage() {
       const slipSummaryData = generateSlipDataForEmployee(emp, selectedMonth, selectedYear);
       if (slipSummaryData) {
          csvRows.push([
-          emp.code,
-          emp.name,
-          emp.designation,
+          `"${emp.code}-${emp.name}-${emp.designation}"`,
           emp.grossMonthlySalary.toFixed(2),
           slipSummaryData.totalEarnings.toFixed(2),
           slipSummaryData.totalDeductions.toFixed(2),
@@ -416,7 +438,7 @@ export default function SalarySlipPage() {
     });
     
     if (processedCount === 0) {
-        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had attendance data for ${selectedMonth} ${selectedYear}. CSV not generated.`, variant: "destructive", duration: 7000 });
+        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had attendance data for ${selectedMonth} ${selectedYear} to generate summaries. CSV not generated.`, variant: "destructive", duration: 7000 });
         setIsLoading(false);
         return;
     }
@@ -447,7 +469,7 @@ export default function SalarySlipPage() {
 
     const employeesToPrint = allEmployees
         .filter(emp => emp.division === selectedDivision)
-        .sort((a, b) => a.code.localeCompare(b.code)); // Sort by employee code
+        .sort((a, b) => a.code.localeCompare(b.code)); 
 
     if (employeesToPrint.length === 0) {
       toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division to print slips.`, variant: "destructive" });
@@ -473,7 +495,6 @@ export default function SalarySlipPage() {
 
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
-    // useEffect will handle calling window.print()
   };
 
   React.useEffect(() => {
@@ -494,7 +515,7 @@ export default function SalarySlipPage() {
             variant: "destructive",
           });
         }
-      }, 500); // Delay to allow DOM to update
+      }, 500); 
       return () => clearTimeout(timer);
     }
   }, [isBulkPrintingView, bulkSlipsData, toast]);
@@ -560,7 +581,7 @@ export default function SalarySlipPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                    {/* Column 1: Employee & Pay Details */}
+                    
                     <div>
                         <h3 className="font-semibold mb-2">Employee Details</h3>
                         <p><strong>Name:</strong> {sData.name}</p>
@@ -573,14 +594,14 @@ export default function SalarySlipPage() {
                         <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
                         <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
                     </div>
-                    {/* Column 2: Attendance & Leave Summary */}
+                    
                     <div>
                         <h3 className="font-semibold mb-2">Attendance Summary</h3>
                         <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
                         <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
                         <p><strong>Paid Holidays:</strong> {sData.paidHolidays}</p>
                         <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                        <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                        <p className="invisible">&nbsp;</p> 
                         <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                         <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -737,7 +758,7 @@ export default function SalarySlipPage() {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                {/* Column 1: Employee & Pay Details */}
+                
                 <div>
                     <h3 className="font-semibold mb-2">Employee Details</h3>
                     <p><strong>Name:</strong> {slipData.name}</p>
@@ -750,7 +771,7 @@ export default function SalarySlipPage() {
                     <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                     <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
                 </div>
-                {/* Column 2: Attendance & Leave Summary */}
+                
                 <div>
                     <h3 className="font-semibold mb-2">Attendance Summary</h3>
                     <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
@@ -812,7 +833,6 @@ export default function SalarySlipPage() {
             <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
             <Button 
               onClick={() => {
-                console.log('Print button clicked. Attempting to call window.print().');
                 try {
                   window.print();
                 } catch (e) {
@@ -826,7 +846,7 @@ export default function SalarySlipPage() {
               }} 
               className="ml-auto print:hidden"
             >
-              <Download className="mr-2 h-4 w-4" /> Print / Save as PDF
+              <Printer className="mr-2 h-4 w-4" /> Print / Save as PDF
             </Button>
           </CardFooter>
         </Card>
@@ -881,5 +901,3 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
-    
