@@ -145,6 +145,7 @@ export default function SalarySlipPage() {
           setAllEmployees(Array.isArray(parsed) ? parsed : []);
         } else {
           setAllEmployees([]);
+          toast({title: "Employee Data Missing", description: "Employee master data not found. Please add employees first.", variant: "destructive", duration: 7000});
         }
         const storedOBStr = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOBStr) {
@@ -230,11 +231,12 @@ export default function SalarySlipPage() {
           }
         } catch (e) {
           console.warn(`Could not parse attendance for ${selectedMonth} ${selectedYear}: ${e}`);
+          toast({ title: "Attendance Data Error", description: `Could not parse attendance for ${selectedMonth} ${selectedYear}. Slip may be inaccurate.`, variant: "destructive" });
         }
       }
     }
 
-    if (!attendanceForMonth) {
+    if (!attendanceForMonth && attendanceStatuses.length === 0) { // Check if statuses were populated
       toast({ title: "Attendance Data Missing", description: `No attendance data found for ${employee.name} for ${selectedMonth} ${selectedYear}. Slip cannot be generated.`, variant: "destructive", duration: 7000 });
       setIsLoading(false);
       return;
@@ -342,7 +344,7 @@ export default function SalarySlipPage() {
       name: employee.name,
       designation: employee.designation,
       joinDate: employee.doj && isValid(parseISO(employee.doj)) ? format(parseISO(employee.doj), "dd MMM yyyy") : employee.doj || "N/A",
-      division: employee.division,
+      division: employee.division || "N/A",
       totalDaysInMonth: totalDaysInMonthValue,
       actualPayDays: actualPayDaysValue,
       earnings: earningsList,
@@ -382,7 +384,6 @@ export default function SalarySlipPage() {
 
     let processedCount = 0;
     employeesForSummary.forEach(emp => {
-      // Simplified calculation logic for summary - mirrors single slip's core parts
       const monthIndex = months.indexOf(selectedMonth);
       if (monthIndex === -1) return;
 
@@ -399,8 +400,7 @@ export default function SalarySlipPage() {
         }
       }
       
-      // If no attendance for this employee for this month, skip them for summary.
-      if(attendanceStatuses.length === 0) return;
+      if(attendanceStatuses.length === 0 && !allMonthAttendance.find(att => att.code === emp.code)) return;
 
 
       let salaryEdits: EditableSalaryFields = {};
@@ -430,7 +430,7 @@ export default function SalarySlipPage() {
       const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
       const totalEarnings = (monthlyComp.basic + monthlyComp.hra + monthlyComp.ca + monthlyComp.medical + monthlyComp.otherAllowance) * payFactor + (salaryEdits.arrears ?? 0);
       const totalOtherDeductionOnSlip = (salaryEdits.manualOtherDeduction ?? 0) + performanceDeductionAmount;
-      const totalDeductions = (salaryEdits.tds ?? 0) + (salaryEdits.loan ?? 0) + (salaryEdits.salaryAdvance ?? 0) + totalOtherDeductionOnSlip; // PF, PT, ESIC are 0
+      const totalDeductions = (salaryEdits.tds ?? 0) + (salaryEdits.loan ?? 0) + (salaryEdits.salaryAdvance ?? 0) + totalOtherDeductionOnSlip;
       const netSalary = totalEarnings - totalDeductions;
 
       csvRows.push([
@@ -570,7 +570,6 @@ export default function SalarySlipPage() {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-              {/* Column 1 */}
               <div>
                 <h3 className="font-semibold mb-2">Employee Details</h3>
                 <p><strong>Name:</strong> {slipData.name}</p>
@@ -578,21 +577,18 @@ export default function SalarySlipPage() {
                 <p><strong>Designation:</strong> {slipData.designation}</p>
                 <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
                 <p><strong>Division:</strong> {slipData.division}</p>
-                
-                <Separator className="my-4" /> 
+                <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Pay Details</h3>
                 <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
               </div>
-              {/* Column 2 */}
               <div>
                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
-
+                 <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
                 <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -645,7 +641,22 @@ export default function SalarySlipPage() {
           </CardContent>
           <CardFooter className="p-6 border-t print:hidden">
             <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
-            <Button onClick={() => window.print()} className="ml-auto">
+            <Button 
+              onClick={() => {
+                console.log('Print button clicked. Attempting to call window.print().');
+                try {
+                  window.print();
+                } catch (e) {
+                  console.error('Error calling window.print():', e);
+                  toast({
+                    title: "Print Error",
+                    description: "Could not open print dialog. Please check browser console.",
+                    variant: "destructive",
+                  });
+                }
+              }} 
+              className="ml-auto print:hidden"
+            >
               <Download className="mr-2 h-4 w-4" /> Print / Save as PDF
             </Button>
           </CardFooter>
@@ -695,11 +706,13 @@ function convertToWords(num: number): string {
 
   let words = inWords(wholePart);
   if (decimalPart > 0) {
-    words += (words && words !== "Zero" ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
-  } else if (!words || words === "Zero") {
-    words = "Zero";
+    words += (words && words !== "Zero" && words !== "overflow" ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
+  } else if (!words || words === "Zero" || words === "overflow") {
+    words = words || "Zero";
   }
   return words.trim() ? words.trim() : 'Zero';
 }
+
+    
 
     
