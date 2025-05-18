@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { getDaysInMonth, parse } from "date-fns";
 
 const sampleEmployees = [
   { id: "E001", name: "John Doe" },
@@ -41,7 +42,7 @@ const COMPANY_DETAILS_MAP = {
     dataAiHint: "company logo pharma wellness"
   },
   Default: {
-    name: "Novita HR Portal", // Default fallback
+    name: "Novita HR Portal", 
     address: "123 Placeholder St, Placeholder City, PC 12345",
     logoText: "Novita",
     dataAiHint: "company logo"
@@ -75,17 +76,22 @@ export default function SalarySlipPage() {
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
+  let totalDaysInMonth = 30; // Default
+  if (selectedMonth && selectedYear) {
+    const monthIndex = months.indexOf(selectedMonth);
+    if (monthIndex !== -1) {
+      const dateForMonth = new Date(parseInt(selectedYear), monthIndex, 1);
+      totalDaysInMonth = getDaysInMonth(dateForMonth);
+    }
+  }
 
   const salaryDetails = {
     employeeId: employeeDetails?.id || "N/A",
     name: employeeDetails?.name || "N/A",
     designation: "Software Engineer",
-    department: "Technology",
     joinDate: "15 Jan 2022",
-    bankAccount: "XXXXXX1234",
-    pan: "ABCDE1234F",
-    payDays: 30,
-    lopDays: 0,
+    actualPayDays: 28, // Placeholder for actual paid days
+    daysLOP: 2, // Placeholder for LOP days
     earnings: [
       { component: "Basic Salary", amount: 15010 },
       { component: "House Rent Allowance (HRA)", amount: 22495 },
@@ -98,13 +104,12 @@ export default function SalarySlipPage() {
       { component: "Professional Tax (PT)", amount: 200 },
       { component: "Income Tax (TDS)", amount: 3500 },
     ],
+    leaveUsedThisMonth: { cl: 1, sl: 0, pl: 1 }, // Placeholder
+    leaveBalanceNextMonth: { cl: 4, sl: 3, pl: 9 }, // Placeholder
   };
   const totalEarnings = salaryDetails.earnings.reduce((sum, item) => sum + item.amount, 0);
   const totalDeductions = salaryDetails.deductions.reduce((sum, item) => sum + item.amount, 0);
   const netSalary = totalEarnings - totalDeductions;
-
-  const attendanceSummary = { present: 22, absent: 0, leaves: 2, weekOffs: 6 };
-  const leaveBalance = { cl: 5, sl: 3, pl: 10 };
 
 
   return (
@@ -188,20 +193,17 @@ export default function SalarySlipPage() {
                 <p><strong>Name:</strong> {salaryDetails.name}</p>
                 <p><strong>Employee ID:</strong> {salaryDetails.employeeId}</p>
                 <p><strong>Designation:</strong> {salaryDetails.designation}</p>
-                <p><strong>Department:</strong> {salaryDetails.department}</p>
                 <p><strong>Date of Joining:</strong> {salaryDetails.joinDate}</p>
-                <p><strong>PAN:</strong> {salaryDetails.pan}</p>
-                <p><strong>Bank Account:</strong> {salaryDetails.bankAccount}</p>
               </div>
               <div>
                 <h3 className="font-semibold mb-2">Pay Details</h3>
-                <p><strong>Pay Days:</strong> {salaryDetails.payDays}</p>
-                <p><strong>Loss of Pay Days (LOP):</strong> {salaryDetails.lopDays}</p>
+                <p><strong>Total Days:</strong> {totalDaysInMonth}</p>
+                <p><strong>Pay Days:</strong> {salaryDetails.actualPayDays}</p>
                  <Separator className="my-2" />
-                <h3 className="font-semibold mb-1 mt-2">Attendance Summary</h3>
-                <p>Present: {attendanceSummary.present} | Absent: {attendanceSummary.absent} | Leaves: {attendanceSummary.leaves} | W/Os: {attendanceSummary.weekOffs}</p>
-                <h3 className="font-semibold mb-1 mt-2">Leave Balance</h3>
-                <p>CL: {leaveBalance.cl} | SL: {leaveBalance.sl} | PL: {leaveBalance.pl}</p>
+                <h3 className="font-semibold mb-1 mt-2">Leave Used (This Month)</h3>
+                <p>CL: {salaryDetails.leaveUsedThisMonth.cl} | SL: {salaryDetails.leaveUsedThisMonth.sl} | PL: {salaryDetails.leaveUsedThisMonth.pl}</p>
+                <h3 className="font-semibold mb-1 mt-2">Leave Balance (Next Month Available)</h3>
+                <p>CL: {salaryDetails.leaveBalanceNextMonth.cl} | SL: {salaryDetails.leaveBalanceNextMonth.sl} | PL: {salaryDetails.leaveBalanceNextMonth.pl}</p>
               </div>
             </div>
 
@@ -269,7 +271,7 @@ function convertToWords(num: number): string {
 
   const inWords = (numToConvert: number): string => {
     let numStr = numToConvert.toString();
-    if (numStr.length > 9) return 'overflow';
+    if (numStr.length > 9) return 'overflow'; // Handle numbers too large
 
     const n = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
@@ -279,7 +281,7 @@ function convertToWords(num: number): string {
     str += (parseInt(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]).trim() + ' Thousand ' : '';
     str += (parseInt(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]).trim() + ' Hundred ' : '';
     str += (parseInt(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]).trim() : '';
-    return str.replace(/\s+/g, ' ').trim();
+    return str.replace(/\s+/g, ' ').trim(); // Clean up extra spaces
   };
 
   if (num === 0) return "Zero";
@@ -291,8 +293,9 @@ function convertToWords(num: number): string {
   let words = inWords(wholePart);
   if (decimalPart > 0) {
     words += (words ? ' ' : '') + 'and ' + inWords(decimalPart) + ' Paise';
+  } else if (!words) { // Case for 0.00
+    words = "Zero";
   }
   return words.trim() ? words.trim() : 'Zero';
 }
 
-    
