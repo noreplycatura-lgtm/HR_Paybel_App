@@ -362,6 +362,110 @@ export default function SalarySlipPage() {
     setIsLoading(false);
   };
 
+  const handleDownloadAllSummaries = () => {
+    if (!selectedMonth || !selectedYear || !selectedDivision) {
+      toast({ title: "Selection Missing", description: "Please select month, year, and division to download summaries.", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+
+    const employeesForSummary = allEmployees.filter(emp => emp.division === selectedDivision);
+    if (employeesForSummary.length === 0) {
+      toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division.`, variant: "destructive" });
+      setIsLoading(false);
+      return;
+    }
+
+    const csvRows: string[][] = [];
+    const headers = ["Employee Code", "Name", "Designation", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"];
+    csvRows.push(headers);
+
+    let processedCount = 0;
+    employeesForSummary.forEach(emp => {
+      // Simplified calculation logic for summary - mirrors single slip's core parts
+      const monthIndex = months.indexOf(selectedMonth);
+      if (monthIndex === -1) return;
+
+      let attendanceStatuses: string[] = [];
+      if (typeof window !== 'undefined') {
+        const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedAttendanceData = localStorage.getItem(attendanceKey);
+        if (storedAttendanceData) {
+          try {
+            const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceData);
+            const empAttendance = allMonthAttendance.find(att => att.code === emp.code);
+            if (empAttendance) attendanceStatuses = empAttendance.attendance;
+          } catch (e) { /* ignore */ }
+        }
+      }
+      
+      // If no attendance for this employee for this month, skip them for summary.
+      if(attendanceStatuses.length === 0) return;
+
+
+      let salaryEdits: EditableSalaryFields = {};
+      if (typeof window !== 'undefined') {
+        const editsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedEditsStr = localStorage.getItem(editsKey);
+        if (storedEditsStr) {
+          try {
+            const allEdits: Record<string, EditableSalaryFields> = JSON.parse(storedEditsStr);
+            salaryEdits = allEdits[emp.id] || {};
+          } catch (e) { /* ignore */ }
+        }
+      }
+      const performanceDeductionEntry = allPerformanceDeductions.find(pd => pd.employeeCode === emp.code && pd.month === selectedMonth && pd.year === selectedYear);
+      const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
+
+      const totalDaysInMonthValue = getDaysInMonth(new Date(selectedYear, monthIndex));
+      const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
+      let actualPayDaysValue = 0;
+      dailyStatuses.forEach(status => {
+        if (status === 'P' || status === 'W' || status === 'PH' || status === 'CL' || status === 'SL' || status === 'PL') actualPayDaysValue++;
+        else if (status === 'HD') actualPayDaysValue += 0.5;
+      });
+      actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
+
+      const monthlyComp = calculateMonthlySalaryComponents(emp.grossMonthlySalary);
+      const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
+      const totalEarnings = (monthlyComp.basic + monthlyComp.hra + monthlyComp.ca + monthlyComp.medical + monthlyComp.otherAllowance) * payFactor + (salaryEdits.arrears ?? 0);
+      const totalOtherDeductionOnSlip = (salaryEdits.manualOtherDeduction ?? 0) + performanceDeductionAmount;
+      const totalDeductions = (salaryEdits.tds ?? 0) + (salaryEdits.loan ?? 0) + (salaryEdits.salaryAdvance ?? 0) + totalOtherDeductionOnSlip; // PF, PT, ESIC are 0
+      const netSalary = totalEarnings - totalDeductions;
+
+      csvRows.push([
+        emp.code,
+        emp.name,
+        emp.designation,
+        emp.grossMonthlySalary.toFixed(2),
+        totalEarnings.toFixed(2),
+        totalDeductions.toFixed(2),
+        netSalary.toFixed(2)
+      ]);
+      processedCount++;
+    });
+    
+    if (processedCount === 0) {
+        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had attendance data for ${selectedMonth} ${selectedYear}. CSV not generated.`, variant: "destructive", duration: 7000 });
+        setIsLoading(false);
+        return;
+    }
+
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `salary_summaries_${selectedDivision}_${selectedMonth}_${selectedYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} for ${selectedMonth} ${selectedYear} generated.` });
+    setIsLoading(false);
+  };
+
   const currentCompanyDetails = selectedDivision
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
@@ -377,7 +481,16 @@ export default function SalarySlipPage() {
 
   return (
     <>
-      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees." />
+      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees.">
+        <Button
+            onClick={handleDownloadAllSummaries}
+            disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
+            variant="outline"
+          >
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+             Download All Summaries (CSV)
+          </Button>
+      </PageHeader>
 
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
         <CardHeader>
@@ -480,7 +593,6 @@ export default function SalarySlipPage() {
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
                 <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
 
-
                 <Separator className="my-4" />
                 <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -532,8 +644,9 @@ export default function SalarySlipPage() {
             <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
           </CardContent>
           <CardFooter className="p-6 border-t print:hidden">
+            <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
             <Button onClick={() => window.print()} className="ml-auto">
-              <Download className="mr-2 h-4 w-4" /> Download PDF
+              <Download className="mr-2 h-4 w-4" /> Print / Save as PDF
             </Button>
           </CardFooter>
         </Card>
