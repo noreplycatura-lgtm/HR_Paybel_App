@@ -47,9 +47,9 @@ const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
     logoHeight: 55,
   },
   Default: {
-    name: "Novita HR Portal",
+    name: "HR Payroll App",
     address: "123 Placeholder St, Placeholder City, PC 12345",
-    logoText: "Novita HR",
+    logoText: "HR App",
     dataAiHint: "company logo",
     logoWidth: 150,
     logoHeight: 50,
@@ -76,6 +76,10 @@ interface SalarySlipDataType {
   netSalary: number;
   leaveUsedThisMonth: { cl: number; sl: number; pl: number };
   leaveBalanceNextMonth: { cl: number; sl: number; pl: number };
+  absentDays: number;
+  weekOffs: number;
+  paidHolidays: number;
+  totalLeavesTakenThisMonth: number;
 }
 
 interface MonthlyEmployeeAttendance {
@@ -157,9 +161,11 @@ export default function SalarySlipPage() {
       }
     } else {
       setFilteredEmployeesForSlip([]);
-      setSelectedEmployeeId(undefined);
-      setSlipData(null);
-      setShowSlip(false);
+       if (selectedDivision) { // if a division is selected but no employees match
+        setSelectedEmployeeId(undefined);
+        setSlipData(null);
+        setShowSlip(false);
+      }
     }
   }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
@@ -227,14 +233,25 @@ export default function SalarySlipPage() {
 
     let actualPayDays = 0;
     let usedCLInMonth = 0, usedSLInMonth = 0, usedPLInMonth = 0;
+    let absentDaysCount = 0;
+    let weekOffsCount = 0;
+    let paidHolidaysCount = 0;
+
     dailyStatuses.forEach(status => {
       if (status === 'P' || status === 'W' || status === 'PH') actualPayDays++;
       else if (status === 'CL') { actualPayDays++; usedCLInMonth++; }
       else if (status === 'SL') { actualPayDays++; usedSLInMonth++; }
       else if (status === 'PL') { actualPayDays++; usedPLInMonth++; }
       else if (status === 'HD') actualPayDays += 0.5;
+
+      if (status === 'A') absentDaysCount += 1;
+      else if (status === 'HD') absentDaysCount += 0.5; 
+      else if (status === 'W') weekOffsCount += 1;
+      else if (status === 'PH') paidHolidaysCount += 1;
     });
     actualPayDays = Math.min(actualPayDays, totalDaysInMonthValue);
+    const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
+
 
     const monthlyComp = calculateMonthlySalaryComponents(employee.grossMonthlySalary);
     const payFactor = totalDaysInMonthValue > 0 ? actualPayDays / totalDaysInMonthValue : 0;
@@ -302,6 +319,10 @@ export default function SalarySlipPage() {
       netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
+      absentDays: absentDaysCount,
+      weekOffs: weekOffsCount,
+      paidHolidays: paidHolidaysCount,
+      totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
     });
 
     setShowSlip(true);
@@ -311,6 +332,11 @@ export default function SalarySlipPage() {
   const currentCompanyDetails = selectedDivision
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
+
+  const nextMonthDate = selectedMonth && selectedYear ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
+  const nextMonthName = format(nextMonthDate, "MMMM");
+  const nextMonthYearNum = getYear(nextMonthDate);
+
 
   if (isLoadingEmployees) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -408,12 +434,18 @@ export default function SalarySlipPage() {
               </div>
               <div>
                 <h3 className="font-semibold mb-2">Pay Details</h3>
-                <p><strong>Total Days:</strong> {slipData.totalDaysInMonth}</p>
+                <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
-                 <Separator className="my-2" />
-                <h3 className="font-semibold mb-1 mt-2">Leave Used (This Month)</h3>
+                <Separator className="my-2" />
+                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
+                <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
+                <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
+                <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
+                <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
+                <Separator className="my-2" />
+                <h3 className="font-semibold mb-1 mt-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-                <h3 className="font-semibold mb-1 mt-2">Leave Balance (Next Month Available)</h3>
+                <h3 className="font-semibold mb-1 mt-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
                 <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
               </div>
             </div>
