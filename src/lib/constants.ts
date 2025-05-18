@@ -33,20 +33,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/leave',
     icon: Briefcase,
   },
-  // {
-  //   title: 'Salary Setup',
-  //   href: '/salary-setup',
-  //   icon: Wrench,
-  // },
-  {
-    title: 'Salary Slip',
-    href: '/salary-slip',
-    icon: FileText,
-  },
   {
     title: 'Salary Sheet',
     href: '/salary-sheet',
     icon: Sheet,
+  },
+  {
+    title: 'Salary Slip',
+    href: '/salary-slip',
+    icon: FileText,
   },
   {
     title: 'Reports',
