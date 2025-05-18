@@ -43,27 +43,69 @@ const employeeFormSchema = z.object({
   dor: z.string().optional().refine((val) => {
     if (!val || val.trim() === "") return true; // Optional is fine
     try {
-        const date = parseISO(val); // Check if it's a valid date if provided
+        const date = parseISO(val);
         return isValid(date);
     } catch {
         return false;
     }
   }, { message: "If provided, DOR must be a valid date (YYYY-MM-DD)"}),
   grossMonthlySalary: z.coerce.number().positive({ message: "Gross salary must be a positive number" }),
+  revisedGrossMonthlySalary: z.coerce.number().optional().refine(val => val === undefined || val === null || val === 0 || val > 0, {
+    message: "Revised gross salary must be a positive number if provided, or empty for no revision.",
+  }),
+  salaryEffectiveDate: z.string().optional().refine((val) => {
+    if (!val || val.trim() === "") return true;
+    try {
+        const date = parseISO(val);
+        return isValid(date);
+    } catch {
+        return false;
+    }
+  }, { message: "If provided, Salary Effective Date must be a valid date (YYYY-MM-DD)"}),
 }).refine(data => {
     if (data.status === "Active" && (data.dor && data.dor.trim() !== "")) {
-        return false; 
+        return false;
     }
     if (data.status === "Left" && data.doj && data.dor && data.dor.trim() !== "" && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
         if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
             return false;
         }
     }
+    if (data.revisedGrossMonthlySalary && data.revisedGrossMonthlySalary > 0 && (!data.salaryEffectiveDate || data.salaryEffectiveDate.trim() === "")) {
+      return false; // If revised salary is set, effective date is required
+    }
+    if ((!data.revisedGrossMonthlySalary || data.revisedGrossMonthlySalary === 0) && (data.salaryEffectiveDate && data.salaryEffectiveDate.trim() !== "")) {
+      return false; // If effective date is set, revised salary is required
+    }
+    if (data.salaryEffectiveDate && data.doj && isValid(parseISO(data.salaryEffectiveDate)) && isValid(parseISO(data.doj))) {
+        if (isBefore(parseISO(data.salaryEffectiveDate), parseISO(data.doj))) {
+            return false;
+        }
+    }
     return true;
-}, {
-    message: "DOR must be empty if status is 'Active'. If status is 'Left', DOR cannot be before DOJ.",
-    path: ["dor"], 
+}, (data) => {
+  if (data.status === "Active" && (data.dor && data.dor.trim() !== "")) {
+    return { message: "DOR must be empty if status is 'Active'.", path: ["dor"] };
+  }
+  if (data.status === "Left" && data.doj && data.dor && data.dor.trim() !== "" && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
+    if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
+      return { message: "DOR cannot be before DOJ.", path: ["dor"] };
+    }
+  }
+  if (data.revisedGrossMonthlySalary && data.revisedGrossMonthlySalary > 0 && (!data.salaryEffectiveDate || data.salaryEffectiveDate.trim() === "")) {
+    return { message: "Salary Effective Date is required if Revised Gross Salary is provided.", path: ["salaryEffectiveDate"] };
+  }
+  if ((!data.revisedGrossMonthlySalary || data.revisedGrossMonthlySalary === 0) && (data.salaryEffectiveDate && data.salaryEffectiveDate.trim() !== "")) {
+    return { message: "Revised Gross Salary is required if Salary Effective Date is provided.", path: ["revisedGrossMonthlySalary"] };
+  }
+   if (data.salaryEffectiveDate && data.doj && isValid(parseISO(data.salaryEffectiveDate)) && isValid(parseISO(data.doj))) {
+      if (isBefore(parseISO(data.salaryEffectiveDate), parseISO(data.doj))) {
+          return { message: "Salary Effective Date cannot be before DOJ.", path: ["salaryEffectiveDate"]};
+      }
+  }
+  return {};
 });
+
 
 type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
@@ -92,6 +134,8 @@ export default function EmployeeMasterPage() {
       hq: "",
       dor: "",
       grossMonthlySalary: 0,
+      revisedGrossMonthlySalary: undefined,
+      salaryEffectiveDate: "",
     },
   });
 
@@ -111,30 +155,33 @@ export default function EmployeeMasterPage() {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployeesStr) {
           const parsedData = JSON.parse(storedEmployeesStr);
-          if (Array.isArray(parsedData)) { 
-            loadedEmployees = parsedData; 
+          if (Array.isArray(parsedData)) {
+            loadedEmployees = parsedData.map(emp => ({
+              ...emp,
+              revisedGrossMonthlySalary: emp.revisedGrossMonthlySalary || undefined,
+              salaryEffectiveDate: emp.salaryEffectiveDate || "",
+            }));
           } else {
-            console.warn("Employee master data in localStorage is corrupted or not an array. Using default sample data and resetting storage.");
-            toast({ title: "Data Load Warning", description: "Stored employee master data might be corrupted. Defaulting to sample employees.", variant: "destructive", duration: 7000 });
+            console.warn("Employee master data in localStorage is corrupted or not an array. Initializing with sample data and resetting storage.");
+            toast({ title: "Data Load Warning", description: "Stored employee master data might be corrupted. Using sample employees.", variant: "destructive", duration: 7000 });
             loadedEmployees = [...sampleEmployees];
             saveEmployeesToLocalStorage([...sampleEmployees]);
           }
         } else {
-          // Key doesn't exist, likely first load. Use samples and save them.
           loadedEmployees = [...sampleEmployees];
           saveEmployeesToLocalStorage([...sampleEmployees]);
           toast({ title: "Using Sample Data", description: "No existing employee data found. Loaded sample employees.", duration: 5000 });
         }
       } catch (error) {
         console.error("Error loading or parsing employees from localStorage:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master data. Stored data might be corrupted. Defaulting to sample employees and resetting storage.", variant: "destructive", duration: 7000 });
-        loadedEmployees = [...sampleEmployees]; 
+        toast({ title: "Data Load Error", description: "Could not load employee master data. Stored data might be corrupted. Using sample employees and resetting storage.", variant: "destructive", duration: 7000 });
+        loadedEmployees = [...sampleEmployees];
         saveEmployeesToLocalStorage([...sampleEmployees]);
       }
       setEmployees(loadedEmployees);
     }
     setIsLoadingData(false);
-  }, [toast]); 
+  }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -150,8 +197,13 @@ export default function EmployeeMasterPage() {
   const onSubmit = (values: EmployeeFormValues) => {
     let submissionValues = { ...values };
     if (submissionValues.status === "Active") {
-      submissionValues.dor = ""; 
+      submissionValues.dor = "";
     }
+    if (!submissionValues.revisedGrossMonthlySalary || submissionValues.revisedGrossMonthlySalary === 0) {
+      submissionValues.revisedGrossMonthlySalary = undefined;
+      submissionValues.salaryEffectiveDate = "";
+    }
+
 
     if (editingEmployeeId) {
       const updatedEmployees = employees.map(emp =>
@@ -172,9 +224,11 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code, 
+        id: submissionValues.code,
         ...submissionValues,
-        dor: submissionValues.dor || undefined, 
+        dor: submissionValues.dor || undefined,
+        revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
+        salaryEffectiveDate: submissionValues.salaryEffectiveDate || "",
       };
       const updatedEmployees = [...employees, newEmployee];
       setEmployees(updatedEmployees);
@@ -191,6 +245,7 @@ export default function EmployeeMasterPage() {
     form.reset({
       code: "", name: "", designation: "", doj: "", status: "Active",
       division: "", hq: "", dor: "", grossMonthlySalary: 0,
+      revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
     });
     setIsEmployeeFormOpen(true);
   };
@@ -203,6 +258,8 @@ export default function EmployeeMasterPage() {
         ...employeeToEdit,
         doj: employeeToEdit.doj && isValid(parseISO(employeeToEdit.doj)) ? format(parseISO(employeeToEdit.doj), 'yyyy-MM-dd') : '',
         dor: employeeToEdit.dor && isValid(parseISO(employeeToEdit.dor)) ? format(parseISO(employeeToEdit.dor), 'yyyy-MM-dd') : '',
+        salaryEffectiveDate: employeeToEdit.salaryEffectiveDate && isValid(parseISO(employeeToEdit.salaryEffectiveDate)) ? format(parseISO(employeeToEdit.salaryEffectiveDate), 'yyyy-MM-dd') : '',
+        revisedGrossMonthlySalary: employeeToEdit.revisedGrossMonthlySalary || undefined,
       };
       form.reset(formValues);
       setIsEmployeeFormOpen(true);
@@ -247,7 +304,7 @@ export default function EmployeeMasterPage() {
           return;
         }
 
-        const expectedHeaders = ["status", "division", "code", "name", "designation", "hq", "doj", "dor", "grossmonthlysalary"];
+        const expectedHeaders = ["status", "division", "code", "name", "designation", "hq", "doj", "dor", "grossmonthlysalary", "revisedgrossmonthlysalary", "salaryeffectivedate"];
         const headerLine = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/\s+/g, ''));
         
         const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
@@ -266,13 +323,15 @@ export default function EmployeeMasterPage() {
         const idxDoj = getIndex("doj");
         const idxDor = getIndex("dor");
         const idxGrossSalary = getIndex("grossmonthlysalary");
+        const idxRevisedGrossSalary = getIndex("revisedgrossmonthlysalary");
+        const idxSalaryEffectiveDate = getIndex("salaryeffectivedate");
+
 
         const dataRows = lines.slice(1);
         let uploadedEmployees: EmployeeDetail[] = [];
         const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
         let skippedForDuplicateInCsv = 0;
-        let skippedForExistingInDb = 0;
         let malformedRows = 0;
         let addedCount = 0;
         let updatedCount = 0;
@@ -280,7 +339,7 @@ export default function EmployeeMasterPage() {
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
           
-          if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary)) {
+          if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary, idxRevisedGrossSalary, idxSalaryEffectiveDate )) {
              console.warn(`Skipping row ${rowIndex + 2} in Employee Master CSV: insufficient columns.`);
              malformedRows++;
              return;
@@ -295,8 +354,11 @@ export default function EmployeeMasterPage() {
           const doj = values[idxDoj];
           let dor = values[idxDor] || "";
           const grossMonthlySalaryStr = values[idxGrossSalary];
+          const revisedGrossMonthlySalaryStr = values[idxRevisedGrossSalary];
+          const salaryEffectiveDateStr = values[idxSalaryEffectiveDate];
           
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
+          const revisedGrossMonthlySalary = revisedGrossMonthlySalaryStr ? parseFloat(revisedGrossMonthlySalaryStr) : undefined;
 
           if (!code || !name || !status || !division || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}): missing or invalid critical data. Ensure all fields are present and Gross Salary is a positive number.`);
@@ -325,18 +387,22 @@ export default function EmployeeMasterPage() {
           if (dor && !/^\d{4}-\d{2}-\d{2}$/.test(dor)) {
              try { const d = new Date(dor.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDor = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
+          let formattedSalaryEffectiveDate = salaryEffectiveDateStr;
+          if (salaryEffectiveDateStr && !/^\d{4}-\d{2}-\d{2}$/.test(salaryEffectiveDateStr)) {
+             try { const d = new Date(salaryEffectiveDateStr.replace(/[-/.]/g, '/')); if (isValid(d)) formattedSalaryEffectiveDate = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
+          }
           
           const employeeData: EmployeeDetail = {
             id: code, status, division, code, name, designation, hq, 
             doj: formattedDoj, dor: formattedDor || undefined, grossMonthlySalary,
+            revisedGrossMonthlySalary: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0) ? revisedGrossMonthlySalary : undefined,
+            salaryEffectiveDate: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0 && formattedSalaryEffectiveDate) ? formattedSalaryEffectiveDate : "",
           };
 
           if (currentEmployeesMap.has(code)) {
-            // Update existing employee
             uploadedEmployees.push(employeeData);
             updatedCount++;
           } else {
-            // Add new employee
             uploadedEmployees.push(employeeData);
             addedCount++;
           }
@@ -345,8 +411,8 @@ export default function EmployeeMasterPage() {
         let message = "";
         if (addedCount > 0 || updatedCount > 0) {
             const newEmployeesMap = new Map(uploadedEmployees.map(emp => [emp.code, emp]));
-            const combinedEmployees = employees.map(emp => newEmployeesMap.get(emp.code) || emp); // Update existing
-            uploadedEmployees.forEach(upEmp => { // Add new ones not in original list
+            const combinedEmployees = employees.map(emp => newEmployeesMap.get(emp.code) || emp); 
+            uploadedEmployees.forEach(upEmp => { 
                 if (!employees.some(e => e.code === upEmp.code)) {
                     combinedEmployees.push(upEmp);
                 }
@@ -382,10 +448,10 @@ export default function EmployeeMasterPage() {
   };
 
   const handleDownloadSampleTemplate = () => {
-    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "DOR", "GrossMonthlySalary"];
+    const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "DOR", "GrossMonthlySalary", "RevisedGrossMonthlySalary", "SalaryEffectiveDate"];
     const sampleData = [
-      ["Active", "Marketing", "E006", "Sarah Lee", "Marketing Specialist", "Chicago", "2024-01-10", "", "62000"],
-      ["Left", "IT", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "2024-06-30", "55000"],
+      ["Active", "Marketing", "E006", "Sarah Lee", "Marketing Specialist", "Chicago", "2024-01-10", "", "62000", "65000", "2024-07-01"],
+      ["Left", "IT", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "2024-06-30", "55000", "", ""],
     ];
     const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -480,7 +546,7 @@ export default function EmployeeMasterPage() {
     <>
       <PageHeader
         title="Employee Master"
-        description="View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary."
+        description={`View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary, Revised Salary, Effective Date.`}
       >
         <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0} title="Delete selected employees">
             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedEmployeeIds.size})
@@ -497,7 +563,7 @@ export default function EmployeeMasterPage() {
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[525px]">
+          <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
               <DialogTitle>{editingEmployeeId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
               <DialogDescription>
@@ -548,7 +614,13 @@ export default function EmployeeMasterPage() {
                         </FormItem>
                     )} />
                     <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                    <FormItem className="md:col-span-2"><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                     <FormField control={form.control} name="revisedGrossMonthlySalary" render={({ field }) => (
+                    <FormItem><FormLabel>Revised Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" placeholder="Optional" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                     <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
+                    <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                  </fieldset>
                 <DialogFooter>
@@ -630,6 +702,8 @@ export default function EmployeeMasterPage() {
                 <TableHead className="min-w-[100px]">DOJ</TableHead>
                 <TableHead className="min-w-[100px]">DOR</TableHead>
                 <TableHead className="min-w-[150px] text-right">Gross Salary (₹)</TableHead>
+                <TableHead className="min-w-[150px] text-right">Revised Salary (₹)</TableHead>
+                <TableHead className="min-w-[120px]">Effective Date</TableHead>
                 <TableHead className="text-center min-w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -659,22 +733,23 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) {
-                            const parts = employee.doj.split(/[-/.]/); 
+                             // Attempt to parse common non-ISO formats if parseISO fails
+                            const parts = employee.doj.split(/[-/.]/);
                             let reparsedDate = null;
-                            if (parts.length === 3) { 
-                                if (parseInt(parts[2]) > 1000) { 
-                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); 
-                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); 
-                                } else if (parseInt(parts[0]) > 1000) { 
-                                     reparsedDate = parseISO(employee.doj); 
+                             if (parts.length === 3) { // Basic check for D-M-Y or M-D-Y
+                                if (parseInt(parts[2]) > 1000) { // Assuming YYYY at the end
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`); // Try DD-MM-YYYY
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`); // Try MM-DD-YYYY
+                                } else if (parseInt(parts[0]) > 1000) { // Assuming YYYY at the start
+                                     reparsedDate = parseISO(employee.doj); // Let parseISO try again with original if YYYY is at start
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj; 
+                            return employee.doj; // Fallback to original string if all parsing fails
                           }
                           return format(parsedDate, "dd-MMM-yy");
                         } catch (e) {
-                          return employee.doj; 
+                          return employee.doj; // Fallback on any error
                         }
                       }
                       return 'N/A';
@@ -685,7 +760,7 @@ export default function EmployeeMasterPage() {
                       if (employee.dor && typeof employee.dor === 'string' && employee.dor.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.dor);
-                          if (!isValid(parsedDate)) {
+                           if (!isValid(parsedDate)) {
                              const parts = employee.dor.split(/[-/.]/);
                              let reparsedDate = null;
                              if (parts.length === 3) {
@@ -708,6 +783,34 @@ export default function EmployeeMasterPage() {
                     })()}
                   </TableCell>
                   <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
+                  <TableCell className="text-right">{employee.revisedGrossMonthlySalary ? employee.revisedGrossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      if (employee.salaryEffectiveDate && typeof employee.salaryEffectiveDate === 'string' && employee.salaryEffectiveDate.trim() !== '') {
+                        try {
+                          const parsedDate = parseISO(employee.salaryEffectiveDate);
+                           if (!isValid(parsedDate)) {
+                             const parts = employee.salaryEffectiveDate.split(/[-/.]/);
+                             let reparsedDate = null;
+                             if (parts.length === 3) {
+                                if (parseInt(parts[2]) > 1000) {
+                                     reparsedDate = parseISO(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                                     if(!isValid(reparsedDate)) reparsedDate = parseISO(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                                } else if (parseInt(parts[0]) > 1000) {
+                                     reparsedDate = parseISO(employee.salaryEffectiveDate);
+                                }
+                            }
+                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
+                            return employee.salaryEffectiveDate;
+                          }
+                          return format(parsedDate, "dd-MMM-yy");
+                        } catch (e) {
+                          return employee.salaryEffectiveDate;
+                        }
+                      }
+                      return 'N/A';
+                    })()}
+                  </TableCell>
                   <TableCell className="text-center">
                     <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} title="Edit this employee's details">
                       <Edit className="h-4 w-4" />
@@ -720,7 +823,7 @@ export default function EmployeeMasterPage() {
               ))}
               {filteredEmployees.length === 0 && !isLoadingData && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground">
+                  <TableCell colSpan={13} className="text-center text-muted-foreground">
                     {filterTerm || statusFilter !== "all" ? "No employees match your filters." : (employees.length === 0 ? "No employee data available. Use 'Add New Employee' or 'Upload Employees'." : "No employees found.")}
                   </TableCell>
                 </TableRow>
@@ -766,5 +869,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-
-    

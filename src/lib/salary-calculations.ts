@@ -1,27 +1,42 @@
 
-// src/lib/salary-calculations.ts
+import type { EmployeeDetail } from './hr-data';
+import { parseISO, isValid, isBefore, isEqual, startOfMonth, endOfMonth, addDays } from 'date-fns';
+
 export interface MonthlySalaryComponents {
   basic: number;
   hra: number;
   ca: number;
   medical: number;
   otherAllowance: number;
-  totalGross: number;
+  totalGross: number; // The gross salary amount used for this period's calculation
 }
 
-/**
- * Calculates monthly salary components based on gross salary.
- * New Rules:
- * 1. Basic is fixed at 15010.
- * 2. If Gross < 15010, Basic = Gross, others = 0.
- * 3. If Gross >= 15010, Basic = 15010. Remaining (Gross - Basic) is distributed:
- *    HRA: 50% of remaining
- *    CA: 20% of remaining
- *    Medical: 15% of remaining
- *    Other Allowance: 15% of remaining (or adjusted to ensure sum equals Gross)
- */
-export function calculateMonthlySalaryComponents(grossMonthlySalary: number): MonthlySalaryComponents {
-  if (grossMonthlySalary <= 0) {
+export function calculateMonthlySalaryComponents(
+  employee: EmployeeDetail,
+  periodYear: number,
+  periodMonthIndex: number // 0-11
+): MonthlySalaryComponents {
+  
+  let applicableGrossSalary = employee.grossMonthlySalary;
+
+  if (employee.revisedGrossMonthlySalary && employee.revisedGrossMonthlySalary > 0 && employee.salaryEffectiveDate) {
+    try {
+      const effectiveDate = parseISO(employee.salaryEffectiveDate);
+      const periodStartDate = startOfMonth(new Date(periodYear, periodMonthIndex, 1));
+      
+      // Use revised salary if effectiveDate is on or before the period's start date,
+      // or if the effectiveDate falls within the current period.
+      if (isValid(effectiveDate) && !isBefore(endOfMonth(periodStartDate), effectiveDate)) {
+         applicableGrossSalary = employee.revisedGrossMonthlySalary;
+      }
+    } catch (e) {
+      console.error("Error parsing salaryEffectiveDate:", employee.salaryEffectiveDate, e);
+      // Stick with original gross if effective date is invalid
+    }
+  }
+
+
+  if (applicableGrossSalary <= 0) {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
   }
 
@@ -32,21 +47,20 @@ export function calculateMonthlySalaryComponents(grossMonthlySalary: number): Mo
   let medical: number;
   let otherAllowance: number;
 
-  if (grossMonthlySalary < fixedBasicAmount) {
-    basic = grossMonthlySalary;
+  if (applicableGrossSalary < fixedBasicAmount) {
+    basic = applicableGrossSalary;
     hra = 0;
     ca = 0;
     medical = 0;
     otherAllowance = 0;
   } else {
     basic = fixedBasicAmount;
-    const remainingAmount = grossMonthlySalary - basic;
+    const remainingAmount = applicableGrossSalary - basic;
     
     hra = remainingAmount * 0.50;
     ca = remainingAmount * 0.20;
     medical = remainingAmount * 0.15;
-    // Calculate Other Allowance as the remainder to ensure the sum is exact
-    otherAllowance = remainingAmount - hra - ca - medical;
+    otherAllowance = remainingAmount - hra - ca - medical; // Ensures sum is exact
   }
 
   return {
@@ -55,6 +69,6 @@ export function calculateMonthlySalaryComponents(grossMonthlySalary: number): Mo
     ca,
     medical,
     otherAllowance,
-    totalGross: grossMonthlySalary,
+    totalGross: applicableGrossSalary, // Return the gross that was used for calculation
   };
 }
