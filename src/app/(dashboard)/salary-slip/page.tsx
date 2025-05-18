@@ -98,11 +98,11 @@ interface EditableSalaryFields {
 
 export default function SalarySlipPage() {
   const { toast } = useToast();
-  const [currentYear, setCurrentYear] = React.useState(new Date().getFullYear());
+  const [currentYear, setCurrentYear] = React.useState(0);
   const [availableYears, setAvailableYears] = React.useState<number[]>([]);
 
-  const [selectedMonth, setSelectedMonth] = React.useState<string>(months[new Date().getMonth()]);
-  const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = React.useState<string>('');
+  const [selectedYear, setSelectedYear] = React.useState<number>(0);
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | undefined>();
   const [selectedDivision, setSelectedDivision] = React.useState<string | undefined>();
   
@@ -119,6 +119,7 @@ export default function SalarySlipPage() {
     const year = new Date().getFullYear();
     setCurrentYear(year);
     setAvailableYears(Array.from({ length: 5 }, (_, i) => year - i));
+    setSelectedMonth(months[new Date().getMonth()]);
     setSelectedYear(year);
   }, []);
 
@@ -161,7 +162,7 @@ export default function SalarySlipPage() {
       }
     } else {
       setFilteredEmployeesForSlip([]);
-       if (selectedDivision) { // if a division is selected but no employees match
+       if (selectedDivision) { 
         setSelectedEmployeeId(undefined);
         setSlipData(null);
         setShowSlip(false);
@@ -333,7 +334,7 @@ export default function SalarySlipPage() {
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
-  const nextMonthDate = selectedMonth && selectedYear ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
+  const nextMonthDate = selectedMonth && selectedYear > 0 ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
   const nextMonthName = format(nextMonthDate, "MMMM");
   const nextMonthYearNum = getYear(nextMonthDate);
 
@@ -359,7 +360,7 @@ export default function SalarySlipPage() {
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={selectedYear ? selectedYear.toString() : ""} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+          <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(val) => setSelectedYear(parseInt(val))}>
              <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="Select Year" />
             </SelectTrigger>
@@ -431,18 +432,22 @@ export default function SalarySlipPage() {
                 <p><strong>Designation:</strong> {slipData.designation}</p>
                 <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
                 <p><strong>Division:</strong> {slipData.division}</p>
-              </div>
-              <div>
+
+                <Separator className="my-4" /> 
+
                 <h3 className="font-semibold mb-2">Pay Details</h3>
                 <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                 <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
+                
                 <Separator className="my-2" />
-                 <h3 className="font-semibold mb-2">Attendance Summary</h3>
+                
+                <h3 className="font-semibold mb-2">Attendance Summary</h3>
                 <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                 <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                 <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                 <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                <Separator className="my-2" />
+              </div>
+              <div>
                 <h3 className="font-semibold mb-1 mt-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                 <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
                 <h3 className="font-semibold mb-1 mt-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
@@ -547,5 +552,3 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
-    
