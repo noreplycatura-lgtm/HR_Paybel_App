@@ -5,7 +5,7 @@ import type { LeaveApplication, OpeningLeaveBalance } from './hr-types';
 
 // TEMPORARY FLAG: Set to true to simplify leave logic and reset prior accruals.
 // Set to false to revert to standard calculation rules.
-const TEMPORARY_RESET_LEAVE_LOGIC = false; // Ensuring standard accrual
+const TEMPORARY_RESET_LEAVE_LOGIC = false; 
 
 export const CL_ACCRUAL_RATE = 0.6;
 export const SL_ACCRUAL_RATE = 0.6;
@@ -119,8 +119,8 @@ export const calculateEmployeeLeaveDetailsForPeriod = (
         if(isAfter(monthIteratorForFY, selectedMonthEndDate)) break; 
     }
   } else {
-    // If TEMPORARY_RESET_LEAVE_LOGIC is true, use opening balances as is, no further accrual for CL/SL for this month.
-    // This means accruedCLInCurrentFY and accruedSLInCurrentFY remain as set from openingBalanceForCurrentFY.
+    // If TEMPORARY_RESET_LEAVE_LOGIC is true, use opening balances as is for the FY start
+    // No accrual for current month if flag is on.
   }
   
   let usedCLInCurrentFYFromApps = 0;
@@ -155,30 +155,23 @@ export const calculateEmployeeLeaveDetailsForPeriod = (
 
   if (latestOpeningPLRecord) {
       accruedPLOverall = latestOpeningPLRecord.openingPL;
-      plCalculationStartDate = startOfMonth(new Date(latestOpeningPLRecord.financialYearStart, 3, 1)); // Start accrual from FY of this OB
+      plCalculationStartDate = startOfMonth(new Date(latestOpeningPLRecord.financialYearStart, 3, 1)); 
       if (isBefore(plCalculationStartDate, doj)) {
-          plCalculationStartDate = startOfMonth(doj); // Or DOJ if later
+          plCalculationStartDate = startOfMonth(doj); 
       }
   }
   
   if (!TEMPORARY_RESET_LEAVE_LOGIC) {
     let monthIteratorForPL = plCalculationStartDate;
     while(isBefore(monthIteratorForPL, selectedMonthEndDate) || isEqual(monthIteratorForPL, selectedMonthEndDate)) {
-        // Only add accrual if the month is *after* the opening balance's FY start month or *within* it if it's the same FY
-        // and also on or after DOJ.
         if(isBefore(doj, endOfMonth(monthIteratorForPL)) || isEqual(doj, endOfMonth(monthIteratorForPL))) {
-             // Skip accrual for the month if it's the same month as plCalculationStartDate and an OB was used for that FY
-            boolSkipAccrual = false;
+            let boolSkipAccrual = false;
             if (latestOpeningPLRecord && getYear(monthIteratorForPL) === latestOpeningPLRecord.financialYearStart && getMonth(monthIteratorForPL) === 3) {
-                // If using an opening balance for this FY, don't double-accrue for April of that OB year.
-                // But if DOJ is later in this FY, April might not be the first accrual month.
                 if(isAfter(monthIteratorForPL, startOfMonth(doj)) || isEqual(monthIteratorForPL, startOfMonth(doj))){
-                    // Accrue only if this month is actually at or after DOJ's effective start for PL.
                 } else {
                   boolSkipAccrual = true;
                 }
             }
-
 
             const serviceMonthsAtIterEnd = calculateMonthsOfService(employee.doj, endOfMonth(monthIteratorForPL));
             if (serviceMonthsAtIterEnd > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL) {
@@ -194,8 +187,9 @@ export const calculateEmployeeLeaveDetailsForPeriod = (
         if(isAfter(monthIteratorForPL, selectedMonthEndDate)) break; 
     }
   } else {
-    // If TEMPORARY_RESET_LEAVE_LOGIC, use opening PL as is, no further accrual for this month.
-    accruedPLOverall = openingBalanceForCurrentFY?.openingPL || 0; // Based on current FY for temporary simplicity
+     // If TEMPORARY_RESET_LEAVE_LOGIC, use opening PL as is for the FY start
+     // No accrual for current month if flag is on.
+    accruedPLOverall = openingBalanceForCurrentFY?.openingPL || 0; 
   }
 
   let usedPLOverallFromApps = 0;
@@ -240,7 +234,7 @@ export const getLeaveBalancesAtStartOfMonth = (
   const monthStartDate = startOfMonth(new Date(targetYear, targetMonthIndex, 1));
   const dojDate = parseISO(employee.doj);
 
-  if (!isValid(dojDate)) { 
+  if (!isValid(dojDate) || !employee.doj ) { 
     return { cl: 0, sl: 0, pl: 0, isEligibleForAccrualThisMonth: false };
   }
   
@@ -261,17 +255,15 @@ export const getLeaveBalancesAtStartOfMonth = (
     return { cl: 0, sl: 0, pl: 0, isEligibleForAccrualThisMonth: false };
   }
 
-  // Standard logic
   const serviceMonthsAtTargetMonthStart = calculateMonthsOfService(employee.doj, monthStartDate);
   const isEligibleForAccrualInTargetMonth = serviceMonthsAtTargetMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
   let prevMonthDate = addMonths(monthStartDate, -1);
 
-  // If the target month is the DOJ month or before, or if prev month is before DOJ, handle as initial calculation
   if (isBefore(monthStartDate, dojDate) || isEqual(monthStartDate, startOfMonth(dojDate)) || isBefore(prevMonthDate, dojDate) ) {
      let initialCL = 0, initialSL = 0, initialPL = 0;
      
-     if (targetMonthIndex === 3) { // April
+     if (targetMonthIndex === 3) { 
         initialCL = openingBalanceForCurrentFY?.openingCL || 0;
         initialSL = openingBalanceForCurrentFY?.openingSL || 0;
      }
@@ -282,9 +274,11 @@ export const getLeaveBalancesAtStartOfMonth = (
     
      if (relevantOpeningPLRecords.length > 0 && relevantOpeningPLRecords[0].financialYearStart === currentFYStartYearForTargetMonth) {
         initialPL = relevantOpeningPLRecords[0].openingPL;
-     } // Else initialPL remains 0 if no OB for this FY
+     } 
 
-     if (isEligibleForAccrualInTargetMonth) {
+     if (isEligibleForAccrualInTargetMonth && isEqual(monthStartDate, startOfMonth(dojDate))) {
+         // No accrual for the very first month of joining if it's the start of eligibility
+     } else if (isEligibleForAccrualInTargetMonth) {
         initialCL += CL_ACCRUAL_RATE;
         initialSL += SL_ACCRUAL_RATE;
         initialPL += PL_ACCRUAL_RATE;
@@ -298,7 +292,6 @@ export const getLeaveBalancesAtStartOfMonth = (
       };
   }
 
-  // If it's not the first month of service, get previous month's closing balance
   const balancesAtPrevMonthEnd = calculateEmployeeLeaveDetailsForPeriod(
     employee,
     getYear(prevMonthDate),
@@ -311,11 +304,10 @@ export const getLeaveBalancesAtStartOfMonth = (
   let openingSLForTargetMonth = balancesAtPrevMonthEnd.balanceSLAtMonthEnd;
   let openingPLForTargetMonth = balancesAtPrevMonthEnd.balancePLAtMonthEnd;
   
-  if (targetMonthIndex === 3) { // April - Financial Year Reset for CL/SL
+  if (targetMonthIndex === 3) { 
     const obForNewFY = allOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === targetYear);
     openingCLForTargetMonth = obForNewFY?.openingCL || 0;
     openingSLForTargetMonth = obForNewFY?.openingSL || 0;
-    // For PL, it carries over, but if a new FY opening PL is provided, it takes precedence
     if (obForNewFY && obForNewFY.openingPL !== undefined) { 
         openingPLForTargetMonth = obForNewFY.openingPL;
     }
