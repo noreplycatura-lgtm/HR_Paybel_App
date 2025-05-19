@@ -18,6 +18,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import type { LeaveApplication } from "@/lib/hr-types";
 
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
@@ -64,26 +65,27 @@ export default function DashboardPage() {
     let activeEmployeesCount = 0;
     let overallAttendanceValue = "N/A";
     let attendanceDescription = "From last uploaded file";
-    let totalLeaveRecords = 0;
+    let totalLeaveRecordsCount = 0;
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
 
     if (typeof window !== 'undefined') {
       try {
+        // Calculate Total Active Employees
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployeesStr) {
           const employeesFromStorage: EmployeeDetail[] = JSON.parse(storedEmployeesStr);
            if (Array.isArray(employeesFromStorage)) {
             activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
            } else {
-            activeEmployeesCount = 0;
+            activeEmployeesCount = 0; // Fallback if data is corrupted
             console.warn("Employee master data in localStorage is corrupted or not an array. Showing 0.");
-            toast({ title: "Data Warning", description: "Could not properly read employee master data from local storage. Data is saved locally in your browser.", variant: "destructive", duration: 7000 });
            }
         } else {
-          activeEmployeesCount = 0;
+          activeEmployeesCount = 0; // No master data, default to 0
         }
 
+        // Calculate Overall Attendance from Last Upload
         const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
         if (lastUploadContextStr) {
           try {
@@ -110,7 +112,6 @@ export default function DashboardPage() {
                 overallAttendanceValue = "N/A";
                 attendanceDescription = `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} is corrupted.`;
                 console.warn("Last uploaded attendance data is corrupted.");
-                 toast({ title: "Data Warning", description: `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} in localStorage is corrupted. Dashboard may not show latest attendance.`, variant: "destructive", duration: 7000 });
               }
             } else {
               overallAttendanceValue = "N/A";
@@ -120,22 +121,26 @@ export default function DashboardPage() {
             console.error("Error parsing last upload context or its attendance data:", e);
             overallAttendanceValue = "N/A";
             attendanceDescription = "Error reading attendance context.";
-            toast({ title: "Data Warning", description: "Could not properly read last upload context. Dashboard may not show latest attendance.", variant: "destructive", duration: 7000 });
           }
-        } else { attendanceDescription = "No attendance data uploaded yet."; }
+        } else { 
+          attendanceDescription = "No attendance data uploaded yet."; 
+        }
 
+        // Calculate Total Leave Records
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
             try {
-              const parsedApps = JSON.parse(storedLeaveApps);
-              totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
+              const parsedApps: LeaveApplication[] = JSON.parse(storedLeaveApps);
+              totalLeaveRecordsCount = Array.isArray(parsedApps) ? parsedApps.length : 0;
             } catch (e) {
               console.error("Error parsing leave applications:", e);
-              totalLeaveRecords = 0;
-              toast({ title: "Data Warning", description: "Could not read leave application data from local storage.", variant: "destructive", duration: 7000 });
+              totalLeaveRecordsCount = 0;
             }
+        } else {
+          totalLeaveRecordsCount = 0;
         }
 
+        // Determine Payroll Status for Last Month
         const lastMonthDate = subMonths(new Date(), 1);
         const lastMonthName = months[getMonth(lastMonthDate)];
         const lastMonthYear = getYear(lastMonthDate);
@@ -155,7 +160,6 @@ export default function DashboardPage() {
               console.error("Error parsing last month's attendance for payroll status:", e);
               payrollStatusValue = "Error";
               payrollStatusDescription = `Error reading ${lastMonthName} ${lastMonthYear} attendance`;
-              toast({ title: "Data Warning", description: `Could not read last month's attendance (${lastMonthName} ${lastMonthYear}) for payroll status.`, variant: "destructive", duration: 7000 });
             }
         } else {
            payrollStatusValue = "Pending";
@@ -168,7 +172,7 @@ export default function DashboardPage() {
           activeEmployeesCount = 0;
           overallAttendanceValue = "N/A";
           attendanceDescription = "Error fetching data.";
-          totalLeaveRecords = 0;
+          totalLeaveRecordsCount = 0;
           payrollStatusValue = "Error";
           payrollStatusDescription = "Error fetching data.";
       }
@@ -177,18 +181,18 @@ export default function DashboardPage() {
     setDashboardCards(prevCards => prevCards.map(card => {
       if (card.title === "Total Employees") return { ...card, value: activeEmployeesCount.toString() };
       if (card.title === "Overall Attendance (Last Upload)") return { ...card, value: overallAttendanceValue, description: attendanceDescription };
-      if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecords.toString() };
+      if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecordsCount.toString() };
       if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
       return card;
     }));
     setIsLoading(false);
-  }, []); // Runs once on mount
+  }, [toast]); // Re-run if toast changes, or consider removing toast dependency if not needed
 
 
   const handleExportData = () => {
     if (typeof window === 'undefined') return;
     const allData: Record<string, any> = {};
-    const keysToExport = [
+    const knownFixedKeys = [
       LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
       LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
       LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
@@ -197,28 +201,35 @@ export default function DashboardPage() {
       LOCAL_STORAGE_SIMULATED_USERS_KEY
     ];
 
-    keysToExport.forEach(key => {
+    knownFixedKeys.forEach(key => {
       const item = localStorage.getItem(key);
       if (item) {
         try {
           allData[key] = JSON.parse(item);
         } catch (e) {
-          allData[key] = item;
+          // If JSON.parse fails, store as raw string (might be non-JSON data or corrupted)
+          allData[key] = item; 
+          console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
         }
       }
     });
 
+    const knownDynamicPrefixes = [
+      LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+      LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+      LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+    ];
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) ||
-                  key.startsWith(LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX) ||
-                  key.startsWith(LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX))) {
+      if (key && knownDynamicPrefixes.some(prefix => key.startsWith(prefix))) {
         const item = localStorage.getItem(key);
         if (item) {
           try {
             allData[key] = JSON.parse(item);
           } catch (e) {
             allData[key] = item;
+            console.warn(`Could not parse JSON for prefixed key ${key} during export, storing as raw string.`);
           }
         }
       }
@@ -256,7 +267,8 @@ export default function DashboardPage() {
         return;
       }
 
-      const knownPrefixes = [
+      // Clear existing relevant localStorage items before import
+      const knownPrefixesForClear = [
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
           LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
           LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
@@ -264,15 +276,8 @@ export default function DashboardPage() {
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && (knownPrefixes.some(prefix => key.startsWith(prefix)) ||
-             [
-                LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
-                LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-                LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-                LOCAL_STORAGE_OPENING_BALANCES_KEY,
-                LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-                LOCAL_STORAGE_SIMULATED_USERS_KEY
-             ].includes(key))) {
+          if(key && (knownPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
+             knownFixedKeys.includes(key))) { // Use knownFixedKeys for clearing as well
             keysToRemove.push(key);
           }
       }
@@ -287,7 +292,8 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
-      window.location.reload();
+      // Force reload to ensure all components re-fetch from localStorage
+      window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
       toast({ title: "Import Error", description: "Could not parse or import JSON data. Check format.", variant: "destructive" });
@@ -373,7 +379,7 @@ export default function DashboardPage() {
                 <CardDescription>
                   Manually export or import all application data stored in your browser's local storage.
                   This is a prototype feature to help transfer data between browsers/computers for testing.
-                  Use with caution: Importing data will overwrite existing local data.
+                  Use with caution: Importing data will overwrite existing local data for this application.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col sm:flex-row gap-4">
@@ -455,3 +461,6 @@ export default function DashboardPage() {
     </>
   );
 }
+
+
+    
