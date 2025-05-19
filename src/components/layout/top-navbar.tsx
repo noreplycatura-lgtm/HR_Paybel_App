@@ -4,7 +4,6 @@
 import Link from "next/link";
 import { UserCircle, PanelLeft } from "lucide-react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,18 +17,8 @@ import {
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
 
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
-
 export function TopNavbar() {
   const { toggleSidebar, isMobile } = useSidebar();
-  const router = useRouter();
-
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
-    }
-    router.push('/login');
-  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 print:hidden">
@@ -67,10 +56,7 @@ export function TopNavbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
-              Logout
-            </DropdownMenuItem>
+            {/* Logout option removed */}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

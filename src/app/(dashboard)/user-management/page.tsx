@@ -45,9 +45,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, LogOut, Trash2, Lock, Unlock, KeyRound, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
 
 const newUserFormSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -64,7 +63,6 @@ interface SimulatedUser {
 
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
 interface ActivityLogEntry {
@@ -77,7 +75,7 @@ const addActivityLog = (message: string) => {
   try {
     const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
-    if (!Array.isArray(activities)) activities = [];
+    if (!Array.isArray(activities)) activities = []; 
 
     activities.unshift({ timestamp: new Date().toISOString(), message });
     activities = activities.slice(0, 10); 
@@ -89,7 +87,6 @@ const addActivityLog = (message: string) => {
 
 export default function UserManagementPage() {
   const { toast } = useToast();
-  const router = useRouter();
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = React.useState(false);
   const [simulatedUsers, setSimulatedUsers] = React.useState<SimulatedUser[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -103,10 +100,8 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(LOCAL_STORAGE_SIMULATED_USERS_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
-          // Ensure 'Novita' is removed if it exists from previous states
           usersToSet = parsedUsers.filter(user => user.username !== "Novita");
           if (usersToSet.length !== parsedUsers.length) {
-            // If Novita was removed, save the updated list back
             localStorage.setItem(LOCAL_STORAGE_SIMULATED_USERS_KEY, JSON.stringify(usersToSet));
           }
         }
@@ -172,22 +167,10 @@ export default function UserManagementPage() {
     addActivityLog(`Co-admin user '${values.username}' created.`);
     toast({
       title: "Co-Admin User Added",
-      description: `User '${values.username}' has been added to the list. This user can now 'log in' via the main login page if not locked.`,
+      description: `User '${values.username}' has been added to the list.`,
     });
     setIsCreateUserDialogOpen(false);
     form.reset();
-  };
-
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
-    }
-    addActivityLog(`User logged out.`);
-    toast({
-      title: "Logged Out",
-      description: "You have been successfully logged out.",
-    });
-    router.push("/login");
   };
 
   const handleToggleLock = (userId: string) => {
@@ -228,7 +211,7 @@ export default function UserManagementPage() {
     addActivityLog(`Password reset attempted for co-admin '${username}'.`);
     toast({
       title: "Prototype Action",
-      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow. Passwords for co-admin users are not stored or checked beyond existence in this prototype.`,
+      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow.`,
     });
   };
 
@@ -250,7 +233,7 @@ export default function UserManagementPage() {
         <CardHeader>
           <CardTitle>Account Controls</CardTitle>
           <CardDescription>
-            Create new co-admin users or log out.
+            Create new co-admin users.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4 pt-6">
@@ -265,7 +248,7 @@ export default function UserManagementPage() {
               <DialogHeader>
                 <DialogTitle>Create New Co-Admin</DialogTitle>
                 <DialogDescription>
-                  Fill in the details for the new co-admin user. This user will be able to 'log in' if not locked.
+                  Fill in the details for the new co-admin user.
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
@@ -308,11 +291,7 @@ export default function UserManagementPage() {
               </Form>
             </DialogContent>
           </Dialog>
-
-          <Button onClick={handleLogout} variant="destructive">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
+          {/* Logout button removed */}
         </CardContent>
       </Card>
 

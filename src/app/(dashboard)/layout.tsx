@@ -5,7 +5,6 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { PanelLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import {
   SidebarProvider,
@@ -21,41 +20,12 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { TopNavbar } from "@/components/layout/top-navbar";
 import { NAV_ITEMS, COMPANY_NAME } from "@/lib/constants";
 
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
-
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const [isAuthCheckComplete, setIsAuthCheckComplete] = React.useState(false);
-
-  React.useEffect(() => {
-    let userIsLoggedIn = false;
-    if (typeof window !== 'undefined') {
-      userIsLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
-      if (!userIsLoggedIn) {
-        router.replace('/login');
-      }
-    }
-    // Crucially, set auth check as complete *after* the check and potential redirect.
-    setIsAuthCheckComplete(true);
-  }, [router]);
-
-  // If the authentication check hasn't completed yet, render nothing to avoid flicker.
-  if (!isAuthCheckComplete) {
-    return null;
-  }
-
-  // After the auth check is complete, if the user is determined to not be logged in
-  // (which means the redirect to /login is in progress or should have happened),
-  // render nothing. This prevents a flash of dashboard content.
-  if (typeof window !== 'undefined' && localStorage.getItem(LOGGED_IN_STATUS_KEY) !== 'true') {
-      return null;
-  }
-
-  // If auth check is complete and user is logged in, render the layout.
+  // Login check removed for direct access
   return (
     <SidebarProvider defaultOpen={false}>
        <div className="flex min-h-screen w-full flex-col bg-muted/40">
