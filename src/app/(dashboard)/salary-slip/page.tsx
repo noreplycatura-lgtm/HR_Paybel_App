@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,8 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
-import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, calculateMonthsOfService, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL } from "@/lib/hr-calculations";
-import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
+import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
+import type { OpeningLeaveBalance } from "@/lib/hr-types";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -55,12 +56,11 @@ const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
   }
 };
 
-// These would be Firestore collection names
-// const FIRESTORE_EMPLOYEE_MASTER_COLLECTION = "employees";
-// const FIRESTORE_ATTENDANCE_COLLECTION_PREFIX = "attendance_";
-// const FIRESTORE_SALARY_EDITS_COLLECTION_PREFIX = "salaryEdits_";
-// const FIRESTORE_OPENING_BALANCES_COLLECTION = "leaveOpeningBalances";
-// const FIRESTORE_PERFORMANCE_DEDUCTIONS_COLLECTION = "performanceDeductions";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 
 
 interface SalarySlipDataType {
@@ -119,7 +119,6 @@ export default function SalarySlipPage() {
   const [allEmployees, setAllEmployees] = React.useState<EmployeeDetail[]>([]);
   const [filteredEmployeesForSlip, setFilteredEmployeesForSlip] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  // No need for allLeaveApplications here as it's not directly used for slip generation; calculations use it.
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
 
 
@@ -140,30 +139,27 @@ export default function SalarySlipPage() {
 
   React.useEffect(() => {
     setIsLoadingEmployees(true);
-    // TODO: Fetch data from Firestore
-    // const fetchData = async () => {
-    //   // const empSnap = await getDocs(collection(db, FIRESTORE_EMPLOYEE_MASTER_COLLECTION));
-    //   // setAllEmployees(empSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as EmployeeDetail)));
-    //   // const obSnap = await getDocs(collection(db, FIRESTORE_OPENING_BALANCES_COLLECTION));
-    //   // setOpeningBalances(obSnap.docs.map(doc => doc.data() as OpeningLeaveBalance));
-    //   // const perfDedSnap = await getDocs(collection(db, FIRESTORE_PERFORMANCE_DEDUCTIONS_COLLECTION));
-    //   // setAllPerformanceDeductions(perfDedSnap.docs.map(doc => doc.data() as PerformanceDeductionEntry));
-    //   setAllEmployees([]);
-    //   setOpeningBalances([]);
-    //   setAllPerformanceDeductions([]);
-    //   setIsLoadingEmployees(false);
-    // };
-    // fetchData();
-    setAllEmployees([]);
-    setOpeningBalances([]);
-    setAllPerformanceDeductions([]);
+    if (typeof window !== 'undefined') {
+        try {
+            const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+            setAllEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
+
+            const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+            setOpeningBalances(storedOB ? JSON.parse(storedOB) : []);
+            
+            const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+            setAllPerformanceDeductions(storedPerfDeductions ? JSON.parse(storedPerfDeductions) : []);
+
+        } catch (error) {
+            console.error("Error loading initial data for Salary Slip page:", error);
+            toast({ title: "Data Load Error", description: "Could not load some initial data from localStorage. Salary slip generation might be affected.", variant: "destructive" });
+            setAllEmployees([]);
+            setOpeningBalances([]);
+            setAllPerformanceDeductions([]);
+        }
+    }
     setIsLoadingEmployees(false);
-    toast({
-        title: "Data Source Changed",
-        description: "Salary Slip data would now be fetched from Firestore. Currently showing empty.",
-        duration: 7000,
-    });
-  }, [toast]);
+  }, []); // Corrected dependency array
 
   React.useEffect(() => {
     if (selectedDivision && allEmployees.length > 0) {
@@ -185,26 +181,21 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]); // Added selectedEmployeeId to reset if division changes make it invalid
+  }, [selectedDivision, allEmployees]); 
 
-  const generateSlipDataForEmployee = ( // This function is now synchronous as it relies on state/props
+  const generateSlipDataForEmployee = (
     employee: EmployeeDetail,
     month: string,
     year: number,
-    localOpeningBalances: OpeningLeaveBalance[], // Pass these in
+    localOpeningBalances: OpeningLeaveBalance[],
     localAllPerformanceDeductions: PerformanceDeductionEntry[],
-    attendanceForMonthEmployee?: MonthlyEmployeeAttendance, // Pass this in
-    salaryEditsForEmployee?: EditableSalaryFields // Pass this in
+    attendanceForMonthEmployee?: MonthlyEmployeeAttendance,
+    salaryEditsForEmployee?: EditableSalaryFields
   ): SalarySlipDataType | null => {
     const monthIndex = months.indexOf(month);
     if (monthIndex === -1 || !employee.doj) return null;
 
     const attendanceStatuses: string[] = attendanceForMonthEmployee?.attendance || [];
-    
-    if (!attendanceForMonthEmployee) { // If no attendance record for this employee for this month
-      console.warn(`No attendance data found for ${employee.code} for ${month} ${year}. Skipping slip.`);
-      return null; 
-    }
     
     const salaryEdits = salaryEditsForEmployee || {};
     const performanceDeductionEntry = localAllPerformanceDeductions.find(
@@ -236,7 +227,7 @@ export default function SalarySlipPage() {
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
     const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
 
-    const monthlyComp = calculateMonthlySalaryComponents(employee, year, monthIndex); // Pass period for revised salary check
+    const monthlyComp = calculateMonthlySalaryComponents(employee, year, monthIndex); 
     const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
 
     const earningsList = [
@@ -263,8 +254,7 @@ export default function SalarySlipPage() {
     ];
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
-
-    // For Firestore, leaveApplications would be another fetched collection
+    
     const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
         employee, year, monthIndex, [], localOpeningBalances 
     );
@@ -274,27 +264,36 @@ export default function SalarySlipPage() {
     const nextMonthIdx = getMonth(nextMonthDateObject);
     const nextYr = getYear(nextMonthDateObject);
     
-    const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
-    const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
-    
-    const openingBalanceForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
+    // For PL, use the balance from current month's end as starting point for next month's accrual.
+    // For CL/SL, if next month is April, it's reset by financial year.
     const closingBalanceCLForSelectedMonth = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth;
     const closingBalanceSLForSelectedMonth = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth;
     const closingBalancePLForSelectedMonth = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
 
-    if (nextMonthIdx === 3) { 
-        nextMonthOpeningCL = (openingBalanceForNextFY?.openingCL || 0) + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0); 
-        nextMonthOpeningSL = (openingBalanceForNextFY?.openingSL || 0) + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0); 
-        let basePLForNextFY = closingBalancePLForSelectedMonth; 
-        if (openingBalanceForNextFY && openingBalanceForNextFY.openingPL !== undefined ) { 
-           basePLForNextFY = openingBalanceForNextFY.openingPL; 
-        }
-        nextMonthOpeningPL = basePLForNextFY + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
-    } else { 
-        nextMonthOpeningCL = closingBalanceCLForSelectedMonth + (isEligibleForAccrualNextMonth ? CL_ACCRUAL_RATE : 0);
-        nextMonthOpeningSL = closingBalanceSLForSelectedMonth + (isEligibleForAccrualNextMonth ? SL_ACCRUAL_RATE : 0);
-        nextMonthOpeningPL = closingBalancePLForSelectedMonth + (isEligibleForAccrualNextMonth ? PL_ACCRUAL_RATE : 0);
+
+    // Get OB for the *next* financial year if next month is April
+    const obForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
+
+    if (nextMonthIdx === 3) { // April
+        nextMonthOpeningCL = obForNextFY?.openingCL || 0;
+        nextMonthOpeningSL = obForNextFY?.openingSL || 0;
+        nextMonthOpeningPL = obForNextFY?.openingPL !== undefined ? obForNextFY.openingPL : closingBalancePLForSelectedMonth;
+    } else {
+        nextMonthOpeningCL = closingBalanceCLForSelectedMonth;
+        nextMonthOpeningSL = closingBalanceSLForSelectedMonth;
+        nextMonthOpeningPL = closingBalancePLForSelectedMonth;
     }
+    
+    // Add next month's accrual if eligible
+    const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
+    const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+
+    if (isEligibleForAccrualNextMonth) {
+        nextMonthOpeningCL += CL_ACCRUAL_RATE;
+        nextMonthOpeningSL += SL_ACCRUAL_RATE;
+        nextMonthOpeningPL += PL_ACCRUAL_RATE;
+    }
+
 
     return {
       employeeId: employee.code, name: employee.name, designation: employee.designation,
@@ -309,7 +308,7 @@ export default function SalarySlipPage() {
   };
 
 
-  const handleGenerateSlip = async () => { // Make async for potential Firestore calls
+  const handleGenerateSlip = () => { 
     if (!selectedMonth || !selectedYear || !selectedEmployeeId || !selectedDivision) {
       toast({ title: "Selection Missing", description: "Please select month, year, division, and employee.", variant: "destructive" });
       return;
@@ -324,12 +323,37 @@ export default function SalarySlipPage() {
       return;
     }
     
-    // TODO: Fetch attendance and salaryEdits from Firestore for this specific employee & period
     let attendanceForMonthEmployee: MonthlyEmployeeAttendance | undefined;
     let salaryEditsForEmployee: EditableSalaryFields | undefined;
-    // Example:
-    // attendanceForMonthEmployee = await fetchAttendanceForEmployeeMonth(employee.code, selectedMonth, selectedYear);
-    // salaryEditsForEmployee = await fetchSalaryEditsForEmployeeMonth(employee.code, selectedMonth, selectedYear);
+
+    if (typeof window !== 'undefined') {
+        const attendanceStorageKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedAttendanceForMonth = localStorage.getItem(attendanceStorageKey);
+        if (storedAttendanceForMonth) {
+            try {
+                const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceForMonth);
+                attendanceForMonthEmployee = allMonthAttendance.find(att => att.code === employee.code);
+            } catch (e) {
+                console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear} for employee ${employee.code}:`, e);
+                 toast({ title: "Attendance Data Error", description: `Could not parse attendance for ${employee.code}. Using defaults.`, variant: "destructive", duration: 5000 });
+            }
+        } else {
+             toast({ title: "No Attendance Data", description: `No attendance data found for ${employee.code} for ${selectedMonth} ${selectedYear}. Slip may be inaccurate.`, variant: "destructive", duration: 5000 });
+        }
+
+        const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedSalaryEditsForMonth = localStorage.getItem(salaryEditsStorageKey);
+        if (storedSalaryEditsForMonth) {
+            try {
+                const allMonthEdits: Record<string, EditableSalaryFields> = JSON.parse(storedSalaryEditsForMonth);
+                salaryEditsForEmployee = allMonthEdits[employee.id];
+            } catch (e) {
+                 console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear} for employee ${employee.code}:`, e);
+                 toast({ title: "Salary Edits Error", description: `Could not parse salary edits for ${employee.code}. Using defaults.`, variant: "destructive", duration: 5000 });
+            }
+        }
+    }
+
 
     const generatedData = generateSlipDataForEmployee(
         employee, selectedMonth, selectedYear, 
@@ -341,14 +365,14 @@ export default function SalarySlipPage() {
       setSlipData(generatedData);
       setShowSlip(true);
     } else {
-      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}. (Data would be fetched from Firestore).`, variant: "destructive" });
+      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}.`, variant: "destructive" });
       setSlipData(null);
       setShowSlip(false);
     }
     setIsLoading(false);
   };
 
-  const handleDownloadAllSummaries = async () => { // Make async
+  const handleDownloadAllSummaries = () => { 
     if (!selectedMonth || !selectedYear || !selectedDivision) {
       toast({ title: "Selection Missing", description: "Please select month, year, and division to download summaries.", variant: "destructive" });
       return;
@@ -364,11 +388,26 @@ export default function SalarySlipPage() {
       setIsLoading(false);
       return;
     }
+    
+    let allMonthAttendanceData: MonthlyEmployeeAttendance[] = [];
+    let allMonthSalaryEdits: Record<string, EditableSalaryFields> = {};
 
-    // TODO: Fetch all attendance and salary edits for the selected month/year in a batch if possible
-    // Or fetch them one by one (less efficient for many employees)
-    // For this example, we'll conceptually pass empty ones to generateSlipDataForEmployee
-    // which means "Used" and "Editable Deductions" will be 0 unless fetched.
+    if (typeof window !== 'undefined') {
+        const attendanceStorageKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedAttendance = localStorage.getItem(attendanceStorageKey);
+        if (storedAttendance) {
+            try { allMonthAttendanceData = JSON.parse(storedAttendance); }
+            catch (e) { console.warn("Error parsing attendance for CSV summary:", e); }
+        }
+        
+        const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedSalaryEdits = localStorage.getItem(salaryEditsStorageKey);
+        if (storedSalaryEdits) {
+            try { allMonthSalaryEdits = JSON.parse(storedSalaryEdits); }
+            catch (e) { console.warn("Error parsing salary edits for CSV summary:", e); }
+        }
+    }
+
 
     const csvRows: string[][] = [];
     const headers = ["Employee (Code-Name-Designation)", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"];
@@ -376,11 +415,10 @@ export default function SalarySlipPage() {
 
     let processedCount = 0;
     for (const emp of employeesForSummary) {
-      // Fetch attendance and salary edits for emp for selectedMonth/selectedYear
-      let attendanceForEmp: MonthlyEmployeeAttendance | undefined; 
-      let editsForEmp: EditableSalaryFields | undefined;
-      // attendanceForEmp = await fetchAttendanceForEmployeeMonth(emp.code, selectedMonth, selectedYear);
-      // editsForEmp = await fetchSalaryEditsForEmployeeMonth(emp.code, selectedMonth, selectedYear);
+      const attendanceForEmp = allMonthAttendanceData.find(att => att.code === emp.code);
+      const editsForEmp = allMonthSalaryEdits[emp.id];
+      
+      const salaryComponents = calculateMonthlySalaryComponents(emp, selectedYear, months.indexOf(selectedMonth));
 
       const slipSummaryData = generateSlipDataForEmployee(
           emp, selectedMonth, selectedYear, 
@@ -390,7 +428,7 @@ export default function SalarySlipPage() {
       if (slipSummaryData) {
          csvRows.push([
           `"${emp.code}-${emp.name}-${emp.designation}"`,
-          emp.grossMonthlySalary.toFixed(2), // This should use the gross applicable for the period. calculateMonthlySalaryComponents returns this.
+          salaryComponents.totalGross.toFixed(2),
           slipSummaryData.totalEarnings.toFixed(2),
           slipSummaryData.totalDeductions.toFixed(2),
           slipSummaryData.netSalary.toFixed(2)
@@ -420,7 +458,7 @@ export default function SalarySlipPage() {
     setIsLoading(false);
   };
   
-  const handlePrintAllSlips = async () => { // Make async
+  const handlePrintAllSlips = () => { 
     if (!selectedMonth || !selectedYear || !selectedDivision) {
       toast({ title: "Selection Missing", description: "Please select month, year, and division.", variant: "destructive" });
       return;
@@ -439,15 +477,31 @@ export default function SalarySlipPage() {
       return;
     }
 
+    let allMonthAttendanceData: MonthlyEmployeeAttendance[] = [];
+    let allMonthSalaryEdits: Record<string, EditableSalaryFields> = {};
+
+    if (typeof window !== 'undefined') {
+        const attendanceStorageKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedAttendance = localStorage.getItem(attendanceStorageKey);
+        if (storedAttendance) {
+            try { allMonthAttendanceData = JSON.parse(storedAttendance); }
+            catch (e) { console.warn("Error parsing attendance for bulk print:", e); }
+        }
+        
+        const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+        const storedSalaryEdits = localStorage.getItem(salaryEditsStorageKey);
+        if (storedSalaryEdits) {
+            try { allMonthSalaryEdits = JSON.parse(storedSalaryEdits); }
+            catch (e) { console.warn("Error parsing salary edits for bulk print:", e); }
+        }
+    }
+
     const generatedSlips: SalarySlipDataType[] = [];
     let countWithData = 0;
 
     for (const emp of employeesToPrint) {
-        // Fetch attendance and salary edits for emp for selectedMonth/selectedYear
-        let attendanceForEmp: MonthlyEmployeeAttendance | undefined;
-        let editsForEmp: EditableSalaryFields | undefined;
-        // attendanceForEmp = await fetchAttendanceForEmployeeMonth(emp.code, selectedMonth, selectedYear);
-        // editsForEmp = await fetchSalaryEditsForEmployeeMonth(emp.code, selectedMonth, selectedYear);
+        const attendanceForEmp = allMonthAttendanceData.find(att => att.code === emp.code);
+        const editsForEmp = allMonthSalaryEdits[emp.id];
       
         const sData = generateSlipDataForEmployee(
             emp, selectedMonth, selectedYear,
@@ -468,7 +522,6 @@ export default function SalarySlipPage() {
 
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
-    // setIsLoading(false); // Printing will set loading false
   };
 
   React.useEffect(() => {
@@ -489,7 +542,7 @@ export default function SalarySlipPage() {
             variant: "destructive",
           });
         } finally {
-            setIsLoading(false); // Ensure loading is false after print attempt
+            setIsLoading(false); 
         }
       }, 500); 
       return () => clearTimeout(timer);
@@ -501,12 +554,12 @@ export default function SalarySlipPage() {
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
-  const nextMonthDate = selectedMonth && selectedYear > 0 ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
-  const nextMonthName = format(nextMonthDate, "MMMM");
-  const nextMonthYearNum = getYear(nextMonthDate);
+  const nextMonthDateForDisplay = selectedMonth && selectedYear > 0 ? addMonths(new Date(selectedYear, months.indexOf(selectedMonth), 1), 1) : new Date();
+  const nextMonthNameForDisplay = format(nextMonthDateForDisplay, "MMMM");
+  const nextMonthYearNumForDisplay = getYear(nextMonthDateForDisplay);
 
 
-  if (isLoadingEmployees && !selectedMonth && !selectedYear) { // Simplified initial loading check
+  if (isLoadingEmployees && !selectedMonth && !selectedYear) { 
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
@@ -517,7 +570,6 @@ export default function SalarySlipPage() {
           onClick={() => {
             setIsBulkPrintingView(false);
             setBulkSlipsData([]);
-            // setIsLoading(false); // Already handled in print useEffect
           }}
           variant="outline"
           className="fixed top-4 right-4 no-print z-[101]"
@@ -634,13 +686,13 @@ export default function SalarySlipPage() {
 
   return (
     <>
-      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees. (Data is illustrative and not persisted to a backend).">
+      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees. Data is loaded from localStorage for this prototype.">
           <Button
             onClick={handleDownloadAllSummaries}
             disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
             variant="outline"
           >
-            {isLoading && bulkSlipsData.length === 0 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isLoading && !bulkSlipsData.length ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
              Download All Summaries (CSV)
           </Button>
           <Button
@@ -754,7 +806,7 @@ export default function SalarySlipPage() {
                     <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                     <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
                     <Separator className="my-4" />
-                    <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYearNum})</h3>
+                    <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthNameForDisplay} {nextMonthYearNumForDisplay})</h3>
                     <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
                 </div>
             </div>
@@ -824,7 +876,7 @@ export default function SalarySlipPage() {
        {!showSlip && !isLoading && !isLoadingEmployees && !isBulkPrintingView && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
-            <p>Please select month, year, division, and employee to generate the salary slip. (Data would be fetched from Firestore).</p>
+            <p>Please select month, year, division, and employee to generate the salary slip. Data is loaded from localStorage for this prototype.</p>
           </CardContent>
         </Card>
       )}
@@ -871,3 +923,5 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
+
+    
