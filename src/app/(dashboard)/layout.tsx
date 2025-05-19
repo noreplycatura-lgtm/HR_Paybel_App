@@ -32,20 +32,30 @@ export default function DashboardLayout({
   const [isAuthCheckComplete, setIsAuthCheckComplete] = React.useState(false);
 
   React.useEffect(() => {
+    let userIsLoggedIn = false;
     if (typeof window !== 'undefined') {
-      const isLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
-      if (!isLoggedIn) {
-        router.replace('/login'); 
-      } else {
-        setIsAuthCheckComplete(true);
+      userIsLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
+      if (!userIsLoggedIn) {
+        router.replace('/login');
       }
     }
-  }, [router]); // Keep router dependency for re-check on route changes if needed
+    // Crucially, set auth check as complete *after* the check and potential redirect.
+    setIsAuthCheckComplete(true);
+  }, [router]);
 
+  // If the authentication check hasn't completed yet, render nothing to avoid flicker.
   if (!isAuthCheckComplete) {
-    return null; 
+    return null;
   }
 
+  // After the auth check is complete, if the user is determined to not be logged in
+  // (which means the redirect to /login is in progress or should have happened),
+  // render nothing. This prevents a flash of dashboard content.
+  if (typeof window !== 'undefined' && localStorage.getItem(LOGGED_IN_STATUS_KEY) !== 'true') {
+      return null;
+  }
+
+  // If auth check is complete and user is logged in, render the layout.
   return (
     <SidebarProvider defaultOpen={false}>
        <div className="flex min-h-screen w-full flex-col bg-muted/40">
@@ -69,7 +79,7 @@ function AppSidebar() {
     setIsClient(true);
   }, []);
 
-  const renderState = isClient ? sidebarContextState : "collapsed"; 
+  const renderState = isClient ? sidebarContextState : "collapsed";
 
   return (
     <Sidebar collapsible="icon" className="print:hidden">
