@@ -64,6 +64,28 @@ interface SimulatedUser {
 
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+
+interface ActivityLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = [];
+
+    activities.unshift({ timestamp: new Date().toISOString(), message });
+    activities = activities.slice(0, 10); 
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log:", error);
+  }
+};
 
 export default function UserManagementPage() {
   const { toast } = useToast();
@@ -81,16 +103,11 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(LOCAL_STORAGE_SIMULATED_USERS_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
-          if (Array.isArray(parsedUsers)) {
-            usersToSet = parsedUsers;
-          } else {
-            console.error("Simulated users data in localStorage is not an array. Resetting to empty. Data is saved locally in your browser.");
-            toast({
-                title: "Data Format Error",
-                description: "Stored user list is corrupted. Please add users again if needed. Data is saved locally in your browser.",
-                variant: "destructive",
-                duration: 7000,
-            });
+          // Ensure 'Novita' is removed if it exists from previous states
+          usersToSet = parsedUsers.filter(user => user.username !== "Novita");
+          if (usersToSet.length !== parsedUsers.length) {
+            // If Novita was removed, save the updated list back
+            localStorage.setItem(LOCAL_STORAGE_SIMULATED_USERS_KEY, JSON.stringify(usersToSet));
           }
         }
       } catch (error) {
@@ -105,7 +122,7 @@ export default function UserManagementPage() {
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, []); // Runs once on mount
+  }, []); 
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -138,7 +155,7 @@ export default function UserManagementPage() {
     if (simulatedUsers.find(user => user.username === values.username)) {
       toast({
         title: "Duplicate Username",
-        description: `A user with the username '${values.username}' already exists.`,
+        description: `A co-admin user with the username '${values.username}' already exists.`,
         variant: "destructive",
       });
       return;
@@ -152,9 +169,9 @@ export default function UserManagementPage() {
     const updatedUsers = [...simulatedUsers, newUser];
     setSimulatedUsers(updatedUsers);
     saveSimulatedUsersToLocalStorage(updatedUsers);
-
+    addActivityLog(`Co-admin user '${values.username}' created.`);
     toast({
-      title: "Simulated Co-Admin User Added",
+      title: "Co-Admin User Added",
       description: `User '${values.username}' has been added to the list. This user can now 'log in' via the main login page if not locked.`,
     });
     setIsCreateUserDialogOpen(false);
@@ -162,9 +179,13 @@ export default function UserManagementPage() {
   };
 
   const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
+    }
+    addActivityLog(`User logged out.`);
     toast({
-      title: "Logout Initiated",
-      description: "Redirecting to login page.",
+      title: "Logged Out",
+      description: "You have been successfully logged out.",
     });
     router.push("/login");
   };
@@ -176,10 +197,13 @@ export default function UserManagementPage() {
     setSimulatedUsers(updatedUsers);
     saveSimulatedUsersToLocalStorage(updatedUsers);
     const user = updatedUsers.find(u => u.id === userId);
-    toast({
-      title: "User Status Changed",
-      description: `User '${user?.username}' has been ${user?.isLocked ? 'locked' : 'unlocked'}.`,
-    });
+    if (user) {
+      addActivityLog(`Co-admin user '${user.username}' status changed to ${user.isLocked ? 'Locked' : 'Active'}.`);
+      toast({
+        title: "User Status Changed",
+        description: `User '${user.username}' has been ${user.isLocked ? 'locked' : 'unlocked'}.`,
+      });
+    }
   };
 
   const handleDeleteUserClick = (user: SimulatedUser) => {
@@ -191,6 +215,7 @@ export default function UserManagementPage() {
     const updatedUsers = simulatedUsers.filter(user => user.id !== userToDelete.id);
     setSimulatedUsers(updatedUsers);
     saveSimulatedUsersToLocalStorage(updatedUsers);
+    addActivityLog(`Co-admin user '${userToDelete.username}' deleted.`);
     toast({
       title: "User Deleted",
       description: `Simulated user '${userToDelete.username}' has been deleted.`,
@@ -200,9 +225,10 @@ export default function UserManagementPage() {
   };
 
   const handleResetPassword = (username: string) => {
+    addActivityLog(`Password reset attempted for co-admin '${username}'.`);
     toast({
       title: "Prototype Action",
-      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow. Passwords for simulated users are not stored.`,
+      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow. Passwords for co-admin users are not stored or checked beyond existence in this prototype.`,
     });
   };
 
@@ -218,13 +244,13 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description={`Manage simulated co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here). (Data saved in browser's local storage).`}
+        description={`Manage co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
       />
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Account Controls</CardTitle>
           <CardDescription>
-            Create new simulated co-admin users or log out.
+            Create new co-admin users or log out.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4 pt-6">
@@ -237,7 +263,7 @@ export default function UserManagementPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Create New Simulated Co-Admin</DialogTitle>
+                <DialogTitle>Create New Co-Admin</DialogTitle>
                 <DialogDescription>
                   Fill in the details for the new co-admin user. This user will be able to 'log in' if not locked.
                 </DialogDescription>
@@ -292,9 +318,9 @@ export default function UserManagementPage() {
 
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle>Simulated Co-Admin Accounts</CardTitle>
+          <CardTitle>Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of simulated co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here and cannot be modified.
+            List of co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here and cannot be modified.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -321,7 +347,6 @@ export default function UserManagementPage() {
                         size="icon"
                         onClick={() => handleResetPassword(user.username)}
                         title={`Simulate Reset Password for ${user.username}`}
-                        disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       <KeyRound className="h-4 w-4" />
                     </Button>
@@ -330,7 +355,6 @@ export default function UserManagementPage() {
                         size="icon"
                         onClick={() => handleToggleLock(user.id)}
                         title={user.isLocked ? `Unlock ${user.username}` : `Lock ${user.username}`}
-                        disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       {user.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                     </Button>
@@ -340,7 +364,6 @@ export default function UserManagementPage() {
                         onClick={() => handleDeleteUserClick(user)}
                         title={`Delete ${user.username}`}
                         className="text-destructive hover:text-destructive/80"
-                        disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -350,7 +373,7 @@ export default function UserManagementPage() {
               {simulatedUsers.length === 0 && !isLoading && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No simulated co-admin users created yet. (Data saved in browser's local storage).
+                    No co-admin users created yet.
                   </TableCell>
                 </TableRow>
               )}
@@ -364,7 +387,7 @@ export default function UserManagementPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the simulated user account for '{userToDelete?.username}'. This action cannot be undone.
+              This will permanently delete the co-admin user account for '{userToDelete?.username}'. This action cannot be undone from local storage.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

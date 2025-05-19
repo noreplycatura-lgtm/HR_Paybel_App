@@ -29,42 +29,7 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // Added for logging
-
-
-interface EmployeeAttendanceData extends EmployeeDetail {
-  attendance: string[];
-  processedAttendance?: string[];
-  isMissingInMaster?: boolean;
-}
-
-const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-const editEmployeeStatusFormSchema = z.object({
-  dor: z.string().refine((val) => {
-    if (!val) return false;
-    try {
-        const date = parseISO(val);
-        return isValid(date);
-    } catch {
-        return false;
-    }
-  }, { message: "Valid Date of Resignation (YYYY-MM-DD) is required"}),
-  // @ts-ignore - This is a bit of a hack to get DOJ context for validation
-  doj: z.string().optional(),
-}).refine((data) => {
-  if (data.doj && data.dor && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
-    if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
-      return false;
-    }
-  }
-  return true;
-}, {
-  message: "DOR cannot be before DOJ.",
-  path: ["dor"],
-});
-
-type EditEmployeeStatusFormValues = z.infer<typeof editEmployeeStatusFormSchema>;
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; 
 
 interface ActivityLogEntry {
   timestamp: string;
@@ -85,6 +50,39 @@ const addActivityLog = (message: string) => {
     console.error("Error adding to activity log:", error);
   }
 };
+
+interface EmployeeAttendanceData extends EmployeeDetail {
+  attendance: string[];
+  processedAttendance?: string[];
+  isMissingInMaster?: boolean;
+}
+
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+const editEmployeeStatusFormSchema = z.object({
+  dor: z.string().refine((val) => {
+    if (!val) return false;
+    try {
+        const date = parseISO(val);
+        return isValid(date);
+    } catch {
+        return false;
+    }
+  }, { message: "Valid Date of Resignation (YYYY-MM-DD) is required"}),
+  doj: z.string().optional(),
+}).refine((data) => {
+  if (data.doj && data.dor && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
+    if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
+      return false;
+    }
+  }
+  return true;
+}, {
+  message: "DOR cannot be before DOJ.",
+  path: ["dor"],
+});
+
+type EditEmployeeStatusFormValues = z.infer<typeof editEmployeeStatusFormSchema>;
 
 
 export default function AttendancePage() {
@@ -150,8 +148,8 @@ export default function AttendancePage() {
             setEmployeeMasterList(parsedMaster);
           } else {
             setEmployeeMasterList([]); 
-            console.error("Employee master data in localStorage is corrupted.");
-            toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please check Employee Master page. Using empty list.", variant: "destructive", duration: 7000 });
+            console.error("Employee master data in localStorage is corrupted. Please check Employee Master page. Using empty list.");
+            toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         } else {
           setEmployeeMasterList([]); 
@@ -188,6 +186,8 @@ export default function AttendancePage() {
             toast({ title: "Data Error", description: `Attendance data for ${selectedMonth} ${selectedYear} in localStorage is corrupted. Data not loaded. Please re-upload if needed.`, variant: "destructive", duration: 7000 });
             setRawAttendanceData([]);
             setUploadedFileName(null);
+            localStorage.removeItem(rawDataKey); // Remove corrupted item
+            localStorage.removeItem(filenameKey);
           }
         } else {
           setRawAttendanceData([]);
@@ -201,7 +201,7 @@ export default function AttendancePage() {
       }
     }
     setIsLoadingState(false);
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, toast]);
 
 
   React.useEffect(() => {
@@ -232,7 +232,7 @@ export default function AttendancePage() {
         currentMissingInMaster.push(emp);
       }
 
-      let employeeStartDate = new Date(1900, 0, 1);
+      let employeeStartDate = new Date(1900, 0, 1); 
       if (emp.doj) {
           try {
               const parsedDoj = parseISO(emp.doj);
@@ -247,7 +247,7 @@ export default function AttendancePage() {
       } else {
           console.warn(`Missing DOJ for employee ${emp.code} during processing. Defaulting to past date.`);
       }
-
+      
       if (isBefore(selectedMonthEndDate, startOfDay(employeeStartDate))) {
          return { ...emp, processedAttendance: Array(new Date(selectedYear, monthIndex + 1, 0).getDate()).fill('-'), isMissingInMaster };
       }
@@ -341,7 +341,7 @@ export default function AttendancePage() {
 
         const headerLine = lines[0];
         const headerValues = headerLine.split(',');
-        const expectedBaseColumns = 6; // Status,Division,Code,Name,Designation,DOJ
+        const expectedBaseColumns = 6; 
         const actualDayColumnsInFile = headerValues.length - expectedBaseColumns;
         const daysInUploadMonth = new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate();
 
@@ -375,13 +375,12 @@ export default function AttendancePage() {
           const designation = values[4] || "N/A";
 
           const dojFromCsv = values[5];
-          let standardizedDoj = new Date(1900,0,1).toISOString().split('T')[0]; // Default past date
+          let standardizedDoj = new Date(1900,0,1).toISOString().split('T')[0]; 
           if (dojFromCsv) {
-            let parsedCsvDoj = parseISO(dojFromCsv); // Tries YYYY-MM-DD and other ISO
+            let parsedCsvDoj = parseISO(dojFromCsv); 
             if (isValid(parsedCsvDoj)) {
                 standardizedDoj = format(parsedCsvDoj, 'yyyy-MM-dd');
             } else {
-                // Try DD-MM-YYYY, MM-DD-YYYY (with various separators)
                 const dateParts = dojFromCsv.match(/^(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})$/);
                 if (dateParts) {
                     let day, month, yearStr;
@@ -389,29 +388,25 @@ export default function AttendancePage() {
                     const part2 = parseInt(dateParts[2]);
                     const part3 = parseInt(dateParts[3]);
 
-                    if (part3 > 1000) { // Assume part3 is YYYY
+                    if (part3 > 1000) { 
                         yearStr = part3.toString();
-                        // Try DD-MM-YYYY
                         if (part2 <= 12 && part1 <=31 && isValid(new Date(parseInt(yearStr), part2 - 1, part1))) {
                            standardizedDoj = format(new Date(parseInt(yearStr), part2 - 1, part1), 'yyyy-MM-dd');
                         }
-                        // Else try MM-DD-YYYY
                         else if (part1 <= 12 && part2 <=31 && isValid(new Date(parseInt(yearStr), part1 - 1, part2))) {
                            standardizedDoj = format(new Date(parseInt(yearStr), part1 - 1, part2), 'yyyy-MM-dd');
                         }
-                    } else { // Assume part3 is YY
-                        yearStr = (part3 + 2000).toString(); // Convert YY to YYYY
-                         // Try DD-MM-YY
+                    } else { 
+                        yearStr = (part3 + 2000).toString(); 
                          if (part2 <= 12 && part1 <=31 && isValid(new Date(parseInt(yearStr), part2 - 1, part1))) {
                            standardizedDoj = format(new Date(parseInt(yearStr), part2 - 1, part1), 'yyyy-MM-dd');
                         }
-                        // Else try MM-DD-YY
                         else if (part1 <= 12 && part2 <=31 && isValid(new Date(parseInt(yearStr), part1 - 1, part2))) {
                            standardizedDoj = format(new Date(parseInt(yearStr), part1 - 1, part2), 'yyyy-MM-dd');
                         }
                     }
                 }
-                 if (standardizedDoj === new Date(1900,0,1).toISOString().split('T')[0]) { // If still default, parsing failed
+                 if (standardizedDoj === new Date(1900,0,1).toISOString().split('T')[0]) {
                     console.warn(`Could not parse DOJ "${dojFromCsv}" for employee ${code}. Using default 1900-01-01. Please use YYYY-MM-DD, DD-MM-YYYY, or MM-DD-YYYY format in CSV.`);
                  }
             }
@@ -419,10 +414,10 @@ export default function AttendancePage() {
              console.warn(`Missing DOJ for employee ${code}. Using default 1900-01-01.`);
           }
 
-          const hq = "N/A"; // HQ not in attendance sheet
-          const grossMonthlySalary = 0; // Gross not in attendance sheet
+          const hq = "N/A"; 
+          const grossMonthlySalary = 0; 
 
-          if (!code || !name || !designation ) { // Critical fields from attendance
+          if (!code || !name || !designation ) { 
             console.warn(`Skipping row ${rowIndex + 1} (Code: ${code}) in attendance CSV: missing critical employee details.`);
             malformedRowCount++;
             return;
@@ -438,13 +433,13 @@ export default function AttendancePage() {
           const dailyStatuses = values.slice(expectedBaseColumns, expectedBaseColumns + daysInUploadMonth).map(statusCsvValue => {
             const trimmedUpperStatus = statusCsvValue.trim().toUpperCase();
             if (trimmedUpperStatus === '' || trimmedUpperStatus === '-') {
-              return 'A'; // Treat blank or '-' as Absent
+              return 'A'; 
             }
             return trimmedUpperStatus;
           });
 
           newAttendanceData.push({
-            id: code, // Use code as ID for simplicity
+            id: code, 
             status: statusValue, division, code, name, designation, hq, doj: standardizedDoj, grossMonthlySalary,
             attendance: dailyStatuses,
           });
@@ -463,18 +458,17 @@ export default function AttendancePage() {
                 addActivityLog(`Attendance for ${uploadMonth} ${uploadYear} uploaded from ${file.name}.`);
               } catch (error) {
                 console.error("Error saving attendance data to localStorage:", error);
-                toast({ title: "Storage Error", description: "Could not save attendance data locally. Data will be lost on refresh.", variant: "destructive" });
+                toast({ title: "Storage Error", description: "Could not save attendance data locally.", variant: "destructive" });
               }
             }
             setRawAttendanceData(newAttendanceData);
             setUploadedFileName(file.name);
-            // Switch view to the uploaded month/year
             if (uploadMonth !== selectedMonth || uploadYear !== selectedYear) {
                 setSelectedMonth(uploadMonth);
                 setSelectedYear(uploadYear);
             }
             toast({ title: "Attendance Data Processed", description: `${newAttendanceData.length} records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Data saved to local storage.`});
-            setSearchTerm(''); // Clear search on new upload
+            setSearchTerm(''); 
             const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
             if (viewTabTrigger) viewTabTrigger.click();
 
@@ -485,14 +479,14 @@ export default function AttendancePage() {
         if (skippedDuplicateCount > 0) toastMessage += `${skippedDuplicateCount} rows skipped due to duplicate employee codes in the file. `;
         if (malformedRowCount > 0) toastMessage += `${malformedRowCount} rows skipped due to missing/invalid data or column count. `;
 
-        if(toastMessage && newAttendanceData.length === 0){ // If only notes and no data
+        if(toastMessage && newAttendanceData.length === 0){ 
             toast({
               title: "Upload Issue",
               description: toastMessage.trim(),
               duration: 9000,
               variant: "destructive",
             });
-        } else if (toastMessage) { // If data was processed but there are also notes
+        } else if (toastMessage) { 
              toast({
                 title: "Processing Notes",
                 description: toastMessage.trim(),
@@ -503,7 +497,7 @@ export default function AttendancePage() {
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure DOJ is in YYYY-MM-DD, DD-MM-YYYY, or MM-DD-YYYY.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Check format and column order. Ensure DOJ is in YYYY-MM-DD, DD-MM-YYYY, or MM-DD-YYYY.", variant: "destructive", duration: 7000 });
       }
     };
 
@@ -537,7 +531,7 @@ export default function AttendancePage() {
     csvRows.push(headers);
 
     filteredAttendanceData.forEach(emp => {
-      if (!emp.processedAttendance) return; // Should not happen if data is processed
+      if (!emp.processedAttendance) return; 
       const finalAttendanceToUse = emp.processedAttendance;
 
       const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
@@ -549,18 +543,18 @@ export default function AttendancePage() {
       const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
       const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
       const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
-      const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length; // Days employee hasn't joined
+      const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length; 
 
       const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
 
       const row = [
-        emp.status || "N/A", // Status from employee master (if available through processed data merge)
-        emp.division || "N/A", // Division from employee master
+        emp.status || "N/A", 
+        emp.division || "N/A", 
         emp.code,
         emp.name,
         emp.designation,
-        emp.doj, // DOJ from attendance file upload
+        emp.doj, 
         ...finalAttendanceToUse,
         workingDaysP.toString(),
         absent1A.toString(),
@@ -570,7 +564,7 @@ export default function AttendancePage() {
         totalPLUsed.toString(),
         totalSLUsed.toString(),
         paidHolidaysPH.toString(),
-        (totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc).toString(), // Ensure not negative if DOJ is future
+        (totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc).toString(), 
         paidDaysCalculated.toFixed(1)
       ];
       csvRows.push(row);
@@ -598,14 +592,13 @@ export default function AttendancePage() {
   const handleDownloadSampleTemplate = () => {
     const daysForTemplate = (uploadYear && uploadMonth && uploadYear > 0) ? new Date(uploadYear, months.indexOf(uploadMonth) + 1, 0).getDate() : 31;
     const csvRows: string[][] = [];
-    // Expected headers: Status, Division, Code, Name, Designation, DOJ, Day1, Day2...
     const headers = ["Status", "Division", "Code", "Name", "Designation", "DOJ", ...Array.from({ length: daysForTemplate }, (_, i) => (i + 1).toString())];
     csvRows.push(headers);
 
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    if (link.href) URL.revokeObjectURL(link.href); // Clear previous blob URL if any
+    if (link.href) URL.revokeObjectURL(link.href); 
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     const monthYearForFilename = (uploadMonth && uploadYear && uploadYear > 0) ? `${uploadMonth}_${uploadYear}` : "sample";
@@ -683,7 +676,6 @@ export default function AttendancePage() {
       }
       const daysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex));
       const currentRawAttendance = [...employee.attendance];
-      // Ensure array has enough elements for the month, padding with 'A' if necessary
       while(currentRawAttendance.length < daysInMonth) {
         currentRawAttendance.push('A');
       }
@@ -716,7 +708,7 @@ export default function AttendancePage() {
       return emp;
     });
 
-    setRawAttendanceData(updatedRawAttendanceData); // Update local state immediately for UI refresh
+    setRawAttendanceData(updatedRawAttendanceData); 
 
     if (typeof window !== 'undefined') {
         const rawDataKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
@@ -748,7 +740,7 @@ export default function AttendancePage() {
         ? { ...emp, status: "Left" as "Left" | "Active", dor: values.dor }
         : emp
     );
-    setEmployeeMasterList(updatedMasterList); // Update state for immediate UI reflection
+    setEmployeeMasterList(updatedMasterList); 
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedMasterList));
@@ -770,11 +762,11 @@ export default function AttendancePage() {
 
   const daysInSelectedUploadMonth = (uploadYear && uploadMonth && uploadYear > 0 && months.indexOf(uploadMonth) !== -1)
     ? getDaysInMonth(new Date(uploadYear, months.indexOf(uploadMonth)))
-    : 31; // Default to 31 for template if month not set
+    : 31; 
 
 
   const availableYears = currentYear > 0 ? Array.from({ length: 5 }, (_, i) => currentYear - i) : [];
-  const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-'); // Exclude '-' from edit options
+  const validAttendanceStatuses = Object.keys(ATTENDANCE_STATUS_COLORS).filter(status => status !== '-'); 
 
 
   if (isLoadingState && !selectedMonth && currentYear === 0) {
@@ -799,7 +791,7 @@ export default function AttendancePage() {
          <Button
             variant="destructive"
             onClick={triggerDeleteConfirmation}
-            disabled={isLoadingState} // Disable if initial state is still loading
+            disabled={isLoadingState} 
         >
             <Trash2 className="mr-2 h-4 w-4" />
             Clear Uploaded Data
@@ -808,7 +800,7 @@ export default function AttendancePage() {
 
       <AlertDialog open={isClearDataDialogOpen} onOpenChange={(isOpen) => {
           setIsClearDataDialogOpen(isOpen);
-          if (!isOpen) { // Reset dialog state on close
+          if (!isOpen) { 
               setDeleteConfirmationText('');
               setDialogClearMonth('');
               setDialogClearYear(0);
@@ -875,9 +867,9 @@ export default function AttendancePage() {
 
       <Dialog open={isEditAttendanceDialogOpen} onOpenChange={(isOpen) => {
           setIsEditAttendanceDialogOpen(isOpen);
-          if (!isOpen) setEditingAttendanceEmployee(null); // Clear editing context on close
+          if (!isOpen) setEditingAttendanceEmployee(null); 
       }}>
-        <DialogContent className="sm:max-w-3xl"> {/* Wider dialog for daily statuses */}
+        <DialogContent className="sm:max-w-3xl"> 
           <DialogHeader>
             <DialogTitle>Edit Attendance for {editingAttendanceEmployee?.name}</DialogTitle>
             <DialogDescription>
@@ -972,7 +964,7 @@ export default function AttendancePage() {
               {(isLoadingState && !selectedMonth) ? (
                 <div className="w-full sm:w-[180px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
-                <Select value={selectedMonth} onValueChange={(value) => { setSelectedMonth(value); setSearchTerm(''); }}>
+                <Select value={selectedMonth} onValueChange={(value) => { setSelectedMonth(value); setSearchTerm(''); }} >
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Select Month" />
                   </SelectTrigger>
@@ -981,7 +973,7 @@ export default function AttendancePage() {
                   </SelectContent>
                 </Select>
               )}
-              {(isLoadingState && selectedYear === 0 && currentYear > 0) ? ( // Check if currentYear has loaded
+              {(isLoadingState && selectedYear === 0 && currentYear > 0) ? ( 
                  <div className="w-full sm:w-[120px] h-10 bg-muted rounded-md animate-pulse" />
               ) : (
                 <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(value) => { setSelectedYear(parseInt(value)); setSearchTerm(''); }} >
@@ -1076,7 +1068,6 @@ export default function AttendancePage() {
                       <TableBody>
                         {filteredAttendanceData.map((emp) => {
                           if (!emp.processedAttendance) {
-                            // This case should ideally not happen if processedAttendance is derived correctly
                             return <TableRow key={emp.id}><TableCell colSpan={daysInSelectedViewMonth + 17}>Loading processed data for {emp.name}...</TableCell></TableRow>;
                           }
                           const finalAttendanceToUse = emp.processedAttendance;
@@ -1152,7 +1143,6 @@ export default function AttendancePage() {
                      return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}... (Data saved in browser's local storage)</div>;
                 }
 
-                // Default fallback for other no-data scenarios
                 return (
                   <div className="text-center py-8 text-muted-foreground">
                      No attendance data available to display for {selectedMonth} {selectedYear}.
@@ -1203,7 +1193,7 @@ export default function AttendancePage() {
                 <Button
                   variant="link"
                   onClick={handleDownloadSampleTemplate}
-                  className="p-0 h-auto text-left" // Ensure text wraps if needed
+                  className="p-0 h-auto text-left" 
                 >
                   <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
@@ -1304,6 +1294,3 @@ export default function AttendancePage() {
     </>
   );
 }
-
-
-    

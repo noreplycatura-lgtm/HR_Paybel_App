@@ -24,7 +24,27 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
+interface ActivityLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = [];
+
+    activities.unshift({ timestamp: new Date().toISOString(), message });
+    activities = activities.slice(0, 10); 
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log:", error);
+  }
+};
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -141,12 +161,12 @@ export default function LeavePage() {
       }
     }
     setIsLoading(false);
-  }, []); // Runs once on mount
+  }, []); 
 
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0 || isLoading) {
       setDisplayData([]);
-      if (!isLoading && employees.length > 0) setIsLoading(false); // Ensure loading state is correct
+      if (!isLoading && employees.length > 0) setIsLoading(false); 
       return;
     }
 
@@ -253,7 +273,7 @@ export default function LeavePage() {
         let openingSLForNextMonthCalc = 0;
         const openingPLForNextMonthCalc = finalBalancePLAtMonthEnd + accrualPLNextMonth;
 
-        if (nextMonthIndexVal === 3) {
+        if (nextMonthIndexVal === 3) { // April - Financial Year Rollover for CL/SL
             const obForNextFY = openingBalances.find(
               (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthYearVal
             );
@@ -358,6 +378,7 @@ export default function LeavePage() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+        addActivityLog(`Opening balances for ${editingEmployeeForOB.name} (FY ${editingOBYear}) updated.`);
         toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved to local storage.`});
       } catch (error) {
          console.error("Error saving opening balances to localStorage:", error);
@@ -513,6 +534,7 @@ export default function LeavePage() {
                 if (typeof window !== 'undefined') {
                     try {
                         localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
+                        addActivityLog(`Opening leave balances uploaded from ${file.name}.`);
                     } catch (error) {
                         console.error("Error saving opening balances to localStorage:", error);
                         message += "Error saving to local storage. ";
@@ -586,6 +608,7 @@ export default function LeavePage() {
     if (typeof window !== 'undefined') {
         try {
             localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+            addActivityLog(`Opening balances for ${selectedEmployeeIds.size} selected employees (FY ${financialYearToClear}) cleared.`);
             toast({ title: "Opening Balances Cleared", description: `Opening balances for ${selectedEmployeeIds.size} selected employee(s) for FY ${financialYearToClear} have been cleared from local storage.` });
         } catch (error) {
             console.error("Error saving cleared opening balances to localStorage:", error);

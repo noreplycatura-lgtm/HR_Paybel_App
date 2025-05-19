@@ -1,15 +1,18 @@
 
+// This file can be deleted as the editor auth logic is no longer in use.
+// Keeping it for now, but it's not imported or used by any active component.
+// To fully remove, delete this file and any lingering imports of useEditorAuth.
+
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const EDITOR_STORAGE_KEY = 'novita_editor_auth_status_v1'; // Versioned key
+const EDITOR_STORAGE_KEY = 'novita_editor_auth_status_v1'; 
 
 export function useEditorAuth() {
   const [isEditor, setIsEditor] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true); // Renamed for clarity
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true); 
 
   useEffect(() => {
-    // Ensure localStorage is accessed only on the client
     if (typeof window !== 'undefined') {
       try {
         const storedStatus = localStorage.getItem(EDITOR_STORAGE_KEY);

@@ -19,12 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleEmployees } from "@/lib/hr-data";
+// import { sampleEmployees } from "@/lib/hr-data"; // No longer using direct sample import for initialization
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // Added for logging
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
 const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -121,10 +121,10 @@ const addActivityLog = (message: string) => {
   try {
     const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
-    if (!Array.isArray(activities)) activities = []; // Ensure it's an array
+    if (!Array.isArray(activities)) activities = []; 
 
     activities.unshift({ timestamp: new Date().toISOString(), message });
-    activities = activities.slice(0, 10); // Keep last 10 activities
+    activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
     console.error("Error adding to activity log:", error);
@@ -172,36 +172,31 @@ export default function EmployeeMasterPage() {
           if (Array.isArray(parsedEmployees)) {
             setEmployees(parsedEmployees);
           } else {
-            console.error("Employee master data in localStorage is corrupted or not an array. Initializing with sample data. Data is saved locally in your browser.");
+            console.error("Employee master data in localStorage is corrupted. Initializing empty. Data is saved locally in your browser.");
             toast({
               title: "Data Error",
-              description: "Stored employee data is corrupted. Please verify and re-upload if necessary. Data is saved locally in your browser.",
+              description: "Stored employee data is corrupted. Using empty list. Data is saved locally in your browser.",
               variant: "destructive",
               duration: 7000,
             });
-            setEmployees(sampleEmployees); // Use sample as fallback
-            localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
+            setEmployees([]); 
           }
         } else {
-          // No data in localStorage, initialize with sample data and save it
-          setEmployees(sampleEmployees);
-          localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
-          toast({ title: "Data Initialized", description: "Initialized with sample employee data. Data is saved locally in your browser.", duration: 5000 });
+          setEmployees([]); 
         }
       } catch (error) {
         console.error("Error loading/processing employees from localStorage:", error);
         toast({
           title: "Storage Error",
-          description: "Could not load employee data due to a storage error. Data is saved locally in your browser. Initializing with sample data.",
+          description: "Could not load employee data. Stored data might be corrupted. Using empty list. Data is saved locally in your browser.",
           variant: "destructive",
           duration: 7000,
         });
-        setEmployees(sampleEmployees); // Fallback to sample data on error
-        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
+        setEmployees([]); 
       }
     }
     setIsLoadingData(false);
-  }, []); // Runs once on mount
+  }, []);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -244,7 +239,7 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code, // Use code as ID for simplicity in this prototype
+        id: submissionValues.code, 
         ...submissionValues,
         dor: submissionValues.dor || undefined,
         revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
@@ -387,10 +382,10 @@ export default function EmployeeMasterPage() {
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            status = "Active"; // Default if status is invalid
+            status = "Active"; 
             console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
           }
-          if (status === "Active") dor = ""; // Clear DOR if active
+          if (status === "Active") dor = ""; 
 
           if (codesInCsv.has(code)) {
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to duplicate code within this CSV file.`);
@@ -398,8 +393,7 @@ export default function EmployeeMasterPage() {
             return;
           }
           codesInCsv.add(code);
-
-          // Check against existing master list from localStorage
+          
           if (currentEmployeesMap.has(code)) {
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list.`);
             skippedForExistingInMaster++;
@@ -407,7 +401,7 @@ export default function EmployeeMasterPage() {
           }
 
           let formattedDoj = doj;
-          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { // If not YYYY-MM-DD
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { 
             try { const d = new Date(doj.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
           let formattedDor = dor;
@@ -458,7 +452,7 @@ export default function EmployeeMasterPage() {
 
       } catch (error) {
         console.error("Error parsing CSV for employees:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Please check its format and column order. Ensure all expected columns are present.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Check format and column order. Ensure all expected columns are present.", variant: "destructive", duration: 7000 });
       }
     };
     reader.onerror = () => {
@@ -662,7 +656,6 @@ export default function EmployeeMasterPage() {
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
             title="Upload employee data from a CSV file"
-            icon={<Upload className="mr-2 h-4 w-4" />}
         />
         <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
           <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
@@ -756,32 +749,30 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) {
-                            // Attempt to parse common non-ISO formats like DD/MM/YYYY or MM/DD/YYYY
                             const parts = employee.doj.split(/[-/.]/);
                             let reparsedDate = null;
                              if (parts.length === 3) {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                // Try DD-MM-YYYY first, then MM-DD-YYYY
-                                if (part3 > 1000) { // YYYY
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); // DD-MM-YYYY
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); // MM-DD-YYYY
-                                } else if (part1 > 1000) { // YYYY-MM-DD or YYYY-DD-MM (less common)
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); // YYYY-DD-MM
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); // YYYY-MM-DD (already tried by parseISO)
-                                } else { // YY
+                                if (part3 > 1000) { 
+                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
+                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
+                                } else if (part1 > 1000) { 
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
+                                } else { 
                                    const yearShort = part3 + 2000;
-                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1); // DD-MM-YY
-                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2); // MM-DD-YY
+                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1); 
+                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2); 
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj; // Return original if reparsing fails
+                            return employee.doj; 
                           }
                           return format(parsedDate, "dd-MMM-yy");
                         } catch (e) {
-                          return employee.doj; // Return original on any error
+                          return employee.doj; 
                         }
                       }
                       return 'N/A';
@@ -917,6 +908,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-
-
-    

@@ -18,9 +18,18 @@ import {
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
 
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+
 export function TopNavbar() {
   const { toggleSidebar, isMobile } = useSidebar();
   const router = useRouter();
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
+    }
+    router.push('/login');
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 print:hidden">
@@ -59,11 +68,8 @@ export function TopNavbar() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Profile (Prototype)</DropdownMenuItem>
-            <DropdownMenuItem disabled>Settings (Prototype)</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/login')}>
-              Login / Logout (Prototype)
+            <DropdownMenuItem onClick={handleLogout}>
+              Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

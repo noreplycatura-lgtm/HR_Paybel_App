@@ -14,6 +14,32 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents, type MonthlySalaryComponents } from "@/lib/salary-calculations";
 import { format, parseISO, isValid, getDaysInMonth, startOfMonth } from "date-fns";
 
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+
+interface ActivityLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = [];
+
+    activities.unshift({ timestamp: new Date().toISOString(), message });
+    activities = activities.slice(0, 10); 
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log:", error);
+  }
+};
+
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface SalarySheetEntry extends EmployeeDetail {
@@ -26,7 +52,7 @@ interface SalarySheetEntry extends EmployeeDetail {
   monthlyCA: number;
   monthlyOtherAllowance: number;
   monthlyMedical: number;
-  calculatedGross: number;
+  calculatedGross: number; // The gross salary used for this month's calculation
   actualBasic: number;
   actualHRA: number;
   actualCA: number;
@@ -68,11 +94,6 @@ interface PerformanceDeductionEntry {
   amount: number;
 }
 
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
-const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
-const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
-
 
 export default function SalarySheetPage() {
   const { toast } = useToast();
@@ -109,7 +130,6 @@ export default function SalarySheetPage() {
             setAllEmployees(Array.isArray(parsedEmployees) ? parsedEmployees : []);
         } else {
             setAllEmployees([]);
-            toast({ title: "No Employee Data", description: "Employee master list is empty. Please add employees. Data is saved locally in your browser.", variant: "destructive", duration: 5000 });
         }
 
         const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
@@ -121,13 +141,13 @@ export default function SalarySheetPage() {
         }
       } catch (error) {
         console.error("Error loading initial master data for salary sheet:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions. Salary sheet may be incomplete. Data is saved locally in your browser.", variant: "destructive"});
+        toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions.", variant: "destructive"});
         setAllEmployees([]);
         setAllPerformanceDeductions([]);
       }
     }
     setIsLoadingData(false);
-  }, []); // Runs once on mount
+  }, []); 
 
   React.useEffect(() => {
     if (isLoadingData || !selectedMonth || !selectedYear || selectedYear === 0) {
@@ -163,7 +183,7 @@ export default function SalarySheetPage() {
                 }
             } catch (e) {
                 console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear} from localStorage:`, e);
-                toast({title: "Attendance Data Corrupted", description: `Could not parse stored attendance for ${selectedMonth} ${selectedYear}. Salary calculations may be affected.`, variant: "destructive", duration: 7000});
+                toast({title: "Attendance Data Corrupted", description: `Could not parse stored attendance for ${selectedMonth} ${selectedYear}.`, variant: "destructive", duration: 7000});
             }
         }
         setRawAttendanceForPeriod(attendanceDataForSelectedMonth);
@@ -176,11 +196,11 @@ export default function SalarySheetPage() {
                 if (typeof parsedEdits === 'object' && parsedEdits !== null) salaryEditsForSelectedMonth = parsedEdits;
                  else { 
                    console.warn(`Salary edits for ${selectedMonth} ${selectedYear} in localStorage is not an object.`);
-                   toast({title: "Salary Edits Format Error", description: `Stored salary edits for ${selectedMonth} ${selectedYear} are corrupted. Using defaults.`, variant: "destructive", duration: 7000});
+                   toast({title: "Salary Edits Format Error", description: `Stored salary edits for ${selectedMonth} ${selectedYear} are corrupted.`, variant: "destructive", duration: 7000});
                  }
             } catch (e) {
                  console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear} from localStorage:`, e);
-                 toast({title: "Salary Edits Data Corrupted", description: `Could not parse stored salary edits for ${selectedMonth} ${selectedYear}. Using defaults.`, variant: "destructive", duration: 7000});
+                 toast({title: "Salary Edits Data Corrupted", description: `Could not parse stored salary edits for ${selectedMonth} ${selectedYear}.`, variant: "destructive", duration: 7000});
             }
         }
         setSalaryEditsForPeriod(salaryEditsForSelectedMonth);
@@ -198,7 +218,7 @@ export default function SalarySheetPage() {
         const empAttendanceRecord = attendanceDataForSelectedMonth.find(att => att.code === emp.code);
 
         if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
-          return null; // Should be caught by filter above, but defensive
+          return null; 
         }
 
         const totalDaysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex, 1));
@@ -246,14 +266,12 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        const totalOtherDeductionCombined = manualOtherDeductionVal + performanceDeductionAmount;
-
-
+        
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         const esic = 0;
         const professionalTax = 0;
         const providentFund = 0;
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionCombined;
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
@@ -278,7 +296,7 @@ export default function SalarySheetPage() {
 
     setSalarySheetData(newSalarySheetData);
     setIsLoadingCalculations(false);
-  }, [allEmployees, selectedMonth, selectedYear, isLoadingData, allPerformanceDeductions]);
+  }, [allEmployees, selectedMonth, selectedYear, isLoadingData, allPerformanceDeductions, toast]);
 
 
   React.useEffect(() => {
@@ -310,10 +328,9 @@ export default function SalarySheetPage() {
           else if (fieldName === 'salaryAdvance') updatedEmp.salaryAdvance = numericValue;
 
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
-          const newTotalOtherDeductionCombined = updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
           const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund +
                                    updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance +
-                                   newTotalOtherDeductionCombined;
+                                   updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
           const newNetPaid = newTotalAllowance - newTotalDeduction;
 
           return { ...updatedEmp, totalAllowance: newTotalAllowance, totalDeduction: newTotalDeduction, netPaid: newNetPaid };
@@ -328,7 +345,6 @@ export default function SalarySheetPage() {
         if (!updatedEditsForStorage[employeeId]) {
           updatedEditsForStorage[employeeId] = {};
         }
-        // Ensure we are updating the correct field name for storage
         if (fieldName === 'manualOtherDeduction') {
             updatedEditsForStorage[employeeId]!.manualOtherDeduction = numericValue;
         } else {
@@ -340,9 +356,10 @@ export default function SalarySheetPage() {
             try {
                 const editsKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
                 localStorage.setItem(editsKey, JSON.stringify(updatedEditsForStorage));
+                addActivityLog(`Salary sheet edit for ${employeeId} (${selectedMonth} ${selectedYear}) updated: ${fieldName}=${numericValue}`);
             } catch (error) {
                 console.error("Error saving salary edits to localStorage:", error);
-                toast({ title: "Storage Error", description: "Could not save salary edits. Data is saved locally in your browser.", variant: "destructive" });
+                toast({ title: "Storage Error", description: "Could not save salary edits.", variant: "destructive" });
             }
         }
     }
@@ -350,14 +367,10 @@ export default function SalarySheetPage() {
 
   const handleDownloadSheet = () => {
     if (isLoadingCalculations || isLoadingData) {
-      toast({ title: "Please Wait", description: "Calculations or data loading is in progress. Please try again shortly.", variant: "destructive"});
+      toast({ title: "Please Wait", description: "Calculations or data loading is in progress.", variant: "destructive"});
       return;
     }
-    if (allEmployees.length === 0) {
-      toast({ title: "No Data", description: "No employee master data found. Data is saved locally in your browser.", variant: "destructive" });
-      return;
-    }
-
+    
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1 || !selectedYear || selectedYear === 0) {
         toast({ title: "Selection Missing", description: "Please select month and year for the report.", variant: "destructive"});
@@ -399,6 +412,11 @@ export default function SalarySheetPage() {
                 }
             } catch (e) { console.warn("Error parsing performance deductions for CSV export from localStorage"); }
         }
+    }
+    
+    if (allEmployees.length === 0) {
+      toast({ title: "No Data", description: "No employee master data found.", variant: "destructive" });
+      return;
     }
 
     const dataToExport = allEmployees
@@ -447,11 +465,10 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        const totalOtherDeductionCombined = manualOtherDeductionVal + performanceDeductionAmount;
-
+        
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         const esic = 0, professionalTax = 0, providentFund = 0;
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionCombined;
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         if (empAttendanceRecord || emp.status === "Left") {
@@ -472,7 +489,7 @@ export default function SalarySheetPage() {
       .filter(emp => emp !== null) as SalarySheetEntry[];
 
     if (dataToExport.length === 0) {
-      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing for all active employees. Data is saved locally in your browser.", variant: "destructive" });
+      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing for all active employees.", variant: "destructive" });
       return;
     }
 
@@ -552,6 +569,7 @@ export default function SalarySheetPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    addActivityLog(`Salary sheet for ${selectedMonth} ${selectedYear} downloaded.`);
     toast({ title: "Download Started", description: "Salary sheet CSV is being downloaded." });
   };
 
@@ -622,7 +640,7 @@ export default function SalarySheetPage() {
         <CardContent className="overflow-x-auto">
           {isLoadingCalculations ? (
              <div className="text-center py-8 text-muted-foreground flex items-center justify-center">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Calculating salaries... (Data saved in browser's local storage)
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Calculating salaries...
             </div>
           ) : filteredSalarySheetData.length > 0 ? (
             <Table>
@@ -750,12 +768,12 @@ export default function SalarySheetPage() {
             <div className="text-center py-8 text-muted-foreground">
               {
                 isLoadingData ? "Loading employee data..." :
-                allEmployees.length === 0 ? "No employees found in Employee Master. Please add employees first. (Data is saved in your browser's local storage)." :
-               !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet. (Data is saved in your browser's local storage)." :
-               rawAttendanceForPeriod.length === 0 && allEmployees.length > 0 ? "No attendance data found for the selected month. Please upload attendance first. (Data is saved in your browser's local storage)." :
-               salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 && allEmployees.length > 0 ? "No employees from master list have attendance data for the selected month. (Data is saved in your browser's local storage)." :
+                allEmployees.length === 0 ? "No employees found in Employee Master. Please add employees first." :
+               !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet." :
+               rawAttendanceForPeriod.length === 0 && allEmployees.length > 0 ? "No attendance data found for the selected month. Please upload attendance first." :
+               salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 && allEmployees.length > 0 ? "No employees from master list have attendance data for the selected month." :
                searchTerm && filteredSalarySheetData.length === 0 ? `No active employees with attendance found matching "${searchTerm}".` :
-               "No active employees with attendance to display for the selected criteria. (Data is saved in your browser's local storage)."}
+               "No active employees with attendance to display for the selected criteria."}
             </div>
           )}
         </CardContent>

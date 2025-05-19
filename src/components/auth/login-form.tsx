@@ -31,7 +31,6 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-// Define the structure for simulated users stored in localStorage
 interface SimulatedUser {
   id: string;
   username: string;
@@ -40,6 +39,7 @@ interface SimulatedUser {
 const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 const MAIN_ADMIN_PASSWORD = "123456";
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 export function LoginForm() {
   const router = useRouter();
@@ -57,54 +57,51 @@ export function LoginForm() {
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-    setIsLoading(false);
+    
+    let loginSuccess = false;
+    let welcomeMessage = "";
 
     if (values.username === MAIN_ADMIN_USERNAME && values.password === MAIN_ADMIN_PASSWORD) {
-      toast({
-        title: "Admin Login Successful",
-        description: "Welcome, Main Admin!",
-      });
-      router.push("/dashboard");
-    } else if (values.username === MAIN_ADMIN_USERNAME) {
-      toast({
-        variant: "destructive",
-        title: "Admin Login Failed",
-        description: "Incorrect password for Main Admin.",
-      });
-      form.setError("password", { type: "manual", message: "Incorrect password for Main Admin." });
+      loginSuccess = true;
+      welcomeMessage = "Welcome, Main Admin!";
     } else {
-      // Check for co-admin
-      let isValidCoAdmin = false;
       if (typeof window !== 'undefined') {
         try {
           const storedUsersStr = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
           if (storedUsersStr) {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
-            if (coAdminUser && !coAdminUser.isLocked) {
-              isValidCoAdmin = true;
+            // For prototype, co-admin password is not checked explicitly here,
+            // just that they exist and are not locked.
+            if (coAdminUser && !coAdminUser.isLocked) { 
+              loginSuccess = true;
+              welcomeMessage = `Welcome, ${values.username}!`;
             }
           }
         } catch (error) {
           console.error("Error reading co-admin users from localStorage:", error);
-          // Proceed to fail login if localStorage is corrupted or inaccessible
         }
       }
+    }
 
-      if (isValidCoAdmin) {
-        toast({
-          title: "Co-Admin Login Successful (Prototype)",
-          description: `Welcome, ${values.username}! Proceeding to dashboard.`,
-        });
-        router.push("/dashboard");
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
-          description: "Invalid username or password, or account is locked.",
-        });
-        form.setError("username", { type: "manual", message: "Invalid credentials or account locked." });
+    setIsLoading(false);
+
+    if (loginSuccess) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
       }
+      toast({
+        title: "Login Successful",
+        description: welcomeMessage,
+      });
+      router.push("/dashboard");
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: "Invalid username or password, or account is locked.",
+      });
+      form.setError("username", { type: "manual", message: "Invalid credentials or account locked." });
     }
   }
 
@@ -152,9 +149,9 @@ export function LoginForm() {
               )}
             />
             <div className="flex items-center justify-between">
-              <Link href="#" className="text-sm text-primary hover:underline invisible">
+              {/* <Link href="#" className="text-sm text-primary hover:underline invisible">
                 Forgot Password?
-              </Link>
+              </Link> */}
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
