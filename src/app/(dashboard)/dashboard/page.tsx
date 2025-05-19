@@ -15,7 +15,7 @@ import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth } from "
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 
-// LocalStorage Keys - Ensure these match across the application
+// LocalStorage Keys
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
@@ -64,10 +64,10 @@ interface MonthlySalaryTotal {
 export default function DashboardPage() {
   const { toast } = useToast();
   const [dashboardCards, setDashboardCards] = React.useState([
-    { title: "Total Employees", value: "N/A", icon: UserCheck, description: "Active employees", dataAiHint: "team office" },
+    { title: "Total Employees", value: "N/A", icon: UserCheck, description: "0 Active, 0 Left", dataAiHint: "team office" },
     { title: "Total Leave Records", value: "N/A", icon: History, description: "All recorded leave entries", dataAiHint: "documents list" },
     { title: "Payroll Status (Last Mth)", value: "N/A", icon: FileText, description: "For previous month", dataAiHint: "report checkmark" },
-    { title: "Storage Used", value: "N/A (Conceptual)", icon: HardDrive, description: "Uploaded data size (Conceptual)", dataAiHint: "data storage" },
+    { title: "Storage Used", value: "N/A", icon: HardDrive, description: "Approx. size of app data", dataAiHint: "data storage" },
   ]);
 
   const [lastFiveMonthsSalaryData, setLastFiveMonthsSalaryData] = React.useState<MonthlySalaryTotal[]>([]);
@@ -86,12 +86,15 @@ export default function DashboardPage() {
     setIsLoading(true);
     setIsLoadingSalaries(true);
 
+    let totalEmployeesCount = 0;
     let activeEmployeesCount = 0;
+    let leftEmployeesCount = 0;
     let totalLeaveRecordsCount = 0;
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
     let employeeMasterList: EmployeeDetail[] = [];
     let allPerfDeductions: PerformanceDeductionEntry[] = [];
+    let storageUsedValue = "N/A";
     
     if (typeof window !== 'undefined') {
       try {
@@ -100,15 +103,23 @@ export default function DashboardPage() {
           const parsedEmployees = JSON.parse(storedEmployeesStr);
           if (Array.isArray(parsedEmployees)) {
             employeeMasterList = parsedEmployees;
+            totalEmployeesCount = parsedEmployees.length;
             activeEmployeesCount = parsedEmployees.filter(emp => emp.status === "Active").length;
+            leftEmployeesCount = parsedEmployees.filter(emp => emp.status === "Left").length;
           } else {
-             activeEmployeesCount = 0;
-             employeeMasterList = [];
              console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
           }
-        } else {
-           activeEmployeesCount = 0;
-           employeeMasterList = [];
+        }
+
+        const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveAppsStr) {
+            try {
+              const parsedApps: LeaveApplication[] = JSON.parse(storedLeaveAppsStr);
+              totalLeaveRecordsCount = Array.isArray(parsedApps) ? parsedApps.length : 0;
+            } catch (e) {
+              console.error("Error parsing leave applications from localStorage:", e);
+              totalLeaveRecordsCount = 0;
+            }
         }
 
         const storedPerfDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
@@ -116,6 +127,62 @@ export default function DashboardPage() {
             const parsedPerfDeductions = JSON.parse(storedPerfDeductionsStr);
             if(Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
         }
+
+        // Calculate Storage Used
+        let totalAppSpecificBytes = 0;
+        const appKeys = [
+          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+          LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+          LOCAL_STORAGE_OPENING_BALANCES_KEY,
+          LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+          LOCAL_STORAGE_SIMULATED_USERS_KEY,
+          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
+          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY
+        ];
+        const appPrefixes = [
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+        ];
+
+        appKeys.forEach(key => {
+          const item = localStorage.getItem(key);
+          if (item) {
+            totalAppSpecificBytes += item.length; // Assuming 1 char ~ 1 byte for approximation
+          }
+        });
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key) {
+            let matchedPrefix = false;
+            for (const prefix of appPrefixes) {
+              if (key.startsWith(prefix)) {
+                matchedPrefix = true;
+                break;
+              }
+            }
+            if (matchedPrefix) {
+              const item = localStorage.getItem(key);
+              if (item) {
+                totalAppSpecificBytes += item.length;
+              }
+            }
+          }
+        }
+        
+        if (totalAppSpecificBytes > 0) {
+          if (totalAppSpecificBytes < 1024) {
+            storageUsedValue = `${totalAppSpecificBytes.toFixed(0)} Bytes`;
+          } else if (totalAppSpecificBytes < 1024 * 1024) {
+            storageUsedValue = `${(totalAppSpecificBytes / 1024).toFixed(2)} KB`;
+          } else {
+            storageUsedValue = `${(totalAppSpecificBytes / (1024 * 1024)).toFixed(2)} MB`;
+          }
+        } else {
+            storageUsedValue = "0 Bytes";
+        }
+
 
         const monthlyTotals: MonthlySalaryTotal[] = [];
         let fiveMonthGrandTotal = 0;
@@ -181,19 +248,6 @@ export default function DashboardPage() {
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
         setIsLoadingSalaries(false);
 
-        const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-        if (storedLeaveAppsStr) {
-            try {
-              const parsedApps: LeaveApplication[] = JSON.parse(storedLeaveAppsStr);
-              totalLeaveRecordsCount = Array.isArray(parsedApps) ? parsedApps.length : 0;
-            } catch (e) {
-              console.error("Error parsing leave applications from localStorage:", e);
-              totalLeaveRecordsCount = 0;
-            }
-        } else {
-          totalLeaveRecordsCount = 0;
-        }
-
         const lastMonthDate = subMonths(new Date(), 1);
         const prevMonthName = months[getMonth(lastMonthDate)];
         const prevMonthYear = getYear(lastMonthDate);
@@ -235,22 +289,16 @@ export default function DashboardPage() {
 
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
-          activeEmployeesCount = 0;
-          totalLeaveRecordsCount = 0;
-          payrollStatusValue = "Error";
-          setRecentActivities([]);
-          setLastFiveMonthsSalaryData([]);
-          setGrandTotalLastFiveMonths(0);
-          setIsLoadingSalaries(false);
           toast({ title: "Dashboard Data Error", description: "Could not load some data. Figures may be inaccurate.", variant: "destructive" });
       }
     }
     setDashboardCards(prevCards => prevCards.map(card => {
-      if (card.title === "Total Employees") return { ...card, value: activeEmployeesCount.toString() };
+      if (card.title === "Total Employees") return { ...card, value: totalEmployeesCount.toString(), description: `${activeEmployeesCount} Active, ${leftEmployeesCount} Left` };
       if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecordsCount.toString() };
       if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
+      if (card.title === "Storage Used") return { ...card, value: storageUsedValue, description: "Approx. size of app data in local storage" };
       return card;
-    }).filter(card => card.title !== "Last Month's Salary Total"));
+    }));
     setIsLoading(false);
   }, []);
 
@@ -259,7 +307,6 @@ export default function DashboardPage() {
     if (typeof window === 'undefined') return;
     const allData: Record<string, any> = {};
     
-    // Ensure this list contains ALL fixed keys used by the application
     const knownFixedKeys = [
       LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
       LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
@@ -282,7 +329,6 @@ export default function DashboardPage() {
       }
     });
 
-    // Ensure this list contains ALL dynamic prefixes used by the application
     const knownDynamicPrefixes = [
       LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
       LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
@@ -291,8 +337,6 @@ export default function DashboardPage() {
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      // Check if the key starts with any of the known dynamic prefixes
-      // AND also ensure we don't re-add keys already handled by knownFixedKeys (though unlikely to be an issue here)
       if (key && knownDynamicPrefixes.some(prefix => key.startsWith(prefix))) {
         const item = localStorage.getItem(key);
         if (item) {
@@ -338,7 +382,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Keys to be cleared before import
       const knownKeysForClear = [
           LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
@@ -385,8 +428,15 @@ export default function DashboardPage() {
       <>
         <PageHeader title="Dashboard" description="Overview of HR activities. (This software operates on offline data stored in your browser's local storage)." />
         <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader><CardTitle>Prototype Data Management (Local Storage)</CardTitle></CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-4">
+          <CardHeader>
+              <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
+              <CardDescription>
+                Manually export or import all application data stored in your browser's local storage.
+                This export includes all entered employees, monthly attendance, leave balances, salary edits, performance deductions, recent activities, and user accounts. 
+                It does NOT export the application code itself. Importing data will overwrite existing local data.
+              </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
             <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Exporting...</Button>
             <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing...</Button>
           </CardContent>
