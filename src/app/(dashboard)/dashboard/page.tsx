@@ -76,39 +76,50 @@ export default function DashboardPage() {
            if (Array.isArray(employeesFromStorage)) {
             activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
            } else {
-            activeEmployeesCount = 0; // Default if data is corrupted
+            activeEmployeesCount = 0; 
+            console.warn("Employee master data in localStorage is corrupted. Showing 0.");
            }
         } else {
-          activeEmployeesCount = 0; // No data, show 0 initially
+          activeEmployeesCount = 0;
         }
 
         const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
         if (lastUploadContextStr) {
-          const lastUploadContext: StoredUploadContext = JSON.parse(lastUploadContextStr);
-          const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastUploadContext.month}_${lastUploadContext.year}`;
-          const storedAttendance = localStorage.getItem(attendanceKey);
-          if (storedAttendance) {
-            const rawData: StoredEmployeeAttendanceData[] = JSON.parse(storedAttendance);
-            let totalPresent = 0;
-            let totalRelevantDays = 0;
-            rawData.forEach(emp => {
-              emp.attendance.forEach(status => {
-                if (['P', 'A', 'HD'].includes(status.toUpperCase())) {
-                  totalRelevantDays++;
-                  if (status.toUpperCase() === 'P') totalPresent++;
-                  else if (status.toUpperCase() === 'HD') totalPresent += 0.5;
-                }
+          try {
+            const lastUploadContext: StoredUploadContext = JSON.parse(lastUploadContextStr);
+            const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastUploadContext.month}_${lastUploadContext.year}`;
+            const storedAttendance = localStorage.getItem(attendanceKey);
+            if (storedAttendance) {
+              const rawData: StoredEmployeeAttendanceData[] = JSON.parse(storedAttendance);
+              let totalPresent = 0;
+              let totalRelevantDays = 0;
+              rawData.forEach(emp => {
+                emp.attendance.forEach(status => {
+                  if (['P', 'A', 'HD'].includes(status.toUpperCase())) {
+                    totalRelevantDays++;
+                    if (status.toUpperCase() === 'P') totalPresent++;
+                    else if (status.toUpperCase() === 'HD') totalPresent += 0.5;
+                  }
+                });
               });
-            });
-            overallAttendanceValue = totalRelevantDays > 0 ? `${((totalPresent / totalRelevantDays) * 100).toFixed(1)}%` : "N/A";
-            attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
-          } else { attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; }
+              overallAttendanceValue = totalRelevantDays > 0 ? `${((totalPresent / totalRelevantDays) * 100).toFixed(1)}%` : "N/A";
+              attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
+            } else { attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; }
+          } catch (e) {
+            console.error("Error parsing last upload context:", e);
+            attendanceDescription = "Error reading attendance context.";
+          }
         } else { attendanceDescription = "No attendance data uploaded yet."; }
 
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
-            const parsedApps = JSON.parse(storedLeaveApps);
-            totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
+            try {
+              const parsedApps = JSON.parse(storedLeaveApps);
+              totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
+            } catch (e) {
+              console.error("Error parsing leave applications:", e);
+              totalLeaveRecords = 0;
+            }
         }
 
         const lastMonthDate = subMonths(new Date(), 1);
@@ -117,13 +128,19 @@ export default function DashboardPage() {
         const lastMonthAttendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastMonthName}_${lastMonthYear}`;
         const storedLastMonthAttendance = localStorage.getItem(lastMonthAttendanceKey);
         if (storedLastMonthAttendance) {
-            const parsedLastMonthAtt = JSON.parse(storedLastMonthAttendance);
-            if (Array.isArray(parsedLastMonthAtt) && parsedLastMonthAtt.length > 0) {
-                payrollStatusValue = "Processed";
-                payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
-            } else {
-                 payrollStatusValue = "Pending";
-                 payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
+            try {
+              const parsedLastMonthAtt = JSON.parse(storedLastMonthAttendance);
+              if (Array.isArray(parsedLastMonthAtt) && parsedLastMonthAtt.length > 0) {
+                  payrollStatusValue = "Processed";
+                  payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
+              } else {
+                   payrollStatusValue = "Pending";
+                   payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
+              }
+            } catch (e) {
+              console.error("Error parsing last month's attendance for payroll status:", e);
+              payrollStatusValue = "Error";
+              payrollStatusDescription = `Error reading ${lastMonthName} ${lastMonthYear} attendance`;
             }
         } else {
            payrollStatusValue = "Pending";
@@ -133,7 +150,6 @@ export default function DashboardPage() {
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
           toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage.", variant: "destructive", duration: 7000});
-          // Reset to defaults on error to avoid inconsistent state
           activeEmployeesCount = 0;
           overallAttendanceValue = "N/A";
           attendanceDescription = "Error fetching data.";
@@ -172,12 +188,11 @@ export default function DashboardPage() {
         try {
           allData[key] = JSON.parse(item);
         } catch (e) {
-          allData[key] = item; // Store as string if not valid JSON
+          allData[key] = item; 
         }
       }
     });
 
-    // Handle prefixed keys (attendance, salary edits)
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && (key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) || 
@@ -197,6 +212,23 @@ export default function DashboardPage() {
     setIsExportDialogOpen(true);
   };
 
+  const handleDownloadExportedFile = () => {
+    if (!exportedDataJson) {
+      toast({ title: "No Data", description: "No data available to download.", variant: "destructive" });
+      return;
+    }
+    const blob = new Blob([exportedDataJson], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "hr_payroll_app_data_export.json");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Download Started", description: "hr_payroll_app_data_export.json is being downloaded." });
+  };
+
   const handleImportData = () => {
     if (typeof window === 'undefined' || !importDataJson) {
       toast({ title: "No Data", description: "Please paste the JSON data to import.", variant: "destructive" });
@@ -209,8 +241,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Clear existing relevant localStorage items before import (optional, but often desired)
-      // This is a simplified clear, a more robust version might iterate known prefixes.
       const knownPrefixes = [
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX, 
           LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX, 
@@ -242,7 +272,6 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
-      // Force a reload or prompt user to reload for changes to take full effect across all components
       window.location.reload();
     } catch (error) {
       console.error("Error importing data:", error);
@@ -263,8 +292,8 @@ export default function DashboardPage() {
                         <card.icon className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="h-8 w-1/2 bg-muted rounded animate-pulse mb-1"></div> {/* Placeholder for value */}
-                        <div className="h-3 w-3/4 bg-muted rounded animate-pulse"></div> {/* Placeholder for description */}
+                        <div className="h-8 w-1/2 bg-muted rounded animate-pulse mb-1"></div>
+                        <div className="h-3 w-3/4 bg-muted rounded animate-pulse"></div>
                     </CardContent>
                 </Card>
             ))}
@@ -378,7 +407,7 @@ export default function DashboardPage() {
           <DialogHeader>
             <DialogTitle>Exported Local Storage Data</DialogTitle>
             <DialogDescription>
-              Copy the JSON text below. You can save it to a file and use the "Import" feature on another computer/browser.
+              Copy the JSON text below or download it as a file. You can save it and use the "Import" feature on another computer/browser.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -391,12 +420,19 @@ export default function DashboardPage() {
             </DialogClose>
             <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                     navigator.clipboard.writeText(exportedDataJson);
                     toast({ title: "Copied!", description: "Data copied to clipboard." });
                 }}
             >
                 Copy to Clipboard
+            </Button>
+            <Button
+                type="button"
+                onClick={handleDownloadExportedFile}
+            >
+                <DownloadCloud className="mr-2 h-4 w-4" /> Download as JSON File
             </Button>
           </DialogFooter>
         </DialogContent>
