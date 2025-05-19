@@ -26,21 +26,24 @@ interface SalarySheetEntry extends EmployeeDetail {
   monthlyCA: number;
   monthlyOtherAllowance: number;
   monthlyMedical: number;
-  calculatedGross: number; 
+  calculatedGross: number; // The gross salary used for this period's calculation
   actualBasic: number;
   actualHRA: number;
   actualCA: number;
   actualOtherAllowance: number;
   actualMedical: number;
+  // Editable fields
   arrears: number;
   tds: number;
   loan: number;
   salaryAdvance: number;
   manualOtherDeduction: number;
   performanceDeduction: number;
-  esic: number; 
-  professionalTax: number; 
-  providentFund: number; 
+  // Fixed deductions (placeholders)
+  esic: number;
+  professionalTax: number;
+  providentFund: number;
+  // Calculated summaries
   totalAllowance: number;
   totalDeduction: number;
   netPaid: number;
@@ -82,13 +85,13 @@ export default function SalarySheetPage() {
   const [rawAttendanceForPeriod, setRawAttendanceForPeriod] = React.useState<MonthlyEmployeeAttendance[]>([]);
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
   const [salaryEditsForPeriod, setSalaryEditsForPeriod] = React.useState<Record<string, EditableSalaryFields>>({});
-  
+
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
   const [selectedYear, setSelectedYear] = React.useState<number>(0);
   const [searchTerm, setSearchTerm] = React.useState('');
-  
-  const [isLoadingData, setIsLoadingData] = React.useState(true); 
+
+  const [isLoadingData, setIsLoadingData] = React.useState(true);
   const [isLoadingCalculations, setIsLoadingCalculations] = React.useState(false);
 
   React.useEffect(() => {
@@ -97,12 +100,11 @@ export default function SalarySheetPage() {
     setCurrentYearState(currentYear);
     setSelectedMonth(months[now.getMonth()]);
     setSelectedYear(currentYear);
-    setIsLoadingData(false); 
   }, []);
 
   React.useEffect(() => {
+    setIsLoadingData(true);
     if (typeof window !== 'undefined') {
-      setIsLoadingData(true);
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         setAllEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
@@ -115,8 +117,8 @@ export default function SalarySheetPage() {
         setAllEmployees([]);
         setAllPerformanceDeductions([]);
       }
-      setIsLoadingData(false);
     }
+    setIsLoadingData(false);
   }, [toast]);
 
   React.useEffect(() => {
@@ -126,7 +128,7 @@ export default function SalarySheetPage() {
       setSalaryEditsForPeriod({});
       return;
     }
-    
+
     setIsLoadingCalculations(true);
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1) {
@@ -139,7 +141,7 @@ export default function SalarySheetPage() {
 
     let attendanceDataForSelectedMonth: MonthlyEmployeeAttendance[] = [];
     let salaryEditsForSelectedMonth: Record<string, EditableSalaryFields> = {};
-    
+
     if (typeof window !== 'undefined') {
         const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
         const storedAttendance = localStorage.getItem(attendanceKey);
@@ -147,7 +149,10 @@ export default function SalarySheetPage() {
             try {
                 const parsedAtt = JSON.parse(storedAttendance);
                 if (Array.isArray(parsedAtt)) attendanceDataForSelectedMonth = parsedAtt;
-            } catch (e) { console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`); }
+            } catch (e) {
+                console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`);
+                toast({title: "Attendance Data Corrupted", description: `Could not parse stored attendance for ${selectedMonth} ${selectedYear}. Salary calculations may be affected.`, variant: "destructive", duration: 7000});
+            }
         }
         setRawAttendanceForPeriod(attendanceDataForSelectedMonth);
 
@@ -157,29 +162,33 @@ export default function SalarySheetPage() {
             try {
                 const parsedEdits = JSON.parse(storedEdits);
                 if (typeof parsedEdits === 'object' && parsedEdits !== null) salaryEditsForSelectedMonth = parsedEdits;
-            } catch (e) { console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear}: ${e}`); }
+            } catch (e) {
+                 console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear}: ${e}`);
+                 toast({title: "Salary Edits Data Corrupted", description: `Could not parse stored salary edits for ${selectedMonth} ${selectedYear}. Using defaults.`, variant: "destructive", duration: 7000});
+            }
         }
         setSalaryEditsForPeriod(salaryEditsForSelectedMonth);
     }
-    
+
     const performanceDeductionsForSelectedMonth = allPerformanceDeductions.filter(
       pd => pd.month === selectedMonth && pd.year === selectedYear
     );
 
     const newSalarySheetData = allEmployees
-      .filter(emp => { 
-        const empAttendanceRecord = attendanceDataForSelectedMonth.find(att => att.code === emp.code);
-        return !!empAttendanceRecord;
+      .filter(emp => { // Only process employees who have attendance data for the selected month
+        return attendanceDataForSelectedMonth.some(att => att.code === emp.code);
       })
       .map(emp => {
         const empAttendanceRecord = attendanceDataForSelectedMonth.find(att => att.code === emp.code);
-        
+
         if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
-          return null; 
+          // This should ideally not happen due to the filter above, but as a safeguard
+          return null;
         }
 
         const totalDaysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex, 1));
         const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
+        
         let daysPaid = 0;
         let weekOffs = 0;
         let fullAbsentDays = 0;
@@ -189,19 +198,20 @@ export default function SalarySheetPage() {
           if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') {
             daysPaid++;
           } else if (status === 'HD') {
-            daysPaid += 0.5; 
+            daysPaid += 0.5;
             halfDaysTaken++;
           } else if (status === 'W') {
-            weekOffs++; 
-            daysPaid++; 
+            weekOffs++;
+            daysPaid++;
           } else if (status === 'A') {
             fullAbsentDays++;
           }
         });
-        
+
         daysPaid = Math.min(daysPaid, totalDaysInMonth);
         const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
-        
+
+        // Pass selectedYear and monthIndex to determine which gross salary to use (original or revised)
         const monthlyComponents = calculateMonthlySalaryComponents(emp, selectedYear, monthIndex);
         const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
 
@@ -210,7 +220,7 @@ export default function SalarySheetPage() {
         const actualCA = monthlyComponents.ca * payFactor;
         const actualMedical = monthlyComponents.medical * payFactor;
         const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
-        
+
         const empEdits = salaryEditsForSelectedMonth[emp.id] || {};
         const arrears = empEdits.arrears ?? 0;
         const tds = empEdits.tds ?? 0;
@@ -222,26 +232,26 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        
+
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0; 
-        const professionalTax = 0; 
-        const providentFund = 0; 
+        const esic = 0; // Placeholder
+        const professionalTax = 0; // Placeholder
+        const providentFund = 0; // Placeholder
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
-          ...emp, 
-          totalDaysInMonth, 
-          daysPaid, 
-          weekOffs, 
+          ...emp,
+          totalDaysInMonth,
+          daysPaid,
+          weekOffs,
           daysAbsent: daysAbsentCalculated,
-          monthlyBasic: monthlyComponents.basic, 
-          monthlyHRA: monthlyComponents.hra, 
+          monthlyBasic: monthlyComponents.basic,
+          monthlyHRA: monthlyComponents.hra,
           monthlyCA: monthlyComponents.ca,
-          monthlyOtherAllowance: monthlyComponents.otherAllowance, 
+          monthlyOtherAllowance: monthlyComponents.otherAllowance,
           monthlyMedical: monthlyComponents.medical,
-          calculatedGross: monthlyComponents.totalGross, 
+          calculatedGross: monthlyComponents.totalGross, // Store the gross used for calculation
           actualBasic, actualHRA, actualCA, actualOtherAllowance, actualMedical,
           arrears, tds, loan, salaryAdvance, manualOtherDeduction: manualOtherDeductionVal, performanceDeduction: performanceDeductionAmount,
           totalAllowance, esic, professionalTax, providentFund, totalDeduction, netPaid,
@@ -271,25 +281,26 @@ export default function SalarySheetPage() {
 
   const handleEditableInputChange = (employeeId: string, fieldName: keyof EditableSalaryFields, value: string) => {
     const numericValue = parseFloat(value) || 0;
-    
+
     setSalarySheetData(prevData => {
       const newData = prevData.map(emp => {
         if (emp.id === employeeId) {
           const updatedEmp = { ...emp };
-          
+
           if (fieldName === 'manualOtherDeduction') updatedEmp.manualOtherDeduction = numericValue;
           else if (fieldName === 'arrears') updatedEmp.arrears = numericValue;
           else if (fieldName === 'tds') updatedEmp.tds = numericValue;
           else if (fieldName === 'loan') updatedEmp.loan = numericValue;
           else if (fieldName === 'salaryAdvance') updatedEmp.salaryAdvance = numericValue;
-          
+
+          // Recalculate totals based on the change
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
-          
-          const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund + 
-                                   updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance + 
-                                   updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
+          // Performance deduction is fixed for the month, only manualOtherDeduction is part of this direct edit's impact on totalDeduction
+          const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund +
+                                   updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance +
+                                   updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction; // performanceDeduction comes from separate source
           const newNetPaid = newTotalAllowance - newTotalDeduction;
-          
+
           return { ...updatedEmp, totalAllowance: newTotalAllowance, totalDeduction: newTotalDeduction, netPaid: newNetPaid };
         }
         return emp;
@@ -297,14 +308,15 @@ export default function SalarySheetPage() {
       return newData;
     });
 
+    // Save edits to localStorage
     if (selectedMonth && selectedYear > 0) {
         const updatedEditsForStorage = { ...salaryEditsForPeriod };
         if (!updatedEditsForStorage[employeeId]) {
           updatedEditsForStorage[employeeId] = {};
         }
         updatedEditsForStorage[employeeId]![fieldName] = numericValue;
-        setSalaryEditsForPeriod(updatedEditsForStorage);
-        
+        setSalaryEditsForPeriod(updatedEditsForStorage); // Update state for persistence
+
         if (typeof window !== 'undefined') {
             try {
                 const editsKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
@@ -326,16 +338,18 @@ export default function SalarySheetPage() {
       toast({ title: "No Data", description: "No employee master data found.", variant: "destructive" });
       return;
     }
-    
+
     const monthIndex = months.indexOf(selectedMonth);
     if (monthIndex === -1 || !selectedYear || selectedYear === 0) {
         toast({ title: "Selection Missing", description: "Please select month and year for the report.", variant: "destructive"});
         return;
     }
-    
-    let attendanceDataForCsv: MonthlyEmployeeAttendance[] = []; 
-    let salaryEditsForCsv: Record<string, EditableSalaryFields> = {}; 
-    
+
+    let attendanceDataForCsv: MonthlyEmployeeAttendance[] = [];
+    let salaryEditsForCsv: Record<string, EditableSalaryFields> = {};
+    let performanceDeductionsForCsv: PerformanceDeductionEntry[] = [];
+
+
     if (typeof window !== 'undefined') {
       const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
       const storedAttendance = localStorage.getItem(attendanceKey);
@@ -354,16 +368,26 @@ export default function SalarySheetPage() {
           if (typeof parsedEdits === 'object' && parsedEdits !== null) salaryEditsForCsv = parsedEdits;
         } catch(e) { console.warn("Error parsing salary edits for CSV export"); }
       }
+
+      const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        if (storedPerfDeductions) {
+            try {
+                const parsed = JSON.parse(storedPerfDeductions);
+                if (Array.isArray(parsed)) {
+                  performanceDeductionsForCsv = parsed.filter(
+                    (pd: PerformanceDeductionEntry) => pd.month === selectedMonth && pd.year === selectedYear
+                  );
+                }
+            } catch (e) { console.warn("Error parsing performance deductions for CSV export"); }
+        }
     }
 
-    const performanceDeductionsForCsv = allPerformanceDeductions.filter(
-      pd => pd.month === selectedMonth && pd.year === selectedYear
-    );
-
+    // Process ALL employees from master for the CSV, including "Left" ones
     const dataToExport = allEmployees
       .map(emp => {
         const empAttendanceRecord = attendanceDataForCsv.find(att => att.code === emp.code);
-        
+
+        // If no attendance record for this employee for this month, they should still be in CSV but with 0 paid days.
         const totalDaysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex, 1));
         let daysPaid = 0, weekOffs = 0, fullAbsentDays = 0, halfDaysTaken = 0;
 
@@ -372,13 +396,13 @@ export default function SalarySheetPage() {
             dailyStatuses.forEach(status => {
               if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaid++;
               else if (status === 'HD') { daysPaid += 0.5; halfDaysTaken++; }
-              else if (status === 'W') { weekOffs++; daysPaid++; }
+              else if (status === 'W') { weekOffs++; daysPaid++; } // Week-offs are paid
               else if (status === 'A') fullAbsentDays++;
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
         } else {
-           // If no attendance record, employee is not processed for salary for this month
-           return null;
+          // No attendance record found, treat all days as absent for calculation purposes in CSV
+          fullAbsentDays = totalDaysInMonth;
         }
 
         const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
@@ -390,7 +414,7 @@ export default function SalarySheetPage() {
         const actualCA = monthlyComponents.ca * payFactor;
         const actualMedical = monthlyComponents.medical * payFactor;
         const actualOtherAllowance = monthlyComponents.otherAllowance * payFactor;
-        
+
         const empEdits = salaryEditsForCsv[emp.id] || {};
         const arrears = empEdits.arrears ?? 0;
         const tds = empEdits.tds ?? 0;
@@ -402,9 +426,9 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        
+
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0, professionalTax = 0, providentFund = 0;
+        const esic = 0, professionalTax = 0, providentFund = 0; // Placeholders
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
@@ -417,27 +441,27 @@ export default function SalarySheetPage() {
           arrears, tds, loan, salaryAdvance, manualOtherDeduction: manualOtherDeductionVal, performanceDeduction: performanceDeductionAmount,
           esic, professionalTax, providentFund,
           totalAllowance, totalDeduction, netPaid,
-          employeeStatus: emp.status as "Active" | "Left",
+          employeeStatus: emp.status as "Active" | "Left", // Ensure status is included
         };
       })
       .filter(emp => emp !== null) as SalarySheetEntry[];
 
     if (dataToExport.length === 0) {
-      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing.", variant: "destructive" });
+      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing for all.", variant: "destructive" });
       return;
     }
 
     const headers = [
-      "Employee Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
-      "Total Days", "Day Paid", "Week Off", "Day Absent",
-      "Monthly Basic", "Monthly HRA", "Monthly CA", "Monthly Other Allowance", "Monthly Medical", "Monthly Gross",
-      "Actual Basic", "Actual HRA", "Actual CA", "Actual Other Allowance", "Actual Medical",
-      "Arrears", "Total Allowance",
-      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Manual Other Ded.", "Performance Ded.", "Total Other Ded.",
-      "Total Deduction", "Net Paid"
+      "Employee Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", // a-f
+      "Total Days", "Day Paid", "Week Off", "Day Absent", // g-j
+      "Monthly Basic", "Monthly HRA", "Monthly CA", "Monthly Other Allowance", "Monthly Medical", "Monthly Gross", // k-p
+      "Basic", "HRA", "CA", "Other Allowance", "Medical", // q-u
+      "Arrears", "Total Allowance", // v-w
+      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Manual Other Ded.", "Performance Ded.", "Total Other Ded.", // x,y,z,aa,ab,ac,ad (manual+perf), new combined
+      "Total Deduction", "Net Paid" // ae-af
     ];
     const csvRows = [headers.join(',')];
-    
+
     dataToExport.forEach(emp => {
       const dojFormatted = emp.doj && isValid(parseISO(emp.doj)) ? format(parseISO(emp.doj), 'dd-MM-yyyy') : emp.doj || 'N/A';
       const totalOtherDeductionForEmp = emp.manualOtherDeduction + emp.performanceDeduction;
@@ -445,15 +469,16 @@ export default function SalarySheetPage() {
         emp.employeeStatus, emp.division || "N/A", emp.code, emp.name, emp.designation, emp.hq || "N/A", dojFormatted,
         emp.totalDaysInMonth.toString(), emp.daysPaid.toFixed(1), emp.weekOffs.toString(), emp.daysAbsent.toFixed(1),
         emp.monthlyBasic.toFixed(2), emp.monthlyHRA.toFixed(2), emp.monthlyCA.toFixed(2), emp.monthlyOtherAllowance.toFixed(2), emp.monthlyMedical.toFixed(2),
-        emp.calculatedGross.toFixed(2), 
+        emp.calculatedGross.toFixed(2),
         emp.actualBasic.toFixed(2), emp.actualHRA.toFixed(2), emp.actualCA.toFixed(2), emp.actualOtherAllowance.toFixed(2), emp.actualMedical.toFixed(2),
         emp.arrears.toFixed(2), emp.totalAllowance.toFixed(2),
         emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.manualOtherDeduction.toFixed(2), emp.performanceDeduction.toFixed(2), totalOtherDeductionForEmp.toFixed(2),
         emp.totalDeduction.toFixed(2), emp.netPaid.toFixed(2),
-      ].map(val => `"${String(val).replace(/"/g, '""')}"`); 
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`); // Basic CSV escaping for values with commas
       csvRows.push(row.join(','));
     });
 
+    // Add Totals Row for CSV
     const totals = {
         monthlyBasic: dataToExport.reduce((sum, emp) => sum + emp.monthlyBasic, 0),
         monthlyHRA: dataToExport.reduce((sum, emp) => sum + emp.monthlyHRA, 0),
@@ -482,7 +507,7 @@ export default function SalarySheetPage() {
     };
 
      const totalRow = [
-        "", "", "", "", "", "", "TOTALS:", "", "", "", "",
+        "", "", "", "", "", "", "TOTALS:", "", "", "", "", // Empty cells for non-summed columns
         totals.monthlyBasic.toFixed(2), totals.monthlyHRA.toFixed(2), totals.monthlyCA.toFixed(2), totals.monthlyOtherAllowance.toFixed(2), totals.monthlyMedical.toFixed(2), totals.calculatedGross.toFixed(2),
         totals.actualBasic.toFixed(2), totals.actualHRA.toFixed(2), totals.actualCA.toFixed(2), totals.actualOtherAllowance.toFixed(2), totals.actualMedical.toFixed(2),
         totals.arrears.toFixed(2), totals.totalAllowance.toFixed(2),
@@ -490,6 +515,7 @@ export default function SalarySheetPage() {
         totals.totalDeduction.toFixed(2), totals.netPaid.toFixed(2),
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
     csvRows.push(totalRow.join(','));
+
 
     const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -504,7 +530,7 @@ export default function SalarySheetPage() {
     URL.revokeObjectURL(url);
     toast({ title: "Download Started", description: "Salary sheet CSV is being downloaded." });
   };
-  
+
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
 
   if (isLoadingData && allEmployees.length === 0) {
@@ -517,9 +543,9 @@ export default function SalarySheetPage() {
 
   return (
     <>
-      <PageHeader title="Salary Sheet" description="Generate and download month-wise salary sheets. (Data saved in browser's local storage).">
-        <Button 
-          onClick={handleDownloadSheet} 
+      <PageHeader title="Salary Sheet" description="Generate and download month-wise salary sheets. Data is saved in browser's local storage.">
+        <Button
+          onClick={handleDownloadSheet}
           disabled={isLoadingCalculations || isLoadingData || allEmployees.length === 0 }
         >
           {isLoadingCalculations ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
@@ -536,7 +562,7 @@ export default function SalarySheetPage() {
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select Month" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="item-aligned">
               {months.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -544,7 +570,7 @@ export default function SalarySheetPage() {
             <SelectTrigger className="w-full sm:w-[120px]">
               <SelectValue placeholder="Select Year" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="item-aligned">
               {availableYears.map(year => <SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -566,7 +592,7 @@ export default function SalarySheetPage() {
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Displaying active employees for whom attendance data was found for the selected period.
-            ESIC, PT, PF are placeholders (0). Editable fields reflect manual adjustments. (Data saved in browser's local storage).
+            ESIC, PT, PF are placeholders (0). Editable fields reflect manual adjustments. Data saved in browser's local storage.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -578,29 +604,35 @@ export default function SalarySheetPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {/* Columns a-f */}
                   <TableHead className="min-w-[120px]">Division</TableHead>
                   <TableHead className="min-w-[80px]">Code</TableHead>
                   <TableHead className="min-w-[150px]">Name</TableHead>
                   <TableHead className="min-w-[150px]">Designation</TableHead>
                   <TableHead className="min-w-[100px]">HQ</TableHead>
                   <TableHead className="min-w-[100px]">DOJ</TableHead>
+                  {/* Columns g-j */}
                   <TableHead className="text-center min-w-[80px]">Total Days</TableHead>
                   <TableHead className="text-center min-w-[80px]">Day Paid</TableHead>
                   <TableHead className="text-center min-w-[80px]">Week Off</TableHead>
                   <TableHead className="text-center min-w-[90px]">Day Absent</TableHead>
+                  {/* Columns k-p */}
                   <TableHead className="text-right min-w-[110px]">M_Basic (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_HRA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">M_CA (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">M_Other (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">M_Medical (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">M_Gross (₹)</TableHead>
+                  {/* Columns q-u */}
                   <TableHead className="text-right min-w-[110px]">Actual_Basic (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_HRA (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">Actual_CA (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">Actual_Other (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">Actual_Medical (₹)</TableHead>
+                  {/* Columns V-W */}
                   <TableHead className="text-right min-w-[100px]">Arrears (₹)</TableHead>
                   <TableHead className="text-right min-w-[120px]">Total Allowance (₹)</TableHead>
+                  {/* Columns X-Z, AA-AD, new Total Other Ded */}
                   <TableHead className="text-right min-w-[100px]">ESIC (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px]">Prof. Tax (₹)</TableHead>
                   <TableHead className="text-right min-w-[100px]">PF (₹)</TableHead>
@@ -610,6 +642,7 @@ export default function SalarySheetPage() {
                   <TableHead className="text-right min-w-[140px]">Manual Other Ded (₹)</TableHead>
                   <TableHead className="text-right min-w-[140px]">Performance Ded (₹)</TableHead>
                   <TableHead className="text-right min-w-[140px]">Total Other Ded (₹)</TableHead>
+                  {/* Columns AE-AF */}
                   <TableHead className="text-right min-w-[120px]">Total Deduction (₹)</TableHead>
                   <TableHead className="text-right min-w-[110px] font-semibold">Net Paid (₹)</TableHead>
                 </TableRow>
@@ -690,7 +723,7 @@ export default function SalarySheetPage() {
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.salaryAdvance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.manualOtherDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.performanceDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right font-bold">{(filteredSalarySheetData.reduce((acc, curr) => acc + (curr.manualOtherDeduction + curr.performanceDeduction) , 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-bold">{(filteredSalarySheetData.reduce((acc, curr) => acc + (curr.manualOtherDeduction + curr.performanceDeduction) , 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.totalDeduction , 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.netPaid, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
@@ -698,7 +731,7 @@ export default function SalarySheetPage() {
             </Table>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              { 
+              {
                 isLoadingData ? "Loading employee data..." :
                 allEmployees.length === 0 ? "No employees found in Employee Master. (Data saved in browser's local storage)." :
                !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet. (Data saved in browser's local storage)." :
@@ -713,4 +746,5 @@ export default function SalarySheetPage() {
     </>
   );
 }
+
     
