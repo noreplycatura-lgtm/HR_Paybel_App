@@ -56,7 +56,7 @@ export function TopNavbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            {/* Logout option removed */}
+            {/* Login/Logout options removed as login is disabled */}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

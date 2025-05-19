@@ -25,7 +25,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Login check removed for direct access
+  // Login check logic has been removed for direct access.
   return (
     <SidebarProvider defaultOpen={false}>
        <div className="flex min-h-screen w-full flex-col bg-muted/40">

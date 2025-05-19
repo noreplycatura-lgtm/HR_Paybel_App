@@ -100,9 +100,11 @@ export default function UserManagementPage() {
         const storedUsers = localStorage.getItem(LOCAL_STORAGE_SIMULATED_USERS_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
-          usersToSet = parsedUsers.filter(user => user.username !== "Novita");
-          if (usersToSet.length !== parsedUsers.length) {
-            localStorage.setItem(LOCAL_STORAGE_SIMULATED_USERS_KEY, JSON.stringify(usersToSet));
+          if (Array.isArray(parsedUsers)) {
+            usersToSet = parsedUsers;
+          } else {
+            console.warn("Simulated users data in localStorage is corrupted. Initializing empty.");
+            toast({ title: "Data Error", description: "Stored user list is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         }
       } catch (error) {
@@ -167,7 +169,7 @@ export default function UserManagementPage() {
     addActivityLog(`Co-admin user '${values.username}' created.`);
     toast({
       title: "Co-Admin User Added",
-      description: `User '${values.username}' has been added to the list.`,
+      description: `User '${values.username}' has been added to the list. Login functionality for co-admins depends on the main login page configuration.`,
     });
     setIsCreateUserDialogOpen(false);
     form.reset();
@@ -227,13 +229,13 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description={`Manage co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
+        description={`Manage co-admin accounts for this prototype. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here). Actual login functionality is separate.`}
       />
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Account Controls</CardTitle>
           <CardDescription>
-            Create new co-admin users.
+            Create new co-admin users (simulated).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4 pt-6">
@@ -291,15 +293,14 @@ export default function UserManagementPage() {
               </Form>
             </DialogContent>
           </Dialog>
-          {/* Logout button removed */}
         </CardContent>
       </Card>
 
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle>Co-Admin Accounts</CardTitle>
+          <CardTitle>Simulated Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here and cannot be modified.
+            List of co-admin users created for this prototype. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
