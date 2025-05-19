@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2, Printer, XCircle } from "lucide-react";
 import Image from "next/image";
-import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth, isBefore, isEqual } from "date-fns";
+import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth, isBefore, isEqual, isAfter } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
 import type { EmployeeDetail } from "@/lib/hr-data";
@@ -68,6 +68,7 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 
 
 interface SalarySlipDataType {
@@ -89,7 +90,7 @@ interface SalarySlipDataType {
   weekOffs: number;
   paidHolidays: number;
   totalLeavesTakenThisMonth: number;
-  period: string; // Added for multi-month context
+  period: string; 
 }
 
 interface MonthlyEmployeeAttendance {
@@ -128,6 +129,8 @@ export default function SalarySlipPage() {
   const [filteredEmployeesForSlip, setFilteredEmployeesForSlip] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
+  const [allLeaveApplications, setAllLeaveApplications] = React.useState<any[]>([]);
+
 
   const [slipData, setSlipData] = React.useState<SalarySlipDataType | null>(null);
   const [bulkSlipsData, setBulkSlipsData] = React.useState<SalarySlipDataType[]>([]);
@@ -152,7 +155,6 @@ export default function SalarySlipPage() {
     setAvailableYears(Array.from({ length: 5 }, (_, i) => year - i));
     setSelectedMonth(month);
     setSelectedYear(year);
-    // Initialize multi-month selectors
     setFromMonthMulti(month);
     setFromYearMulti(year);
     setToMonthMulti(month);
@@ -172,12 +174,17 @@ export default function SalarySlipPage() {
             const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
             setAllPerformanceDeductions(storedPerfDeductions ? JSON.parse(storedPerfDeductions) : []);
 
+            const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+            setAllLeaveApplications(storedLeaveApps ? JSON.parse(storedLeaveApps) : []);
+
+
         } catch (error) {
             console.error("Error loading initial data for Salary Slip page:", error);
             toast({ title: "Data Load Error", description: "Could not load some initial data from localStorage. Salary slip generation might be affected.", variant: "destructive" });
             setAllEmployees([]);
             setOpeningBalances([]);
             setAllPerformanceDeductions([]);
+            setAllLeaveApplications([]);
         }
     }
     setIsLoadingEmployees(false);
@@ -203,17 +210,35 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]); 
+  }, [selectedDivision, allEmployees]); 
 
   const generateSlipDataForEmployee = (
     employee: EmployeeDetail,
     month: string,
     year: number,
     localOpeningBalances: OpeningLeaveBalance[],
-    localAllPerformanceDeductions: PerformanceDeductionEntry[]
+    localAllPerformanceDeductions: PerformanceDeductionEntry[],
+    localAllLeaveApplications: any[]
   ): SalarySlipDataType | null => {
     const monthIndex = months.indexOf(month);
     if (monthIndex === -1 || !employee.doj) return null;
+
+    const employeeDOJ = parseISO(employee.doj);
+    if (!isValid(employeeDOJ)) return null; // Invalid DOJ
+
+    const selectedPeriodStartDate = startOfMonth(new Date(year, monthIndex, 1));
+    const selectedPeriodEndDate = endOfMonth(selectedPeriodStartDate);
+
+    // Skip if employee not active during the selected month
+    if (isAfter(employeeDOJ, selectedPeriodEndDate)) {
+      return null;
+    }
+    if (employee.dor) {
+      const employeeDOR = parseISO(employee.dor);
+      if (isValid(employeeDOR) && isBefore(employeeDOR, selectedPeriodStartDate)) {
+        return null;
+      }
+    }
 
     let attendanceForMonthEmployee: MonthlyEmployeeAttendance | undefined;
     let salaryEditsForEmployee: EditableSalaryFields | undefined;
@@ -242,14 +267,14 @@ export default function SalarySlipPage() {
         }
     }
     
-    const attendanceStatuses: string[] = attendanceForMonthEmployee?.attendance || [];
+    const attendanceStatuses: string[] = attendanceForMonthEmployee?.attendance || Array(getDaysInMonth(selectedPeriodStartDate)).fill('A'); // Default to all Absent if no record
     const salaryEdits = salaryEditsForEmployee || {};
     const performanceDeductionEntry = localAllPerformanceDeductions.find(
       pd => pd.employeeCode === employee.code && pd.month === month && pd.year === year
     );
     const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
 
-    const totalDaysInMonthValue = getDaysInMonth(new Date(year, monthIndex));
+    const totalDaysInMonthValue = getDaysInMonth(selectedPeriodStartDate);
     const dailyStatuses = attendanceStatuses.slice(0, totalDaysInMonthValue);
 
     let actualPayDaysValue = 0;
@@ -257,31 +282,33 @@ export default function SalarySlipPage() {
     let absentDaysCount = 0;
     let weekOffsCount = 0;
     let paidHolidaysCount = 0;
+    let halfDaysTaken = 0;
 
     dailyStatuses.forEach(status => {
       if (status === 'P' || status === 'W' || status === 'PH') actualPayDaysValue++;
       else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
       else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
       else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
-      else if (status === 'HD') actualPayDaysValue += 0.5;
+      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; }
 
       if (status === 'A') absentDaysCount += 1;
-      else if (status === 'HD') absentDaysCount += 0.5; 
+      else if (status === 'HD') { /* counted as half day absent for summary */ }
       else if (status === 'W') weekOffsCount += 1;
       else if (status === 'PH') paidHolidaysCount += 1;
     });
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
+    const finalAbsentDays = absentDaysCount + (halfDaysTaken * 0.5);
     const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
 
     const monthlyComp = calculateMonthlySalaryComponents(employee, year, monthIndex); 
     const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
 
     const earningsList = [
-      { component: "Basic Salary", amount: monthlyComp.basic * payFactor },
-      { component: "House Rent Allowance (HRA)", amount: monthlyComp.hra * payFactor },
-      { component: "Conveyance Allowance (CA)", amount: monthlyComp.ca * payFactor },
-      { component: "Medical Allowance", amount: monthlyComp.medical * payFactor },
-      { component: "Other Allowance", amount: monthlyComp.otherAllowance * payFactor },
+      { component: "Basic Salary", amount: (monthlyComp.basic || 0) * payFactor },
+      { component: "House Rent Allowance (HRA)", amount: (monthlyComp.hra || 0) * payFactor },
+      { component: "Conveyance Allowance (CA)", amount: (monthlyComp.ca || 0) * payFactor },
+      { component: "Medical Allowance", amount: (monthlyComp.medical || 0) * payFactor },
+      { component: "Other Allowance", amount: (monthlyComp.otherAllowance || 0) * payFactor },
       { component: "Arrears", amount: salaryEdits.arrears ?? 0 },
     ];
     const calculatedTotalEarnings = earningsList.reduce((sum, item) => sum + item.amount, 0);
@@ -302,11 +329,13 @@ export default function SalarySlipPage() {
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
     
     const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
-        employee, year, monthIndex, [], localOpeningBalances 
+        employee, year, monthIndex, 
+        localAllLeaveApplications.filter(app => app.employeeId === employee.id), 
+        localOpeningBalances 
     );
     
     let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
-    const nextMonthDateObject = addMonths(startOfMonth(new Date(year, monthIndex, 1)), 1);
+    const nextMonthDateObject = addMonths(selectedPeriodStartDate, 1);
     const nextMonthIdx = getMonth(nextMonthDateObject);
     const nextYr = getYear(nextMonthDateObject);
     
@@ -347,7 +376,7 @@ export default function SalarySlipPage() {
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
-      absentDays: absentDaysCount, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount, totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
+      absentDays: finalAbsentDays, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount, totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
       period: `${month} ${year}`,
     };
   };
@@ -370,14 +399,14 @@ export default function SalarySlipPage() {
     
     const generatedData = generateSlipDataForEmployee(
         employee, selectedMonth, selectedYear, 
-        openingBalances, allPerformanceDeductions
+        openingBalances, allPerformanceDeductions, allLeaveApplications
     );
 
     if (generatedData) {
       setSlipData(generatedData);
       setShowSlip(true);
     } else {
-      toast({ title: "Data Error", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}.`, variant: "destructive" });
+      toast({ title: "Data Error or Ineligible", description: `Could not generate slip for ${employee.name}. Required data might be missing for ${selectedMonth} ${selectedYear}, or employee was not active during this period.`, variant: "destructive", duration: 7000 });
       setSlipData(null);
       setShowSlip(false);
     }
@@ -410,7 +439,7 @@ export default function SalarySlipPage() {
       const salaryComponents = calculateMonthlySalaryComponents(emp, selectedYear, months.indexOf(selectedMonth));
       const slipSummaryData = generateSlipDataForEmployee(
           emp, selectedMonth, selectedYear, 
-          openingBalances, allPerformanceDeductions
+          openingBalances, allPerformanceDeductions, allLeaveApplications
       );
       if (slipSummaryData) {
          csvRows.push([
@@ -425,7 +454,7 @@ export default function SalarySlipPage() {
     }
     
     if (processedCount === 0) {
-        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had necessary data for ${selectedMonth} ${selectedYear} to generate summaries. CSV not generated.`, variant: "destructive", duration: 7000 });
+        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had necessary data for ${selectedMonth} ${selectedYear} to generate summaries, or were ineligible. CSV not generated.`, variant: "destructive", duration: 7000 });
         setIsLoading(false);
         return;
     }
@@ -470,7 +499,7 @@ export default function SalarySlipPage() {
     for (const emp of employeesToPrint) {
         const sData = generateSlipDataForEmployee(
             emp, selectedMonth, selectedYear,
-            openingBalances, allPerformanceDeductions
+            openingBalances, allPerformanceDeductions, allLeaveApplications
         );
         if (sData) {
             generatedSlips.push(sData);
@@ -479,7 +508,7 @@ export default function SalarySlipPage() {
     }
 
     if (countWithData === 0) {
-      toast({ title: "No Slips Generated", description: `No employees in ${selectedDivision} had necessary data (e.g. attendance) for ${selectedMonth} ${selectedYear}. Cannot print slips.`, variant: "destructive", duration: 7000 });
+      toast({ title: "No Slips Generated", description: `No employees in ${selectedDivision} had necessary data (e.g. attendance) or were eligible for ${selectedMonth} ${selectedYear}. Cannot print slips.`, variant: "destructive", duration: 7000 });
       setIsLoading(false);
       return;
     }
@@ -522,7 +551,7 @@ export default function SalarySlipPage() {
 
       const sData = generateSlipDataForEmployee(
         employee, currentMonthName, currentYearValue,
-        openingBalances, allPerformanceDeductions
+        openingBalances, allPerformanceDeductions, allLeaveApplications
       );
       if (sData) {
         generatedSlips.push(sData);
@@ -537,13 +566,13 @@ export default function SalarySlipPage() {
     }
     
     if (generatedSlips.length === 0) {
-      toast({ title: "No Slips Generated", description: `No data found for ${employee.name} within the selected date range to generate slips.`, variant: "destructive", duration: 7000 });
+      toast({ title: "No Slips Generated", description: `No data found or employee ineligible for ${employee.name} within the selected date range to generate slips.`, variant: "destructive", duration: 7000 });
       setIsLoadingMultiMonth(false);
       return;
     }
 
     setBulkSlipsData(generatedSlips);
-    setIsBulkPrintingView(true); // Reuses the existing bulk print view
+    setIsBulkPrintingView(true); 
     setIsLoadingMultiMonth(false);
   };
 
@@ -551,15 +580,13 @@ export default function SalarySlipPage() {
   React.useEffect(() => {
     if (isBulkPrintingView && bulkSlipsData.length > 0) {
       let printTitle = `SalarySlips-${selectedMonth}-${selectedYear}`;
-      if(bulkSlipsData.length > 1 && bulkSlipsData[0].period !== bulkSlipsData[bulkSlipsData.length -1].period){
-          // Multi-month for single employee
+      if(bulkSlipsData.length > 0 && bulkSlipsData[0].period !== bulkSlipsData[bulkSlipsData.length -1]?.period){
           const empName = bulkSlipsData[0].name.replace(/\s+/g, '_');
           const fromPeriod = bulkSlipsData[0].period.replace(/\s+/g, '-');
           const toPeriod = bulkSlipsData[bulkSlipsData.length - 1].period.replace(/\s+/g, '-');
           printTitle = `Slips_${empName}_${fromPeriod}_to_${toPeriod}`;
-      } else if (bulkSlipsData.length > 1) {
-          // All employees for a single month/division
-          printTitle = `AllSlips-${selectedDivision}-${selectedMonth}-${selectedYear}`;
+      } else if (bulkSlipsData.length > 0) {
+          printTitle = `AllSlips-${selectedDivision}-${bulkSlipsData[0].period.replace(/\s+/g, '-')}`;
       }
 
       const originalTitle = document.title;
@@ -625,8 +652,8 @@ export default function SalarySlipPage() {
              ? COMPANY_DETAILS_MAP[sData.division as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
              : COMPANY_DETAILS_MAP.Default;
 
-          const slipMonthYear = sData.period; // Use period from sData
-          const slipDateForNextMonthCalc = parseISO(`${getYear(parseISO(sData.joinDate))}-${months.indexOf(slipMonthYear.split(' ')[0]) + 1}-01`); // Reconstruct date for next month calc
+          const slipMonthYear = sData.period; 
+          const slipDateForNextMonthCalc = parseISO(`${getYear(new Date(slipMonthYear.split(' ')[1]))}-${months.indexOf(slipMonthYear.split(' ')[0]) + 1}-01`);
           const slipNextMonthDate = addMonths(slipDateForNextMonthCalc, 1);
           const slipNextMonthName = format(slipNextMonthDate, "MMMM");
           const slipNextMonthYearNum = getYear(slipNextMonthDate);
@@ -656,7 +683,7 @@ export default function SalarySlipPage() {
               </CardHeader>
               <CardContent className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                    <div>
+                    <div className="space-y-1">
                         <h3 className="font-semibold mb-2">Employee Details</h3>
                         <p><strong>Name:</strong> {sData.name}</p>
                         <p><strong>Employee ID:</strong> {sData.employeeId}</p>
@@ -668,7 +695,7 @@ export default function SalarySlipPage() {
                         <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
                         <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
                     </div>
-                    <div>
+                    <div className="space-y-1">
                         <h3 className="font-semibold mb-2">Attendance Summary</h3>
                         <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
                         <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
@@ -842,7 +869,7 @@ export default function SalarySlipPage() {
            
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-            <div className="md:col-span-2" /> {/* Spacer */}
+            <div className="md:col-span-2" /> 
              <Select value={toMonthMulti} onValueChange={setToMonthMulti}>
               <SelectTrigger> <SelectValue placeholder="To Month" /> </SelectTrigger>
               <SelectContent> {months.map(m => <SelectItem key={`to-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
@@ -851,14 +878,15 @@ export default function SalarySlipPage() {
               <SelectTrigger> <SelectValue placeholder="To Year" /> </SelectTrigger>
               <SelectContent> {availableYears.map(y => <SelectItem key={`to-multi-${y}`} value={y.toString()}>{y}</SelectItem>)} </SelectContent>
             </Select>
-          </div>
-           <Button
+             <Button
               onClick={handleGenerateMultiMonthSlips}
               disabled={!selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0 || isLoadingMultiMonth}
+              className="md:mt-auto" 
             >
               {isLoadingMultiMonth ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
               Generate & Print Multi-Month Slips
             </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -887,7 +915,7 @@ export default function SalarySlipPage() {
           </CardHeader>
           <CardContent className="p-6">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                <div>
+                <div className="space-y-1">
                     <h3 className="font-semibold mb-2">Employee Details</h3>
                     <p><strong>Name:</strong> {slipData.name}</p>
                     <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
@@ -899,7 +927,7 @@ export default function SalarySlipPage() {
                     <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                     <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
                 </div>
-                <div>
+                <div className="space-y-1">
                     <h3 className="font-semibold mb-2">Attendance Summary</h3>
                     <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
                     <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
@@ -1004,8 +1032,9 @@ function convertToWords(num: number): string {
   const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
 
   const inWords = (numToConvert: number): string => {
-    if (numToConvert === 0) return "Zero";
-    let numStr = numToConvert.toString();
+    if (numToConvert < 0) return ""; // Handle negative numbers if necessary, though salary shouldn't be.
+    if (numToConvert === 0) return ""; // Changed from "Zero" to "" for combining parts
+    let numStr = Math.floor(numToConvert).toString(); // Use Math.floor to only process whole number part
     if (numStr.length > 9) return 'overflow'; 
 
     const nMatch = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
@@ -1022,24 +1051,25 @@ function convertToWords(num: number): string {
   if (num === 0) return "Zero";
   
   const roundedNum = parseFloat(num.toFixed(2)); 
-  const [wholePartStr, decimalPartStr = "00"] = roundedNum.toString().split('.');
-  const wholePart = parseInt(wholePartStr);
-  const decimalPart = parseInt(decimalPartStr.padEnd(2, '0'));
+  const wholePart = Math.floor(roundedNum);
+  const decimalPart = Math.round((roundedNum - wholePart) * 100);
 
   let words = inWords(wholePart);
-  if (words === "Zero" && wholePart !== 0) words = ""; // Handle case where whole part is 0 but inWords returns "Zero"
-  if (words === "" && wholePart === 0) words = "Zero"; // Ensure "Zero" if number is like 0.50
-
-  if (decimalPart > 0) {
-    words += (words && words !== "Zero" && words !== "overflow" ? ' ' : (wholePart === 0 ? "" : " ")) + (wholePart !== 0 && decimalPart > 0 ? 'and ' : '') + inWords(decimalPart) + ' Paise';
-  } else if (words && words !== "Zero" && words !== "overflow" && wholePart !== 0) {
-    // No paise, and whole part is not zero
-  } else if (!words || words === "overflow") {
-     words = words || "Zero";
+  if (words === "" && wholePart === 0 && decimalPart > 0) { // Case like 0.50
+     // words remains ""
+  } else if (words === "" && wholePart === 0 && decimalPart === 0) { // Case 0.00
+     words = "Zero";
+  } else if (words === "") { // Should not happen if wholePart > 0
+     words = "ErrorInConversion";
   }
 
-  return words.trim() ? words.trim() : 'Zero';
+
+  if (decimalPart > 0) {
+    words += (words && words !== "Zero" ? ' ' : (wholePart === 0 ? "" : " ")) + (wholePart !== 0 ? 'and ' : '') + inWords(decimalPart) + ' Paise';
+  } else if (words && words !== "Zero" && wholePart !== 0 && decimalPart === 0) {
+    // No paise, and whole part is not zero, words already contains the rupees part
+  }
+  
+  return words.trim() ? words.trim() : 'Zero'; // Default to Zero if empty
 }
 
-
-    
