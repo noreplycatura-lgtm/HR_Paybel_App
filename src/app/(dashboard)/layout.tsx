@@ -32,31 +32,30 @@ export default function DashboardLayout({
   const [isAuthCheckComplete, setIsAuthCheckComplete] = React.useState(false);
 
   React.useEffect(() => {
-    // This effect runs when the component mounts and when 'router' changes (which should be stable)
     if (typeof window !== 'undefined') {
       const isLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
       if (!isLoggedIn) {
-        router.replace('/login'); // Use replace to avoid login page in history
+        router.replace('/login'); 
       } else {
-        setIsAuthCheckComplete(true); // Allow rendering children
+        setIsAuthCheckComplete(true);
       }
     }
-  }, [router]); // Dependency array
+  }, [router]); // Keep router dependency for re-check on route changes if needed
 
   if (!isAuthCheckComplete) {
-    // Render nothing or a loading spinner while auth check is in progress
-    // This prevents rendering children prematurely if the user is not logged in
     return null; 
   }
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar />
-      <div className="flex flex-1 flex-col sm:gap-4 sm:py-4">
-        <TopNavbar />
-        <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
-          {children}
-        </main>
+       <div className="flex min-h-screen w-full flex-col bg-muted/40">
+        <AppSidebar />
+        <div className="flex flex-1 flex-col sm:gap-4 sm:py-4">
+          <TopNavbar />
+          <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
+            {children}
+          </main>
+        </div>
       </div>
     </SidebarProvider>
   );
@@ -70,7 +69,7 @@ function AppSidebar() {
     setIsClient(true);
   }, []);
 
-  const renderState = isClient ? sidebarContextState : "collapsed"; // Default to collapsed for SSR/initial render
+  const renderState = isClient ? sidebarContextState : "collapsed"; 
 
   return (
     <Sidebar collapsible="icon" className="print:hidden">

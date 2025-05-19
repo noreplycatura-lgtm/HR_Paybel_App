@@ -53,8 +53,8 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
-    
+    await new Promise(resolve => setTimeout(resolve, 500)); // Shorter delay for testing
+
     let loginSuccess = false;
     let welcomeMessage = "";
 
@@ -68,13 +68,16 @@ export function LoginForm() {
           if (storedUsersStr) {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
-            if (coAdminUser && !coAdminUser.isLocked) { 
+            // For co-admin, password check is not implemented in this prototype
+            // We only check if the user exists and is not locked.
+            if (coAdminUser && !coAdminUser.isLocked) {
               loginSuccess = true;
               welcomeMessage = `Welcome, ${values.username}!`;
             }
           }
         } catch (error) {
           console.error("Error reading co-admin users from localStorage:", error);
+          // Fall through to login failed
         }
       }
     }
@@ -85,7 +88,9 @@ export function LoginForm() {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
       }
-      router.replace("/dashboard"); // Use replace and call before toast
+      // It's important that router.replace is called *before* any other async operations
+      // or state updates that might delay or interfere with navigation.
+      router.replace("/dashboard");
       toast({
         title: "Login Successful",
         description: welcomeMessage,
@@ -103,7 +108,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
-        <h1 className="text-3xl font-bold mb-2 text-primary uppercase">HR Payroll App</h1>
+         <h1 className="text-3xl font-bold mb-2 text-primary uppercase">HR PAYROLL APP</h1>
         <CardTitle className="text-2xl font-bold">Login</CardTitle>
         <CardDescription>Enter your credentials to access the portal.</CardDescription>
       </CardHeader>
