@@ -16,7 +16,6 @@ import { format, parseISO, isValid, getDaysInMonth, startOfMonth } from "date-fn
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// Reflects the structure for display and calculation, including editable fields
 interface SalarySheetEntry extends EmployeeDetail {
   totalDaysInMonth: number;
   daysPaid: number;
@@ -106,20 +105,10 @@ export default function SalarySheetPage() {
       setIsLoadingData(true);
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployees) {
-          const parsed = JSON.parse(storedEmployees);
-          setAllEmployees(Array.isArray(parsed) ? parsed : []);
-        } else {
-          setAllEmployees([]);
-        }
+        setAllEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
 
         const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
-        if (storedPerfDeductions) {
-          const parsedPerf = JSON.parse(storedPerfDeductions);
-          setAllPerformanceDeductions(Array.isArray(parsedPerf) ? parsedPerf : []);
-        } else {
-          setAllPerformanceDeductions([]);
-        }
+        setAllPerformanceDeductions(storedPerfDeductions ? JSON.parse(storedPerfDeductions) : []);
       } catch (error) {
         console.error("Error loading initial master data for salary sheet:", error);
         toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions. Salary sheet may be incomplete.", variant: "destructive"});
@@ -233,13 +222,12 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        const totalOtherDeductionForEmp = manualOtherDeductionVal + performanceDeductionAmount;
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         const esic = 0; 
         const professionalTax = 0; 
         const providentFund = 0; 
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionForEmp;
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
@@ -281,7 +269,7 @@ export default function SalarySheetPage() {
     }
   }, [salarySheetData, searchTerm]);
 
-  const handleEditableInputChange = async (employeeId: string, fieldName: keyof EditableSalaryFields, value: string) => {
+  const handleEditableInputChange = (employeeId: string, fieldName: keyof EditableSalaryFields, value: string) => {
     const numericValue = parseFloat(value) || 0;
     
     setSalarySheetData(prevData => {
@@ -297,11 +285,9 @@ export default function SalarySheetPage() {
           
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
           
-          const newTotalOtherDeduction = updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
-          
           const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund + 
                                    updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance + 
-                                   newTotalOtherDeduction;
+                                   updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
           const newNetPaid = newTotalAllowance - newTotalDeduction;
           
           return { ...updatedEmp, totalAllowance: newTotalAllowance, totalDeduction: newTotalDeduction, netPaid: newNetPaid };
@@ -331,7 +317,7 @@ export default function SalarySheetPage() {
     }
   };
 
-  const handleDownloadSheet = async () => {
+  const handleDownloadSheet = () => {
     if (isLoadingCalculations || isLoadingData) {
       toast({ title: "Please Wait", description: "Calculations or data loading is in progress. Please try again shortly.", variant: "destructive"});
       return;
@@ -390,10 +376,9 @@ export default function SalarySheetPage() {
               else if (status === 'A') fullAbsentDays++;
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
-        } else if (emp.status === "Active") {
-           daysPaid = 0;
-        } else if (emp.status === "Left") {
-           daysPaid = 0;
+        } else {
+           // If no attendance record, employee is not processed for salary for this month
+           return null;
         }
 
         const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
@@ -417,11 +402,10 @@ export default function SalarySheetPage() {
           pd => pd.employeeCode === emp.code
         );
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
-        const totalOtherDeductionForEmp = manualOtherDeductionVal + performanceDeductionAmount;
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         const esic = 0, professionalTax = 0, providentFund = 0;
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionForEmp;
+        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
@@ -533,7 +517,7 @@ export default function SalarySheetPage() {
 
   return (
     <>
-      <PageHeader title="Salary Sheet" description="Generate and download month-wise salary sheets. (Data would typically be fetched from Firestore).">
+      <PageHeader title="Salary Sheet" description="Generate and download month-wise salary sheets. (Data saved in browser's local storage).">
         <Button 
           onClick={handleDownloadSheet} 
           disabled={isLoadingCalculations || isLoadingData || allEmployees.length === 0 }
@@ -582,13 +566,13 @@ export default function SalarySheetPage() {
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Displaying active employees for whom attendance data was found for the selected period.
-            ESIC, PT, PF are placeholders (0). Editable fields reflect manual adjustments. (Data would be fetched from Firestore).
+            ESIC, PT, PF are placeholders (0). Editable fields reflect manual adjustments. (Data saved in browser's local storage).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {isLoadingCalculations ? (
              <div className="text-center py-8 text-muted-foreground flex items-center justify-center">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Calculating salaries... (Data would be fetched from Firestore)
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Calculating salaries... (Data saved in browser's local storage)
             </div>
           ) : filteredSalarySheetData.length > 0 ? (
             <Table>
@@ -716,12 +700,12 @@ export default function SalarySheetPage() {
             <div className="text-center py-8 text-muted-foreground">
               { 
                 isLoadingData ? "Loading employee data..." :
-                allEmployees.length === 0 ? "No employees found in Employee Master. (Data would be fetched from Firestore)." :
-               !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet. (Data would be fetched from Firestore)." :
-               rawAttendanceForPeriod.length === 0 && allEmployees.length > 0 ? "No attendance data found for the selected month. Please upload attendance first. (Data would be fetched from Firestore)." :
-               salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 && allEmployees.length > 0 ? "No employees from master list have attendance data for the selected month. (Data would be fetched from Firestore)." :
+                allEmployees.length === 0 ? "No employees found in Employee Master. (Data saved in browser's local storage)." :
+               !selectedMonth || !selectedYear || selectedYear === 0 ? "Please select Month and Year to view salary sheet. (Data saved in browser's local storage)." :
+               rawAttendanceForPeriod.length === 0 && allEmployees.length > 0 ? "No attendance data found for the selected month. Please upload attendance first. (Data saved in browser's local storage)." :
+               salarySheetData.length === 0 && rawAttendanceForPeriod.length > 0 && allEmployees.length > 0 ? "No employees from master list have attendance data for the selected month. (Data saved in browser's local storage)." :
                searchTerm && filteredSalarySheetData.length === 0 ? `No active employees with attendance found matching "${searchTerm}".` :
-               "No active employees with attendance to display for the selected criteria. (Data would be fetched from Firestore)."}
+               "No active employees with attendance to display for the selected criteria. (Data saved in browser's local storage)."}
             </div>
           )}
         </CardContent>
@@ -729,3 +713,4 @@ export default function SalarySheetPage() {
     </>
   );
 }
+    

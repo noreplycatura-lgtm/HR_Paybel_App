@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -8,10 +9,11 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast"; 
 import { getMonth, getYear, subMonths, format } from "date-fns";
 
-// These would be Firestore collection names
-// const FIRESTORE_EMPLOYEE_MASTER_COLLECTION = "employees";
-// const FIRESTORE_ATTENDANCE_COLLECTION_PREFIX = "attendance_"; 
-// const FIRESTORE_LEAVE_APPLICATIONS_COLLECTION = "leaveApplications";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual for now
+
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -20,7 +22,7 @@ interface StoredEmployeeAttendanceData {
   attendance: string[];
 }
 
-interface StoredUploadContext { // This conceptually comes from a settings/metadata store in Firestore
+interface StoredUploadContext { 
   month: string;
   year: number;
 }
@@ -45,74 +47,79 @@ export default function DashboardPage() {
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
 
-    // TODO: Implement fetching all necessary data from Firestore
-    // This would involve multiple async calls.
-    const fetchDashboardData = async () => {
-        try {
-            // Fetch Employee Master Count
-            // const empSnap = await getDocs(collection(db, FIRESTORE_EMPLOYEE_MASTER_COLLECTION));
-            // const employeesFromFirestore = empSnap.docs.map(doc => doc.data() as EmployeeDetail);
-            // activeEmployeesCount = employeesFromFirestore.filter(emp => emp.status === "Active").length;
-            activeEmployeesCount = 0; // Placeholder
-
-            // Fetch Overall Attendance
-            // const lastUploadContextSnap = await getDoc(doc(db, "settings", "lastUploadContext")); // Example path
-            // if (lastUploadContextSnap.exists()) {
-            //   const lastUploadContext = lastUploadContextSnap.data() as StoredUploadContext;
-            //   const attendanceSnap = await getDoc(doc(db, FIRESTORE_ATTENDANCE_COLLECTION_PREFIX + `${lastUploadContext.month}_${lastUploadContext.year}`));
-            //   if (attendanceSnap.exists()) {
-            //     const rawData = attendanceSnap.data().attendanceRecords as StoredEmployeeAttendanceData[];
-            //     // ... calculate attendance percentage ...
-            //     overallAttendanceValue = "X%"; // Placeholder
-            //     attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
-            //   } else { attendanceDescription = `No attendance data for last upload context.`; }
-            // } else { attendanceDescription = "No attendance data uploaded yet."; }
-            overallAttendanceValue = "N/A"; // Placeholder
-            attendanceDescription = "Fetch from Firestore"; // Placeholder
-
-            // Fetch Total Leave Records
-            // const leaveAppSnap = await getDocs(collection(db, FIRESTORE_LEAVE_APPLICATIONS_COLLECTION));
-            // totalLeaveRecords = leaveAppSnap.size;
-            totalLeaveRecords = 0; // Placeholder
-
-            // Fetch Payroll Status (Last Month)
-            const lastMonthDate = subMonths(new Date(), 1);
-            const lastMonthName = months[getMonth(lastMonthDate)];
-            const lastMonthYear = getYear(lastMonthDate);
-            // const lastMonthAttendanceSnap = await getDoc(doc(db, FIRESTORE_ATTENDANCE_COLLECTION_PREFIX + `${lastMonthName}_${lastMonthYear}`));
-            // if (lastMonthAttendanceSnap.exists() && (lastMonthAttendanceSnap.data().attendanceRecords as StoredEmployeeAttendanceData[]).length > 0) {
-            //    payrollStatusValue = "Processed";
-            //    payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
-            // } else {
-            //    payrollStatusValue = "Pending";
-            //    payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
-            // }
-            payrollStatusValue = "N/A"; // Placeholder
-            payrollStatusDescription = "Fetch from Firestore"; // Placeholder
-
-        } catch (error) {
-            console.error("Dashboard: Error fetching data from Firestore:", error);
-            toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from Firestore.", variant: "destructive", duration: 7000});
+    if (typeof window !== 'undefined') {
+      try {
+        // Fetch Employee Master Count
+        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployees) {
+          const employeesFromStorage: EmployeeDetail[] = JSON.parse(storedEmployees);
+          activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
         }
 
-        setDashboardCards(prevCards => prevCards.map(card => {
-          if (card.title === "Total Employees") return { ...card, value: activeEmployeesCount.toString() };
-          if (card.title === "Overall Attendance (Last Upload)") return { ...card, value: overallAttendanceValue, description: attendanceDescription };
-          if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecords.toString() };
-          if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
-          return card;
-        }));
-        setIsLoading(false);
-    };
+        // Fetch Overall Attendance
+        const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+        if (lastUploadContextStr) {
+          const lastUploadContext: StoredUploadContext = JSON.parse(lastUploadContextStr);
+          const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastUploadContext.month}_${lastUploadContext.year}`;
+          const storedAttendance = localStorage.getItem(attendanceKey);
+          if (storedAttendance) {
+            const rawData: StoredEmployeeAttendanceData[] = JSON.parse(storedAttendance);
+            let totalPresent = 0;
+            let totalRelevantDays = 0;
+            rawData.forEach(emp => {
+              emp.attendance.forEach(status => {
+                if (['P', 'A', 'HD'].includes(status.toUpperCase())) {
+                  totalRelevantDays++;
+                  if (status.toUpperCase() === 'P') totalPresent++;
+                  else if (status.toUpperCase() === 'HD') totalPresent += 0.5;
+                }
+              });
+            });
+            overallAttendanceValue = totalRelevantDays > 0 ? `${((totalPresent / totalRelevantDays) * 100).toFixed(1)}%` : "N/A";
+            attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
+          } else { attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; }
+        } else { attendanceDescription = "No attendance data uploaded yet."; }
 
-    fetchDashboardData();
+        // Fetch Total Leave Records (Conceptual from localStorage)
+        const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveApps) {
+          totalLeaveRecords = (JSON.parse(storedLeaveApps) as any[]).length;
+        }
 
+        // Fetch Payroll Status (Last Month)
+        const lastMonthDate = subMonths(new Date(), 1);
+        const lastMonthName = months[getMonth(lastMonthDate)];
+        const lastMonthYear = getYear(lastMonthDate);
+        const lastMonthAttendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastMonthName}_${lastMonthYear}`;
+        const storedLastMonthAttendance = localStorage.getItem(lastMonthAttendanceKey);
+        if (storedLastMonthAttendance && (JSON.parse(storedLastMonthAttendance) as StoredEmployeeAttendanceData[]).length > 0) {
+           payrollStatusValue = "Processed";
+           payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
+        } else {
+           payrollStatusValue = "Pending";
+           payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
+        }
+
+      } catch (error) {
+          console.error("Dashboard: Error fetching data from localStorage:", error);
+          toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage.", variant: "destructive", duration: 7000});
+      }
+    }
+
+    setDashboardCards(prevCards => prevCards.map(card => {
+      if (card.title === "Total Employees") return { ...card, value: activeEmployeesCount.toString() };
+      if (card.title === "Overall Attendance (Last Upload)") return { ...card, value: overallAttendanceValue, description: attendanceDescription };
+      if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecords.toString() };
+      if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
+      return card;
+    }));
+    setIsLoading(false);
   }, [toast]); 
 
   if (isLoading) {
     return (
       <>
-        <PageHeader title="Dashboard" description="Overview of HR activities. (Data would be fetched from Firestore)" />
+        <PageHeader title="Dashboard" description="Overview of HR activities. (Data saved in browser's local storage)" />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {dashboardCards.map((card, index) => (
                  <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
@@ -133,7 +140,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Overview of HR activities. (Data is illustrative as Firestore is not connected)" />
+      <PageHeader title="Dashboard" description="Overview of HR activities. (Data saved in browser's local storage)" />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {dashboardCards.map((card, index) => (
           <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
@@ -179,3 +186,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    

@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -19,11 +20,10 @@ import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RAT
 import type { LeaveApplication, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
-// These would be Firestore collection names
-// const FIRESTORE_EMPLOYEE_MASTER_COLLECTION = "employees";
-// const FIRESTORE_OPENING_BALANCES_COLLECTION = "leaveOpeningBalances";
-// const FIRESTORE_LEAVE_APPLICATIONS_COLLECTION = "leaveApplications";
-// const FIRESTORE_ATTENDANCE_COLLECTION_PREFIX = "attendance_";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual, managed by Edit OB dialog now
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -50,9 +50,8 @@ interface MonthlyEmployeeAttendance {
 
 const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
   if (!month || year === 0) return { rawDataKey: null };
-  // This would be a Firestore path in a real app
   return {
-    conceptualFirestorePath: `attendance/${month}_${year}/records`, 
+    rawDataKey: `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`,
   };
 };
 
@@ -61,7 +60,7 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); // Conceptual, not fully used for applying leave in UI
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
 
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -89,30 +88,26 @@ export default function LeavePage() {
 
   React.useEffect(() => {
     setIsLoading(true);
-    // TODO: Implement fetching data from Firestore
-    // Example:
-    // const fetchData = async () => {
-    //   // const empSnap = await getDocs(collection(db, FIRESTORE_EMPLOYEE_MASTER_COLLECTION));
-    //   // setEmployees(empSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as EmployeeDetail)));
-    //   // const obSnap = await getDocs(collection(db, FIRESTORE_OPENING_BALANCES_COLLECTION));
-    //   // setOpeningBalances(obSnap.docs.map(doc => doc.data() as OpeningLeaveBalance));
-    //   // const appSnap = await getDocs(collection(db, FIRESTORE_LEAVE_APPLICATIONS_COLLECTION));
-    //   // setLeaveApplications(appSnap.docs.map(doc => ({id: doc.id, ...doc.data() } as LeaveApplication)));
-    //   setEmployees([]);
-    //   setOpeningBalances([]);
-    //   setLeaveApplications([]);
-    //   setIsLoading(false);
-    // };
-    // fetchData();
-    setEmployees([]);
-    setOpeningBalances([]);
-    setLeaveApplications([]);
+    if (typeof window !== 'undefined') {
+      try {
+        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        setEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
+
+        const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+        setOpeningBalances(storedOB ? JSON.parse(storedOB) : []);
+        
+        const storedApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        setLeaveApplications(storedApps ? JSON.parse(storedApps) : []);
+
+      } catch (error) {
+        console.error("Error loading initial data for Leave page:", error);
+        toast({ title: "Storage Error", description: "Could not load some persisted leave data.", variant: "destructive" });
+        setEmployees([]);
+        setOpeningBalances([]);
+        setLeaveApplications([]);
+      }
+    }
     setIsLoading(false);
-     toast({
-        title: "Data Source Changed",
-        description: "Leave data would now be fetched from Firestore. Currently showing empty.",
-        duration: 7000,
-    });
   }, [toast]); 
 
   React.useEffect(() => {
@@ -131,10 +126,35 @@ export default function LeavePage() {
     }
     
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
+    const prevMonthDateObject = addMonths(selectedMonthStartDate, -1);
+    const prevMonthName = months[getMonth(prevMonthDateObject)];
+    const prevMonthYear = getYear(prevMonthDateObject);
 
-    const newDisplayDataPromises = employees
+    let attendanceForSelectedMonth: MonthlyEmployeeAttendance[] = [];
+    let attendanceForPrevMonth: MonthlyEmployeeAttendance[] = [];
+
+    if (typeof window !== 'undefined') {
+        const currentMonthKeys = getDynamicAttendanceStorageKeys(selectedMonth, selectedYear);
+        if (currentMonthKeys.rawDataKey) {
+            const storedAtt = localStorage.getItem(currentMonthKeys.rawDataKey);
+            if (storedAtt) {
+                try { attendanceForSelectedMonth = JSON.parse(storedAtt); }
+                catch (e) { console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`); }
+            }
+        }
+        const prevMonthKeys = getDynamicAttendanceStorageKeys(prevMonthName, prevMonthYear);
+        if (prevMonthKeys.rawDataKey) {
+            const storedAttPrev = localStorage.getItem(prevMonthKeys.rawDataKey);
+            if (storedAttPrev) {
+                try { attendanceForPrevMonth = JSON.parse(storedAttPrev); }
+                catch (e) { console.warn(`Error parsing attendance for ${prevMonthName} ${prevMonthYear}: ${e}`); }
+            }
+        }
+    }
+
+    const newDisplayData = employees
       .filter(emp => emp.status === "Active") 
-      .map(async emp => { // Make map async to allow awaiting Firestore calls if needed
+      .map(emp => { 
         
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
           emp, selectedYear, monthIndex, leaveApplications, openingBalances 
@@ -143,16 +163,15 @@ export default function LeavePage() {
         let usedCLFromAttendance = 0;
         let usedSLFromAttendance = 0;
         let usedPLFromAttendance = 0;
-
-        // TODO: Fetch attendance data from Firestore for selectedMonth/Year for this emp
-        // Example of conceptual fetch:
-        // const empAttendanceRecord = await fetchAttendanceForEmployeeMonth(emp.code, selectedMonth, selectedYear);
-        // if (empAttendanceRecord && empAttendanceRecord.attendance) {
-        //    const daysInSelectedMonth = new Date(selectedYear, monthIndex + 1, 0).getDate();
-        //    const dailyStatuses = empAttendanceRecord.attendance.slice(0, daysInSelectedMonth);
-        //    dailyStatuses.forEach(status => { /* ... count leaves ... */ });
-        // }
-        // For now, assuming 0 used from attendance as it's not fetched here
+        const empAttSelectedMonth = attendanceForSelectedMonth.find(att => att.code === emp.code);
+        if (empAttSelectedMonth && empAttSelectedMonth.attendance) {
+            const daysInSelected = getDaysInMonth(selectedMonthStartDate);
+            empAttSelectedMonth.attendance.slice(0, daysInSelected).forEach(status => {
+                if (status === 'CL') usedCLFromAttendance++;
+                if (status === 'SL') usedSLFromAttendance++;
+                if (status === 'PL') usedPLFromAttendance++;
+            });
+        }
 
         const finalBalanceCLAtMonthEnd = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
         const finalBalanceSLAtMonthEnd = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
@@ -161,8 +180,15 @@ export default function LeavePage() {
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
         let usedPLLastMonth = 0;
-        const prevMonthDate = addMonths(selectedMonthStartDate, -1);
-        // TODO: Fetch attendance for last month similarly if needed for display
+        const empAttPrevMonth = attendanceForPrevMonth.find(att => att.code === emp.code);
+        if (empAttPrevMonth && empAttPrevMonth.attendance) {
+            const daysInPrev = getDaysInMonth(prevMonthDateObject);
+            empAttPrevMonth.attendance.slice(0, daysInPrev).forEach(status => {
+                if (status === 'CL') usedCLLastMonth++;
+                if (status === 'SL') usedSLLastMonth++;
+                if (status === 'PL') usedPLLastMonth++;
+            });
+        }
 
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndexVal = getMonth(nextMonthDateObject);
@@ -213,11 +239,9 @@ export default function LeavePage() {
         };
     });
 
-    Promise.all(newDisplayDataPromises).then(data => {
-      setDisplayData(data.filter(d => d !== null) as LeaveDisplayData[]);
-      setSelectedEmployeeIds(new Set()); 
-      setIsLoading(false);
-    });
+    setDisplayData(newDisplayData.filter(d => d !== null) as LeaveDisplayData[]);
+    setSelectedEmployeeIds(new Set()); 
+    setIsLoading(false);
 
   }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
@@ -263,7 +287,7 @@ export default function LeavePage() {
     setIsEditOpeningBalanceDialogOpen(true);
   };
 
-  const handleSaveOpeningBalances = async () => {
+  const handleSaveOpeningBalances = () => {
     if (!editingEmployeeForOB || editingOBYear <= 0) { 
       toast({ title: "Error", description: "No employee or invalid financial year selected for editing opening balances.", variant: "destructive"});
       return;
@@ -289,9 +313,15 @@ export default function LeavePage() {
     }
 
     setOpeningBalances(updatedOpeningBalances);
-    // TODO: Conceptual save to Firestore (FIRESTORE_OPENING_BALANCES_COLLECTION)
-    // await saveOpeningBalancesToFirestore(updatedOpeningBalances);
-    toast({ title: "Opening Balances Saved (Local State)", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved. Firestore save is conceptual.`});
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+        toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved to local storage.`});
+      } catch (error) {
+         console.error("Error saving opening balances to localStorage:", error);
+         toast({ title: "Storage Error", description: "Could not save opening balances locally.", variant: "destructive" });
+      }
+    }
     setIsEditOpeningBalanceDialogOpen(false);
     setEditingEmployeeForOB(null);
   };
@@ -438,8 +468,14 @@ export default function LeavePage() {
                 });
                 const updatedBalances = Array.from(existingRecordsMap.values());
                 setOpeningBalances(updatedBalances);
-                // TODO: Conceptual save to Firestore (FIRESTORE_OPENING_BALANCES_COLLECTION)
-                // await saveOpeningBalancesToFirestore(updatedBalances); 
+                if (typeof window !== 'undefined') {
+                    try {
+                        localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
+                    } catch (error) {
+                        console.error("Error saving opening balances to localStorage:", error);
+                        message += "Error saving to local storage. ";
+                    }
+                }
             } else {
                  message += `No new valid opening balance records found in ${file.name}. `;
             }
@@ -448,8 +484,8 @@ export default function LeavePage() {
             if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to invalid/missing data. `;
 
             toast({
-                title: newUploadedOpeningBalances.length > 0 ? "Opening Balances Processed (Local State)" : "Upload Issue",
-                description: message.trim() + (newUploadedOpeningBalances.length > 0 ? " Firestore save is conceptual." : ""),
+                title: newUploadedOpeningBalances.length > 0 ? "Opening Balances Processed" : "Upload Issue",
+                description: message.trim() + (newUploadedOpeningBalances.length > 0 ? " Data saved to local storage." : ""),
                 duration: 9000,
                 variant: newUploadedOpeningBalances.length > 0 ? "default" : "destructive",
             });
@@ -484,7 +520,7 @@ export default function LeavePage() {
     toast({ title: "Template Downloaded", description: "opening_leave_balance_template.csv downloaded." });
   };
 
-  const handleDeleteSelectedOpeningBalances = async () => {
+  const handleDeleteSelectedOpeningBalances = () => {
     if (selectedEmployeeIds.size === 0) {
       toast({ title: "No Selection", description: "Please select employees to clear their opening balances.", variant: "destructive" });
       return;
@@ -492,7 +528,7 @@ export default function LeavePage() {
     setIsDeleteSelectedOBDialogOpen(true);
   };
 
-  const confirmDeleteSelectedOpeningBalances = async () => {
+  const confirmDeleteSelectedOpeningBalances = () => {
     if (!selectedMonth || selectedYear === 0) {
         toast({ title: "Error", description: "Cannot determine financial year. Please select a valid month/year.", variant: "destructive" });
         setIsDeleteSelectedOBDialogOpen(false);
@@ -505,9 +541,15 @@ export default function LeavePage() {
     );
 
     setOpeningBalances(updatedOpeningBalances);
-    // TODO: Conceptual delete from Firestore
-    // await saveOpeningBalancesToFirestore(updatedOpeningBalances); // Save the filtered list
-    toast({ title: "Opening Balances Cleared (Local State)", description: `Opening balances for ${selectedEmployeeIds.size} selected employee(s) for FY ${financialYearToClear} have been cleared. Firestore update is conceptual.` });
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
+            toast({ title: "Opening Balances Cleared", description: `Opening balances for ${selectedEmployeeIds.size} selected employee(s) for FY ${financialYearToClear} have been cleared from local storage.` });
+        } catch (error) {
+            console.error("Error saving cleared opening balances to localStorage:", error);
+            toast({ title: "Storage Error", description: "Could not save cleared opening balances locally.", variant: "destructive" });
+        }
+    }
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedOBDialogOpen(false);
   };
@@ -531,7 +573,7 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after 5 months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month are sourced from attendance data; balances can go negative."
+        description="View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after 5 months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month are sourced from attendance data; balances can go negative. (Data is saved in browser's local storage)."
       >
         <Button variant="destructive" onClick={handleDeleteSelectedOpeningBalances} disabled={selectedEmployeeIds.size === 0}>
             <Trash2 className="mr-2 h-4 w-4" /> Clear Selected OB ({selectedEmployeeIds.size})
@@ -558,7 +600,7 @@ export default function LeavePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Clearing Opening Balances</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to clear the opening balances for {selectedEmployeeIds.size} selected employee(s) for the financial year corresponding to {selectedMonth} {selectedYear}? This action cannot be undone (from local state).
+              Are you sure you want to clear the opening balances for {selectedEmployeeIds.size} selected employee(s) for the financial year corresponding to {selectedMonth} {selectedYear}? This action cannot be undone (from local storage).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -645,7 +687,7 @@ export default function LeavePage() {
           <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves (CL/SL/PL) for the month are sourced from attendance data for that month.
-            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service. Balances can go negative. (Data is illustrative and not persisted to a backend).
+            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service. Balances can go negative. (Data is saved in browser's local storage).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -730,6 +772,10 @@ export default function LeavePage() {
                                 } else if (part1 > 1000) { 
                                     if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
                                     else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
+                                } else {
+                                   const yearShort = part3 + 2000;
+                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
+                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
@@ -762,9 +808,9 @@ export default function LeavePage() {
               )) : (
                 <TableRow>
                   <TableCell colSpan={20} className="text-center text-muted-foreground py-8">
-                    {employees.length === 0 && !isLoading ? "No employee data. (Data would be fetched from Firestore)." :
+                    {employees.length === 0 && !isLoading ? "No employee data. (Data saved in browser's local storage)." :
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
-                     "Please select month and year to view leave summary. (Data would be fetched from Firestore)."}
+                     "Please select month and year to view leave summary. (Data saved in browser's local storage)."}
                   </TableCell>
                 </TableRow>
               )}
@@ -775,3 +821,5 @@ export default function LeavePage() {
     </>
   );
 }
+
+    

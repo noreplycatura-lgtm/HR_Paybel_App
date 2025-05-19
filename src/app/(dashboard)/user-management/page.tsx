@@ -107,7 +107,7 @@ export default function UserManagementPage() {
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, []); // Corrected dependency array
+  }, [toast]); // Added toast to dependency array as it's used in the effect
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -220,7 +220,7 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description={`Manage simulated co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
+        description={`Manage simulated co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here). (Data saved in browser's local storage).`}
       />
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -352,7 +352,7 @@ export default function UserManagementPage() {
               {simulatedUsers.length === 0 && !isLoading && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No simulated co-admin users created yet.
+                    No simulated co-admin users created yet. (Data saved in browser's local storage).
                   </TableCell>
                 </TableRow>
               )}
@@ -380,5 +380,4 @@ export default function UserManagementPage() {
     </>
   );
 }
-
     

@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -24,6 +25,12 @@ import { Download, Trash2, Loader2, Edit, Search } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth, getDaysInMonth, isAfter, isValid } from "date-fns";
 
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+
+
 interface EmployeeAttendanceData extends EmployeeDetail {
   attendance: string[]; 
   processedAttendance?: string[]; 
@@ -31,10 +38,6 @@ interface EmployeeAttendanceData extends EmployeeDetail {
 }
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-// These would be Firestore collection names in a real setup
-// const FIRESTORE_ATTENDANCE_COLLECTION_PREFIX = "attendance_"; // e.g., attendance_May_2024
-// const FIRESTORE_EMPLOYEE_MASTER_COLLECTION = "employees";
 
 const editEmployeeStatusFormSchema = z.object({
   dor: z.string().refine((val) => {
@@ -84,7 +87,7 @@ export default function AttendancePage() {
   const [uploadYear, setUploadYear] = React.useState<number>(0);
 
   const [isLoadingState, setIsLoadingState] = React.useState(true);
-  const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null); // This can indicate if data was loaded from conceptual "backend"
+  const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null); 
   
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = React.useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = React.useState('');
@@ -106,7 +109,6 @@ export default function AttendancePage() {
     defaultValues: { dor: "" },
   });
 
-  // Initialize page
   React.useEffect(() => {
     setIsLoadingState(true);
     const now = new Date();
@@ -121,13 +123,29 @@ export default function AttendancePage() {
     setUploadMonth(defaultMonthName); 
     setUploadYear(defaultYear);
     
-    // TODO: Fetch employeeMasterList from Firestore
-    // setEmployeeMasterList(fetchedMasterList);
-    setEmployeeMasterList([]); // Start empty
+    if (typeof window !== 'undefined') {
+      try {
+        const storedMaster = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedMaster) {
+          const parsedMaster = JSON.parse(storedMaster);
+          if (Array.isArray(parsedMaster)) {
+            setEmployeeMasterList(parsedMaster);
+          } else {
+            setEmployeeMasterList([]); // Fallback for corrupted data
+            toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please check Employee Master page.", variant: "destructive", duration: 7000 });
+          }
+        } else {
+          setEmployeeMasterList([]);
+        }
+      } catch (error) {
+        console.error("Error loading employee master from localStorage:", error);
+        setEmployeeMasterList([]);
+        toast({ title: "Storage Error", description: "Could not load employee master data.", variant: "destructive", duration: 7000 });
+      }
+    }
     setIsLoadingState(false); 
-  }, []);
+  }, [toast]);
 
-  // Fetch attendance data for selectedMonth/Year
   React.useEffect(() => {
     if (!selectedMonth || !selectedYear || selectedYear === 0) {
       setRawAttendanceData([]);
@@ -135,25 +153,34 @@ export default function AttendancePage() {
       return;
     }
     setIsLoadingState(true);
-    // TODO: Fetch rawAttendanceData and uploadedFileName from Firestore for selectedMonth/selectedYear
-    // Example:
-    // const fetchAttendance = async () => {
-    //   // const docRef = doc(db, FIRESTORE_ATTENDANCE_COLLECTION_PREFIX + `${selectedMonth}_${selectedYear}`);
-    //   // const docSnap = await getDoc(docRef);
-    //   // if (docSnap.exists()) {
-    //   //   setRawAttendanceData(docSnap.data().attendanceRecords as EmployeeAttendanceData[]);
-    //   //   setUploadedFileName(docSnap.data().fileName);
-    //   // } else {
-    //   //   setRawAttendanceData([]);
-    //   //   setUploadedFileName(null);
-    //   // }
-    //   setRawAttendanceData([]); // Simulate empty Firestore
-    //   setUploadedFileName(null);
-    //   setIsLoadingState(false);
-    // };
-    // fetchAttendance();
-    setRawAttendanceData([]); // Start empty
-    setUploadedFileName(null);
+    if (typeof window !== 'undefined') {
+      const rawDataKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+      const filenameKey = `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${selectedMonth}_${selectedYear}`;
+      try {
+        const storedRawData = localStorage.getItem(rawDataKey);
+        const storedFilename = localStorage.getItem(filenameKey);
+
+        if (storedRawData) {
+          const parsedRawData = JSON.parse(storedRawData);
+          if (Array.isArray(parsedRawData)) {
+            setRawAttendanceData(parsedRawData);
+            setUploadedFileName(storedFilename || null);
+          } else {
+            toast({ title: "Data Error", description: `Attendance data for ${selectedMonth} ${selectedYear} in localStorage is corrupted.`, variant: "destructive", duration: 7000 });
+            setRawAttendanceData([]);
+            setUploadedFileName(null);
+          }
+        } else {
+          setRawAttendanceData([]);
+          setUploadedFileName(null);
+        }
+      } catch (error) {
+        console.error(`Error loading attendance data for ${selectedMonth} ${selectedYear} from localStorage:`, error);
+        toast({ title: "Storage Error", description: `Could not load attendance data for ${selectedMonth} ${selectedYear}.`, variant: "destructive", duration: 7000 });
+        setRawAttendanceData([]);
+        setUploadedFileName(null);
+      }
+    }
     setIsLoadingState(false);
   }, [selectedMonth, selectedYear, toast]);
 
@@ -399,17 +426,26 @@ export default function AttendancePage() {
         
         let toastMessage = "";
         if (newAttendanceData.length > 0) {
-            toastMessage += `${newAttendanceData.length} employee records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Switched to View tab.`;
-            // TODO: Conceptual save to Firestore
-            // await saveAttendanceToFirestore(uploadMonth, uploadYear, newAttendanceData, file.name);
+            if (typeof window !== 'undefined') {
+              const rawDataKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${uploadMonth}_${uploadYear}`;
+              const filenameKey = `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${uploadMonth}_${uploadYear}`;
+              const lastUploadContext = { month: uploadMonth, year: uploadYear };
+              try {
+                localStorage.setItem(rawDataKey, JSON.stringify(newAttendanceData));
+                localStorage.setItem(filenameKey, file.name);
+                localStorage.setItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY, JSON.stringify(lastUploadContext));
+              } catch (error) {
+                console.error("Error saving attendance data to localStorage:", error);
+                toast({ title: "Storage Error", description: "Could not save attendance data locally. Data will be lost on refresh.", variant: "destructive" });
+              }
+            }
             setRawAttendanceData(newAttendanceData); 
             setUploadedFileName(file.name);
             if (uploadMonth !== selectedMonth || uploadYear !== selectedYear) {
                 setSelectedMonth(uploadMonth); 
                 setSelectedYear(uploadYear);
             }
-            
-            toast({ title: "Data Processed (Local State)", description: "Data loaded into the page. Firestore save is conceptual."});
+            toast({ title: "Attendance Data Processed", description: `${newAttendanceData.length} records loaded from ${file.name} for ${uploadMonth} ${uploadYear}. Data saved to local storage.`});
             setSearchTerm(''); 
             const viewTabTrigger = document.querySelector('button[role="tab"][value="view"]') as HTMLElement | null;
             if (viewTabTrigger) viewTabTrigger.click();
@@ -421,12 +457,21 @@ export default function AttendancePage() {
         if (skippedDuplicateCount > 0) toastMessage += `${skippedDuplicateCount} rows skipped due to duplicate employee codes in the file. `;
         if (malformedRowCount > 0) toastMessage += `${malformedRowCount} rows skipped due to missing/invalid data or column count. `;
         
-        toast({
-          title: newAttendanceData.length > 0 ? "Attendance Data Processed" : "Upload Issue",
-          description: toastMessage.trim(),
-          duration: 9000,
-          variant: newAttendanceData.length > 0 ? "default" : "destructive",
-        });
+        if(toastMessage && newAttendanceData.length === 0){
+            toast({
+              title: "Upload Issue",
+              description: toastMessage.trim(),
+              duration: 9000,
+              variant: "destructive",
+            });
+        } else if (toastMessage) {
+             toast({
+                title: "Processing Notes",
+                description: toastMessage.trim(),
+                duration: 9000,
+            });
+        }
+
 
       } catch (error) {
         console.error("Error parsing CSV:", error);
@@ -555,10 +600,28 @@ export default function AttendancePage() {
     setIsClearDataDialogOpen(true);
   };
 
-  const confirmAndDeleteData = async () => {
+  const confirmAndDeleteData = () => {
     if (deleteConfirmationText === "DELETE" && dialogClearMonth && dialogClearYear > 0) {
-        // TODO: Conceptual delete from Firestore
-        // await deleteAttendanceFromFirestore(dialogClearMonth, dialogClearYear);
+        if (typeof window !== 'undefined') {
+          const rawDataKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${dialogClearMonth}_${dialogClearYear}`;
+          const filenameKey = `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${dialogClearMonth}_${dialogClearYear}`;
+          try {
+            localStorage.removeItem(rawDataKey);
+            localStorage.removeItem(filenameKey);
+            
+            // Check if this was the last uploaded context and clear it too
+            const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+            if (lastUploadContextStr) {
+                const lastUploadContext = JSON.parse(lastUploadContextStr);
+                if (lastUploadContext.month === dialogClearMonth && lastUploadContext.year === dialogClearYear) {
+                    localStorage.removeItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
+                }
+            }
+          } catch (error) {
+            console.error("Error clearing attendance data from localStorage:", error);
+            toast({ title: "Storage Error", description: "Could not clear attendance data from local storage.", variant: "destructive" });
+          }
+        }
         
         if (dialogClearMonth === selectedMonth && dialogClearYear === selectedYear) {
             setRawAttendanceData([]);
@@ -566,8 +629,8 @@ export default function AttendancePage() {
         }
         
         toast({
-            title: "Data Cleared (Local State)",
-            description: `Uploaded attendance data for ${dialogClearMonth} ${dialogClearYear} has been cleared from view. Firestore delete is conceptual.`,
+            title: "Data Cleared",
+            description: `Uploaded attendance data for ${dialogClearMonth} ${dialogClearYear} has been cleared from local storage.`,
         });
     } else {
          toast({
@@ -611,7 +674,7 @@ export default function AttendancePage() {
     });
   };
 
-  const handleUpdateAttendance = async () => {
+  const handleUpdateAttendance = () => {
     if (!editingAttendanceEmployee || !selectedMonth || selectedYear === 0) {
       toast({ title: "Error", description: "No employee selected for update or invalid period.", variant: "destructive"});
       return;
@@ -625,10 +688,17 @@ export default function AttendancePage() {
     });
 
     setRawAttendanceData(updatedRawAttendanceData); 
-    // TODO: Conceptual update in Firestore
-    // await updateAttendanceInFirestore(selectedMonth, selectedYear, editingAttendanceEmployee.code, editableDailyStatuses);
     
-    toast({ title: "Attendance Updated (Local State)", description: `Raw attendance for ${editingAttendanceEmployee.name} for ${selectedMonth} ${selectedYear} has been updated in view. Firestore update is conceptual.`});
+    if (typeof window !== 'undefined') {
+        const rawDataKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${selectedMonth}_${selectedYear}`;
+        try {
+            localStorage.setItem(rawDataKey, JSON.stringify(updatedRawAttendanceData));
+             toast({ title: "Attendance Updated", description: `Attendance for ${editingAttendanceEmployee.name} for ${selectedMonth} ${selectedYear} has been updated in local storage.`});
+        } catch (error) {
+            console.error("Error saving updated attendance to localStorage:", error);
+            toast({ title: "Storage Error", description: "Could not save updated attendance data locally.", variant: "destructive" });
+        }
+    }
     
     setIsEditAttendanceDialogOpen(false);
     setEditingAttendanceEmployee(null);
@@ -640,7 +710,7 @@ export default function AttendancePage() {
     setIsEditEmployeeStatusDialogOpen(true);
   };
 
-  const handleSaveEmployeeStatus = async (values: EditEmployeeStatusFormValues) => {
+  const handleSaveEmployeeStatus = (values: EditEmployeeStatusFormValues) => {
     if (!editingEmployeeForStatus) return;
 
     const updatedMasterList = employeeMasterList.map(emp =>
@@ -649,10 +719,15 @@ export default function AttendancePage() {
         : emp
     );
     setEmployeeMasterList(updatedMasterList); 
-    // TODO: Conceptual update in Firestore employee master
-    // await updateEmployeeInFirestore(editingEmployeeForStatus.id, { status: "Left", dor: values.dor });
-
-    toast({ title: "Employee Status Updated (Local State)", description: `${editingEmployeeForStatus.name} marked as 'Left' with DOR ${values.dor}. Firestore update is conceptual.` });
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedMasterList));
+        toast({ title: "Employee Status Updated", description: `${editingEmployeeForStatus.name} marked as 'Left' with DOR ${values.dor}. Master list updated in local storage.` });
+      } catch (error) {
+         console.error("Error saving updated employee master to localStorage:", error);
+         toast({ title: "Storage Error", description: "Could not save updated employee master data locally.", variant: "destructive" });
+      }
+    }
     setIsEditEmployeeStatusDialogOpen(false);
     setEditingEmployeeForStatus(null);
   };
@@ -712,7 +787,7 @@ export default function AttendancePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Clear Uploaded Attendance Data</AlertDialogTitle>
             <AlertDialogDescription>
-              Select the month and year to permanently delete its uploaded attendance data. This action cannot be undone (conceptually, from Firestore).
+              Select the month and year to permanently delete its uploaded attendance data from local storage. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           
@@ -817,7 +892,7 @@ export default function AttendancePage() {
           <DialogHeader>
             <DialogTitle>Edit Employee Status for {editingEmployeeForStatus?.name}</DialogTitle>
             <DialogDescription>
-              Mark employee as 'Left' and set their Date of Resignation (DOR). This will update the Employee Master (conceptually, in Firestore).
+              Mark employee as 'Left' and set their Date of Resignation (DOR). This will update the Employee Master in local storage.
             </DialogDescription>
           </DialogHeader>
           <Form {...statusEditForm}>
@@ -935,7 +1010,7 @@ export default function AttendancePage() {
                      return (
                         <div className="text-center py-8 text-muted-foreground">
                             No attendance data found for {selectedMonth} {selectedYear}.<br />
-                            Please upload a file via the 'Upload Attendance Data' tab. (Data would be fetched from Firestore).
+                            Please upload a file via the 'Upload Attendance Data' tab. (Data saved in browser's local storage).
                         </div>
                     );
                 }
@@ -1042,13 +1117,13 @@ export default function AttendancePage() {
                     );
                 }
                 if (isLoadingState) { 
-                     return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}... (Data would be fetched from Firestore)</div>;
+                     return <div className="text-center py-8 text-muted-foreground">Loading attendance data for {selectedMonth} {selectedYear}... (Data saved in browser's local storage)</div>;
                 }
                 
                 return ( 
                   <div className="text-center py-8 text-muted-foreground">
                      No attendance data available to display for {selectedMonth} {selectedYear}.
-                     {uploadedFileName ? `Ensure data exists in Firestore for this period or re-upload.` : ` Please upload an attendance file. (Data would be fetched from Firestore).`}
+                     {uploadedFileName ? `Ensure data exists in local storage for this period or re-upload.` : ` Please upload an attendance file. (Data saved in browser's local storage).`}
                   </div>
                 );
               })()}
@@ -1100,7 +1175,6 @@ export default function AttendancePage() {
                   <Download className="mr-2 h-4 w-4 flex-shrink-0" /> Download Sample Template (CSV for {uploadMonth && uploadYear > 0 ? `${uploadMonth} ${uploadYear}` : 'selected period'})
                 </Button>
               </div>
-               {/* Removed localStorage specific check for last upload context */}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1110,7 +1184,7 @@ export default function AttendancePage() {
                     <CardHeader>
                         <CardTitle>Employees in Attendance, NOT in Master List</CardTitle>
                         <CardDescription>
-                            These employees were found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''} but their codes are not in the Employee Master. (Employee Master data would be fetched from Firestore).
+                            These employees were found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''} but their codes are not in the Employee Master. (Employee Master data saved in browser's local storage).
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1149,7 +1223,7 @@ export default function AttendancePage() {
                     <CardHeader>
                         <CardTitle>Active Employees in Master, NOT in Attendance Sheet</CardTitle>
                         <CardDescription>
-                            These "Active" employees from the Employee Master were not found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}. (Employee Master data would be fetched from Firestore).
+                            These "Active" employees from the Employee Master were not found in the attendance data for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}. (Employee Master data saved in browser's local storage).
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1197,3 +1271,5 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    

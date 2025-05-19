@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -19,13 +20,13 @@ import { Loader2, PlusCircle, Upload, Trash2, Download, Edit } from "lucide-reac
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { format, parseISO, isValid } from "date-fns";
 
-// const FIRESTORE_EMPLOYEE_MASTER_COLLECTION = "employees";
-// const FIRESTORE_PERFORMANCE_DEDUCTIONS_COLLECTION = "performanceDeductions";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface PerformanceDeductionEntry {
-  id: string; // Firestore document ID
+  id: string; 
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -68,45 +69,35 @@ export default function PerformanceDeductionPage() {
   
   React.useEffect(() => {
     setIsLoadingData(true);
-    // TODO: Fetch employeeMasterList and performanceDeductions from Firestore
-    // Example:
-    // const fetchData = async () => {
-    //   // const empSnap = await getDocs(collection(db, FIRESTORE_EMPLOYEE_MASTER_COLLECTION));
-    //   // setEmployeeMasterList(empSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as EmployeeDetail)));
-    //   // const dedSnap = await getDocs(collection(db, FIRESTORE_PERFORMANCE_DEDUCTIONS_COLLECTION));
-    //   // setPerformanceDeductions(dedSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PerformanceDeductionEntry)));
-    //   setEmployeeMasterList([]);
-    //   setPerformanceDeductions([]);
-    //   setIsLoadingData(false);
-    // };
-    // fetchData();
-    setEmployeeMasterList([]);
-    setPerformanceDeductions([]);
+    if (typeof window !== 'undefined') {
+      try {
+        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        setEmployeeMasterList(storedEmployees ? JSON.parse(storedEmployees) : []);
+
+        const storedDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        setPerformanceDeductions(storedDeductions ? JSON.parse(storedDeductions) : []);
+      } catch (error) {
+        console.error("Error loading data for Performance Deduction page:", error);
+        toast({ title: "Storage Error", description: "Could not load initial data.", variant: "destructive" });
+        setEmployeeMasterList([]);
+        setPerformanceDeductions([]);
+      }
+    }
     setIsLoadingData(false);
-     toast({
-        title: "Data Source Changed",
-        description: "Performance Deduction data would now be fetched from Firestore. Currently showing empty.",
-        duration: 7000,
-    });
   }, [toast]);
 
-  const conceptualSaveDeductionsToFirestore = async (deductions: PerformanceDeductionEntry[]) => {
-    console.log("Conceptually saving/updating performance deductions in Firestore:", deductions);
-    // In a real app, this would involve addDoc or setDoc for new/updated entries.
+  const saveDeductionsToLocalStorage = (deductions: PerformanceDeductionEntry[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY, JSON.stringify(deductions));
+      } catch (error) {
+        console.error("Error saving performance deductions to localStorage:", error);
+        toast({ title: "Storage Error", description: "Could not save performance deductions.", variant: "destructive" });
+      }
+    }
   };
 
-  const conceptualDeleteDeductionFromFirestore = async (deductionId: string) => {
-    console.log("Conceptually deleting performance deduction from Firestore, ID:", deductionId);
-    // In a real app, this would be deleteDoc(doc(db, FIRESTORE_PERFORMANCE_DEDUCTIONS_COLLECTION, deductionId));
-  };
-
-  const conceptualBatchDeleteDeductionsFromFirestore = async (ids: string[]) => {
-    console.log("Conceptually batch deleting performance deductions from Firestore, IDs:", ids);
-    // In a real app, this would loop through ids and call deleteDoc or use a batched write.
-  };
-
-
-  const handleSaveDeduction = async (values: DeductionFormValues) => {
+  const handleSaveDeduction = (values: DeductionFormValues) => {
     setIsSaving(true);
     const selectedEmployee = employeeMasterList.find(emp => emp.code === values.employeeCode);
     if (!selectedEmployee) {
@@ -115,12 +106,10 @@ export default function PerformanceDeductionPage() {
       return;
     }
 
-    // For Firestore, ID would be auto-generated or a composite key strategy.
-    // For this state-only version, we use a composite key for uniqueness checking and updates.
     const uniqueId = `${values.employeeCode}-${values.month}-${values.year}`; 
 
     const newDeduction: PerformanceDeductionEntry = {
-      id: uniqueId, // This would be Firestore's doc.id in a real app
+      id: uniqueId, 
       employeeCode: values.employeeCode,
       employeeName: selectedEmployee.name,
       designation: selectedEmployee.designation,
@@ -138,8 +127,8 @@ export default function PerformanceDeductionPage() {
     }
     
     setPerformanceDeductions(updatedDeductions);
-    await conceptualSaveDeductionsToFirestore(updatedDeductions); // Conceptual save
-    toast({ title: "Deduction Saved (Local State)", description: `Performance deduction for ${selectedEmployee.name} for ${values.month} ${values.year} saved.` });
+    saveDeductionsToLocalStorage(updatedDeductions);
+    toast({ title: "Deduction Saved", description: `Performance deduction for ${selectedEmployee.name} for ${values.month} ${values.year} saved.` });
     form.reset({ employeeCode: "", month: months[new Date().getMonth()], year: new Date().getFullYear(), amount: 0 });
     setIsSaving(false);
   };
@@ -180,7 +169,7 @@ export default function PerformanceDeductionPage() {
           return;
         }
         const headersFromFile = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/\s+/g, ''));
-        const expectedHeaders = ["code", "name", "designation", "amount", "month", "year"]; // name & designation from file are for reference, not strictly used to update master
+        const expectedHeaders = ["code", "name", "designation", "amount", "month", "year"]; 
         const missingHeaders = expectedHeaders.filter(eh => !headersFromFile.includes(eh));
         if (missingHeaders.length > 0) {
           toast({ title: "File Header Error", description: `Missing headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 7000 });
@@ -217,9 +206,9 @@ export default function PerformanceDeductionPage() {
             return;
           }
 
-          const deductionId = `${code}-${matchedMonth}-${year}`; // Composite ID for local state management
+          const deductionId = `${code}-${matchedMonth}-${year}`; 
           const deductionEntry: PerformanceDeductionEntry = {
-            id: deductionId, // This would be Firestore's auto-ID if adding new
+            id: deductionId, 
             employeeCode: code,
             employeeName: employeeDetails.name, 
             designation: employeeDetails.designation,
@@ -234,18 +223,18 @@ export default function PerformanceDeductionPage() {
           } else {
             addedCount++;
           }
-          newUploadedDeductions.push(deductionEntry); // Accumulate all valid entries
+          newUploadedDeductions.push(deductionEntry); 
         });
 
         if (newUploadedDeductions.length > 0) {
           const updatedDeductionsMap = new Map(performanceDeductions.map(d => [d.id, d]));
           newUploadedDeductions.forEach(nd => {
-            updatedDeductionsMap.set(nd.id, nd); // Add new or overwrite existing for the same composite key
+            updatedDeductionsMap.set(nd.id, nd); 
           });
           const finalDeductions = Array.from(updatedDeductionsMap.values());
           setPerformanceDeductions(finalDeductions);
-          await conceptualSaveDeductionsToFirestore(finalDeductions); // Conceptual save
-          toast({ title: "Deductions Uploaded (Local State)", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''} Firestore save is conceptual.` });
+          saveDeductionsToLocalStorage(finalDeductions);
+          toast({ title: "Deductions Uploaded", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''} Data saved to local storage.` });
         } else {
           toast({ title: "No Valid Data", description: `No valid deduction records found in the uploaded CSV. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
         }
@@ -262,12 +251,12 @@ export default function PerformanceDeductionPage() {
     setDeductionToDelete(deduction);
   };
 
-  const confirmDeleteDeduction = async () => {
+  const confirmDeleteDeduction = () => {
     if (!deductionToDelete) return;
     const updatedDeductions = performanceDeductions.filter(d => d.id !== deductionToDelete.id);
     setPerformanceDeductions(updatedDeductions);
-    await conceptualDeleteDeductionFromFirestore(deductionToDelete.id); // Conceptual delete
-    toast({ title: "Deduction Deleted (Local State)", description: `Deduction for ${deductionToDelete.employeeName} for ${deductionToDelete.month} ${deductionToDelete.year} deleted. Firestore delete is conceptual.`, variant: "destructive" });
+    saveDeductionsToLocalStorage(updatedDeductions);
+    toast({ title: "Deduction Deleted", description: `Deduction for ${deductionToDelete.employeeName} for ${deductionToDelete.month} ${deductionToDelete.year} deleted.`, variant: "destructive" });
     setDeductionToDelete(null);
   };
 
@@ -300,12 +289,11 @@ export default function PerformanceDeductionPage() {
     setIsDeleteSelectedDialogOpen(true);
   };
 
-  const confirmDeleteSelectedDeductions = async () => {
-    const idsToDelete = Array.from(selectedDeductionIds);
+  const confirmDeleteSelectedDeductions = () => {
     const updatedDeductions = performanceDeductions.filter(d => !selectedDeductionIds.has(d.id));
     setPerformanceDeductions(updatedDeductions);
-    await conceptualBatchDeleteDeductionsFromFirestore(idsToDelete); // Conceptual delete
-    toast({ title: "Deductions Deleted (Local State)", description: `${selectedDeductionIds.size} deduction(s) deleted. Firestore delete is conceptual.`, variant: "destructive" });
+    saveDeductionsToLocalStorage(updatedDeductions);
+    toast({ title: "Deductions Deleted", description: `${selectedDeductionIds.size} deduction(s) deleted.`, variant: "destructive" });
     setSelectedDeductionIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
   };
@@ -325,7 +313,7 @@ export default function PerformanceDeductionPage() {
 
   return (
     <>
-      <PageHeader title="Performance Deductions Management" description="Manage employee performance-related salary deductions. (Data is illustrative and not persisted to a backend).">
+      <PageHeader title="Performance Deductions Management" description="Manage employee performance-related salary deductions. (Data saved in browser's local storage).">
         <Button
           variant="destructive"
           onClick={handleDeleteSelectedDeductions}
@@ -500,7 +488,7 @@ export default function PerformanceDeductionPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        No performance deductions recorded yet. (Data would be fetched from Firestore).
+                        No performance deductions recorded yet. (Data saved in browser's local storage).
                       </TableCell>
                     </TableRow>
                   )}
@@ -516,7 +504,7 @@ export default function PerformanceDeductionPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the performance deduction of ₹{deductionToDelete?.amount.toLocaleString()} for {deductionToDelete?.employeeName} for {deductionToDelete?.month} {deductionToDelete?.year}? This action cannot be undone (from local state).
+              Are you sure you want to delete the performance deduction of ₹{deductionToDelete?.amount.toLocaleString()} for {deductionToDelete?.employeeName} for {deductionToDelete?.month} {deductionToDelete?.year}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -533,7 +521,7 @@ export default function PerformanceDeductionPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedDeductionIds.size} selected performance deduction(s)? This action cannot be undone (from local state).
+              Are you sure you want to delete {selectedDeductionIds.size} selected performance deduction(s)? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -547,3 +535,4 @@ export default function PerformanceDeductionPage() {
     </>
   );
 }
+    
