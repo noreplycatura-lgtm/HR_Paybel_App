@@ -5,7 +5,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import Image from "next/image";
+// import Image from "next/image"; // No longer needed for logo
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { COMPANY_NAME } from "@/lib/constants";
+import { APP_NAME } from "@/lib/constants"; // Changed COMPANY_NAME to APP_NAME for consistency
 
 const loginFormSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -56,7 +56,7 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
     
     let loginSuccess = false;
     let welcomeMessage = "";
@@ -71,8 +71,6 @@ export function LoginForm() {
           if (storedUsersStr) {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
-            // For prototype, co-admin password is not checked explicitly here,
-            // just that they exist and are not locked.
             if (coAdminUser && !coAdminUser.isLocked) { 
               loginSuccess = true;
               welcomeMessage = `Welcome, ${values.username}!`;
@@ -80,6 +78,7 @@ export function LoginForm() {
           }
         } catch (error) {
           console.error("Error reading co-admin users from localStorage:", error);
+          // Fall through, loginSuccess remains false
         }
       }
     }
@@ -108,14 +107,15 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
-        <Image
+        {/* <Image
           src="https://placehold.co/150x50.png?text=Novita+Healthcare"
           alt={`${COMPANY_NAME} Logo`}
           width={150}
           height={50}
           className="mb-4"
           data-ai-hint="company logo"
-        />
+        /> */}
+        <h1 className="text-3xl font-bold mb-2 text-primary">HR PAYROLL APP</h1>
         <CardTitle className="text-2xl font-bold">Login</CardTitle>
         <CardDescription>Enter your credentials to access the portal.</CardDescription>
       </CardHeader>
