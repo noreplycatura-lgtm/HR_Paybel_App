@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCheck, CalendarCheck, History, DollarSign, HardDrive, UploadCloud, DownloadCloud, FileText } from "lucide-react";
+import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, KeySquare } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
 import { getMonth, getYear, subMonths, format } from "date-fns";
@@ -31,7 +31,7 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // For future use
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -260,7 +260,7 @@ export default function DashboardPage() {
       LOCAL_STORAGE_OPENING_BALANCES_KEY,
       LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
       LOCAL_STORAGE_SIMULATED_USERS_KEY,
-      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY // Include if we start logging
+      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY 
     ];
 
     knownFixedKeys.forEach(key => {
@@ -328,16 +328,21 @@ export default function DashboardPage() {
         return;
       }
 
-      const knownPrefixesForClear = [
-          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+      // Clear existing known application data
+      const knownKeysForClear = [
+          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+          LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+          LOCAL_STORAGE_OPENING_BALANCES_KEY,
+          LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+          LOCAL_STORAGE_SIMULATED_USERS_KEY,
+          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY
       ];
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && (knownPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
-             knownFixedKeys.includes(key))) {
+          if(key && (knownDynamicPrefixes.some(prefix => key.startsWith(prefix)) ||
+             knownKeysForClear.includes(key))) {
             keysToRemove.push(key);
           }
       }
@@ -352,7 +357,6 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
-      // Trigger a hard reload to ensure all components re-fetch from localStorage
       window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
@@ -394,8 +398,8 @@ export default function DashboardPage() {
           </Card>
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Quick Links</CardTitle>
-              <CardDescription>Access common tasks quickly.</CardDescription>
+              <CardTitle>Quick Links & Shortcuts</CardTitle>
+              <CardDescription>Access common tasks quickly. (Shortcuts are conceptual)</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col space-y-2">
                 <div className="h-4 w-1/2 bg-muted rounded animate-pulse mb-2"></div>
@@ -449,14 +453,42 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Quick Links</CardTitle>
-            <CardDescription>Access common tasks quickly.</CardDescription>
+            <CardTitle>Quick Links & Shortcuts</CardTitle>
+            <CardDescription>Access common tasks quickly. (Shortcuts are conceptual)</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col space-y-2">
-             <a href="/attendance" className="text-primary hover:underline">Upload Attendance</a>
-             <a href="/leave" className="text-primary hover:underline">Manage Leaves</a>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center">
+              <a href="/employee-master" className="text-primary hover:underline">Employee Master</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + E</span>
+            </div>
+             <div className="flex justify-between items-center">
+              <a href="/attendance" className="text-primary hover:underline">Attendance</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + A</span>
+            </div>
+             <div className="flex justify-between items-center">
+               <a href="/leave" className="text-primary hover:underline">Manage Leaves</a>
+               <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + L</span>
+            </div>
+             <div className="flex justify-between items-center">
+              <a href="/salary-sheet" className="text-primary hover:underline">Salary Sheet</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + S</span>
+            </div>
+             <div className="flex justify-between items-center">
+              <a href="/performance-deduction" className="text-primary hover:underline">Performance Deduction</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + P</span>
+            </div>
+            <div className="flex justify-between items-center">
              <a href="/salary-slip" className="text-primary hover:underline">Generate Salary Slip</a>
-             <a href="/reports" className="text-primary hover:underline">View Reports</a>
+             <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + I</span>
+            </div>
+             <div className="flex justify-between items-center">
+              <a href="/reports" className="text-primary hover:underline">View Reports</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + R</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <a href="/user-management" className="text-primary hover:underline">User Management</a>
+              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + U</span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -553,4 +585,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
