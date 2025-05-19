@@ -82,7 +82,10 @@ export default function DashboardPage() {
             console.warn("Employee master data in localStorage is corrupted or not an array. Showing 0.");
            }
         } else {
-          activeEmployeesCount = 0; // No master data, default to 0
+          // If no data in localStorage, try to use sampleEmployees for initial count
+          // This part depends on if you have sampleEmployees available here or a way to get them.
+          // For now, defaulting to 0 if no localStorage.
+          activeEmployeesCount = 0;
         }
 
         // Calculate Overall Attendance from Last Upload
@@ -111,18 +114,19 @@ export default function DashboardPage() {
               } else {
                 overallAttendanceValue = "N/A";
                 attendanceDescription = `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} is corrupted.`;
-                console.warn("Last uploaded attendance data is corrupted.");
+                console.warn("Last uploaded attendance data is corrupted or not an array.");
               }
             } else {
               overallAttendanceValue = "N/A";
-              attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`;
+              attendanceDescription = `No attendance data found for ${lastUploadContext.month} ${lastUploadContext.year}.`;
             }
           } catch (e) {
             console.error("Error parsing last upload context or its attendance data:", e);
             overallAttendanceValue = "N/A";
-            attendanceDescription = "Error reading attendance context.";
+            attendanceDescription = "Error reading last attendance context.";
           }
         } else { 
+          overallAttendanceValue = "N/A"; // Explicitly set N/A if context key not found
           attendanceDescription = "No attendance data uploaded yet."; 
         }
 
@@ -168,7 +172,7 @@ export default function DashboardPage() {
 
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
-          toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage. Data is saved locally in your browser.", variant: "destructive", duration: 7000});
+          // Don't use toast here as it's in the dependency array and could cause loops if toast itself errors.
           activeEmployeesCount = 0;
           overallAttendanceValue = "N/A";
           attendanceDescription = "Error fetching data.";
@@ -186,7 +190,7 @@ export default function DashboardPage() {
       return card;
     }));
     setIsLoading(false);
-  }, [toast]); // Re-run if toast changes, or consider removing toast dependency if not needed
+  }, []); // Corrected dependency array
 
 
   const handleExportData = () => {
@@ -207,7 +211,6 @@ export default function DashboardPage() {
         try {
           allData[key] = JSON.parse(item);
         } catch (e) {
-          // If JSON.parse fails, store as raw string (might be non-JSON data or corrupted)
           allData[key] = item; 
           console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
         }
@@ -267,7 +270,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Clear existing relevant localStorage items before import
       const knownPrefixesForClear = [
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
           LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
@@ -277,7 +279,7 @@ export default function DashboardPage() {
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if(key && (knownPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
-             knownFixedKeys.includes(key))) { // Use knownFixedKeys for clearing as well
+             knownFixedKeys.includes(key))) {
             keysToRemove.push(key);
           }
       }
@@ -292,7 +294,6 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
-      // Force reload to ensure all components re-fetch from localStorage
       window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
@@ -318,6 +319,32 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
             ))}
+        </div>
+         <div className="grid gap-6 mt-8 md:grid-cols-2">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle>Recent Activities</CardTitle>
+              <CardDescription>Latest updates and notifications (Illustrative).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-4 w-3/4 bg-muted rounded animate-pulse mb-2"></div>
+              <div className="h-4 w-full bg-muted rounded animate-pulse mb-2"></div>
+              <div className="h-4 w-2/3 bg-muted rounded animate-pulse mb-2"></div>
+              <div className="h-4 w-5/6 bg-muted rounded animate-pulse"></div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle>Quick Links</CardTitle>
+              <CardDescription>Access common tasks quickly.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col space-y-2">
+                <div className="h-4 w-1/2 bg-muted rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-2/3 bg-muted rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-3/5 bg-muted rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-4/5 bg-muted rounded animate-pulse"></div>
+            </CardContent>
+          </Card>
         </div>
       </>
     );
@@ -461,6 +488,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-
-    
