@@ -4,15 +4,31 @@
 import * as React from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { UserCheck, CalendarCheck, History, DollarSign, HardDrive } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { UserCheck, CalendarCheck, History, DollarSign, HardDrive, UploadCloud, DownloadCloud } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data"; 
 import { useToast } from "@/hooks/use-toast"; 
 import { getMonth, getYear, subMonths, format } from "date-fns";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual for now
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -37,6 +53,11 @@ export default function DashboardPage() {
     { title: "Storage Used", value: "N/A (Conceptual)", icon: HardDrive, description: "Uploaded data size (Conceptual)", dataAiHint: "data storage" },
   ]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
+  const [exportedDataJson, setExportedDataJson] = React.useState("");
+  const [importDataJson, setImportDataJson] = React.useState("");
+
 
   React.useEffect(() => {
     setIsLoading(true);
@@ -49,14 +70,18 @@ export default function DashboardPage() {
 
     if (typeof window !== 'undefined') {
       try {
-        // Fetch Employee Master Count
-        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployees) {
-          const employeesFromStorage: EmployeeDetail[] = JSON.parse(storedEmployees);
-          activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployeesStr) {
+          const employeesFromStorage: EmployeeDetail[] = JSON.parse(storedEmployeesStr);
+           if (Array.isArray(employeesFromStorage)) {
+            activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
+           } else {
+            activeEmployeesCount = 0; // Default if data is corrupted
+           }
+        } else {
+          activeEmployeesCount = 0; // No data, show 0 initially
         }
 
-        // Fetch Overall Attendance
         const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
         if (lastUploadContextStr) {
           const lastUploadContext: StoredUploadContext = JSON.parse(lastUploadContextStr);
@@ -80,21 +105,26 @@ export default function DashboardPage() {
           } else { attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; }
         } else { attendanceDescription = "No attendance data uploaded yet."; }
 
-        // Fetch Total Leave Records (Conceptual from localStorage)
         const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveApps) {
-          totalLeaveRecords = (JSON.parse(storedLeaveApps) as any[]).length;
+            const parsedApps = JSON.parse(storedLeaveApps);
+            totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
         }
 
-        // Fetch Payroll Status (Last Month)
         const lastMonthDate = subMonths(new Date(), 1);
         const lastMonthName = months[getMonth(lastMonthDate)];
         const lastMonthYear = getYear(lastMonthDate);
         const lastMonthAttendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${lastMonthName}_${lastMonthYear}`;
         const storedLastMonthAttendance = localStorage.getItem(lastMonthAttendanceKey);
-        if (storedLastMonthAttendance && (JSON.parse(storedLastMonthAttendance) as StoredEmployeeAttendanceData[]).length > 0) {
-           payrollStatusValue = "Processed";
-           payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
+        if (storedLastMonthAttendance) {
+            const parsedLastMonthAtt = JSON.parse(storedLastMonthAttendance);
+            if (Array.isArray(parsedLastMonthAtt) && parsedLastMonthAtt.length > 0) {
+                payrollStatusValue = "Processed";
+                payrollStatusDescription = `Based on ${lastMonthName} ${lastMonthYear} attendance`;
+            } else {
+                 payrollStatusValue = "Pending";
+                 payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
+            }
         } else {
            payrollStatusValue = "Pending";
            payrollStatusDescription = `Awaiting ${lastMonthName} ${lastMonthYear} attendance`;
@@ -103,6 +133,13 @@ export default function DashboardPage() {
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
           toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage.", variant: "destructive", duration: 7000});
+          // Reset to defaults on error to avoid inconsistent state
+          activeEmployeesCount = 0;
+          overallAttendanceValue = "N/A";
+          attendanceDescription = "Error fetching data.";
+          totalLeaveRecords = 0;
+          payrollStatusValue = "Error";
+          payrollStatusDescription = "Error fetching data.";
       }
     }
 
@@ -115,6 +152,104 @@ export default function DashboardPage() {
     }));
     setIsLoading(false);
   }, [toast]); 
+
+
+  const handleExportData = () => {
+    if (typeof window === 'undefined') return;
+    const allData: Record<string, any> = {};
+    const keysToExport = [
+      LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+      LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+      LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+      LOCAL_STORAGE_OPENING_BALANCES_KEY,
+      LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+      LOCAL_STORAGE_SIMULATED_USERS_KEY
+    ];
+
+    keysToExport.forEach(key => {
+      const item = localStorage.getItem(key);
+      if (item) {
+        try {
+          allData[key] = JSON.parse(item);
+        } catch (e) {
+          allData[key] = item; // Store as string if not valid JSON
+        }
+      }
+    });
+
+    // Handle prefixed keys (attendance, salary edits)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) || 
+                  key.startsWith(LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX) ||
+                  key.startsWith(LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX))) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          try {
+            allData[key] = JSON.parse(item);
+          } catch (e) {
+            allData[key] = item;
+          }
+        }
+      }
+    }
+    setExportedDataJson(JSON.stringify(allData, null, 2));
+    setIsExportDialogOpen(true);
+  };
+
+  const handleImportData = () => {
+    if (typeof window === 'undefined' || !importDataJson) {
+      toast({ title: "No Data", description: "Please paste the JSON data to import.", variant: "destructive" });
+      return;
+    }
+    try {
+      const dataToImport = JSON.parse(importDataJson);
+      if (typeof dataToImport !== 'object' || dataToImport === null) {
+        toast({ title: "Invalid JSON", description: "The provided text is not a valid JSON object.", variant: "destructive" });
+        return;
+      }
+
+      // Clear existing relevant localStorage items before import (optional, but often desired)
+      // This is a simplified clear, a more robust version might iterate known prefixes.
+      const knownPrefixes = [
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX, 
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX, 
+          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+      ];
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if(key && (knownPrefixes.some(prefix => key.startsWith(prefix)) || 
+             [
+                LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+                LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+                LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+                LOCAL_STORAGE_OPENING_BALANCES_KEY,
+                LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+                LOCAL_STORAGE_SIMULATED_USERS_KEY
+             ].includes(key))) {
+            keysToRemove.push(key);
+          }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+
+
+      for (const key in dataToImport) {
+        if (Object.prototype.hasOwnProperty.call(dataToImport, key)) {
+          localStorage.setItem(key, JSON.stringify(dataToImport[key]));
+        }
+      }
+      toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
+      setIsImportDialogOpen(false);
+      setImportDataJson("");
+      // Force a reload or prompt user to reload for changes to take full effect across all components
+      window.location.reload();
+    } catch (error) {
+      console.error("Error importing data:", error);
+      toast({ title: "Import Error", description: "Could not parse or import JSON data. Check format.", variant: "destructive" });
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -183,8 +318,90 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Accordion type="single" collapsible className="w-full mt-8">
+        <AccordionItem value="item-1">
+          <AccordionTrigger className="text-base font-semibold">Prototype Data Management (Local Storage)</AccordionTrigger>
+          <AccordionContent>
+            <Card className="shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle>Local Storage Data Tools</CardTitle>
+                <CardDescription>
+                  Manually export or import all application data stored in your browser's local storage.
+                  This is a prototype feature to help transfer data between browsers/computers for testing.
+                  Use with caution: Importing data will overwrite existing local data.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col sm:flex-row gap-4">
+                <Button onClick={handleExportData} variant="outline">
+                  <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
+                </Button>
+                <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">
+                      <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                      <DialogTitle>Import Local Storage Data</DialogTitle>
+                      <DialogDescription>
+                        Paste the JSON string you previously exported here. This will overwrite all current local data for this application.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <Label htmlFor="import-json-area">JSON Data to Import:</Label>
+                      <Textarea
+                        id="import-json-area"
+                        value={importDataJson}
+                        onChange={(e) => setImportDataJson(e.target.value)}
+                        rows={15}
+                        placeholder="Paste your exported JSON data here..."
+                      />
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button type="button" variant="outline">Cancel</Button>
+                      </DialogClose>
+                      <Button type="button" onClick={handleImportData}>Import Data & Reload</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardContent>
+            </Card>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Exported Local Storage Data</DialogTitle>
+            <DialogDescription>
+              Copy the JSON text below. You can save it to a file and use the "Import" feature on another computer/browser.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <Label htmlFor="export-json-area">All Local Storage Data (JSON):</Label>
+            <Textarea id="export-json-area" value={exportedDataJson} readOnly rows={15} />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Close</Button>
+            </DialogClose>
+            <Button
+                type="button"
+                onClick={() => {
+                    navigator.clipboard.writeText(exportedDataJson);
+                    toast({ title: "Copied!", description: "Data copied to clipboard." });
+                }}
+            >
+                Copy to Clipboard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-    
