@@ -188,7 +188,7 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees]); 
+  }, [selectedDivision, allEmployees, selectedEmployeeId]); 
 
   const generateSlipDataForEmployee = (
     employee: EmployeeDetail,
@@ -262,7 +262,6 @@ export default function SalarySlipPage() {
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
     
-    // Pass empty array for leaveApplications as attendance data is now the source of truth for used leaves in the month
     const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
         employee, year, monthIndex, [], localOpeningBalances 
     );
@@ -289,7 +288,6 @@ export default function SalarySlipPage() {
         nextMonthOpeningPL = closingBalancePLForSelectedMonth;
     }
     
-    // Add next month's accrual if eligible
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
@@ -531,6 +529,8 @@ export default function SalarySlipPage() {
 
   React.useEffect(() => {
     if (isBulkPrintingView && bulkSlipsData.length > 0) {
+      const originalTitle = document.title;
+      document.title = `All-SalarySlips-${selectedDivision}-${selectedMonth}-${selectedYear}`;
       const timer = setTimeout(() => {
         try {
           window.print();
@@ -548,11 +548,15 @@ export default function SalarySlipPage() {
           });
         } finally {
             setIsLoading(false); 
+            document.title = originalTitle;
         }
       }, 500); 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        document.title = originalTitle; // Restore title if component unmounts early
+      };
     }
-  }, [isBulkPrintingView, bulkSlipsData, toast]);
+  }, [isBulkPrintingView, bulkSlipsData, toast, selectedDivision, selectedMonth, selectedYear]);
 
 
   const currentCompanyDetails = selectedDivision
@@ -613,7 +617,7 @@ export default function SalarySlipPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
                     <div>
                         <h3 className="font-semibold mb-2">Employee Details</h3>
                         <p><strong>Name:</strong> {sData.name}</p>
@@ -621,7 +625,7 @@ export default function SalarySlipPage() {
                         <p><strong>Designation:</strong> {sData.designation}</p>
                         <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
                         <p><strong>Division:</strong> {sData.division}</p>
-                        <Separator className="my-4" />
+                         <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Pay Details</h3>
                         <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
                         <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
@@ -632,7 +636,7 @@ export default function SalarySlipPage() {
                         <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
                         <p><strong>Paid Holidays:</strong> {sData.paidHolidays}</p>
                         <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                        <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                         <p className="invisible">&nbsp;</p> 
                         <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                         <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -795,7 +799,7 @@ export default function SalarySlipPage() {
                     <p><strong>Designation:</strong> {slipData.designation}</p>
                     <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
                     <p><strong>Division:</strong> {slipData.division}</p>
-                    <Separator className="my-4" />
+                     <Separator className="my-4" />
                     <h3 className="font-semibold mb-2">Pay Details</h3>
                     <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
                     <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
@@ -806,7 +810,7 @@ export default function SalarySlipPage() {
                     <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                     <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                     <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                    <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                    <p className="invisible">&nbsp;</p> 
                     <Separator className="my-4" />
                     <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                     <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -860,15 +864,21 @@ export default function SalarySlipPage() {
             <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
             <Button 
               onClick={() => {
-                try {
-                  window.print();
-                } catch (e) {
-                  console.error('Error calling window.print():', e);
-                  toast({
-                    title: "Print Error",
-                    description: "Could not open print dialog. Please check browser console.",
-                    variant: "destructive",
-                  });
+                if (slipData) {
+                  const originalTitle = document.title;
+                  document.title = `${slipData.employeeId}-${slipData.name}-SalarySlip-${selectedMonth}-${selectedYear}`;
+                  try {
+                    window.print();
+                  } catch (e) {
+                    console.error('Error calling window.print():', e);
+                    toast({
+                      title: "Print Error",
+                      description: "Could not open print dialog. Please check browser console.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    document.title = originalTitle;
+                  }
                 }
               }} 
               className="ml-auto print:hidden"
@@ -928,5 +938,3 @@ function convertToWords(num: number): string {
   }
   return words.trim() ? words.trim() : 'Zero';
 }
-
-    
