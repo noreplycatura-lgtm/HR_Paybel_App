@@ -91,6 +91,11 @@ body {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 1cm; /* Adjust this margin to control space for browser headers/footers */
+  }
+
   body {
     margin: 0;
     padding: 0;
@@ -114,24 +119,23 @@ body {
   /* Position the printable area at the top-left for printing */
   #salary-slip-printable-area,
   #salary-slip-preview {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%; /* Use full width for browser to handle scaling to paper */
-    margin: 0; /* Remove screen margins for print */
-    padding: 0; /* Remove screen padding for print */
-    box-sizing: border-box;
+    position: absolute !important; /* Use absolute to ensure it's not affected by other flow */
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important; /* Use full width for browser to handle scaling to paper */
+    margin: 0 !important; /* Remove screen margins for print */
+    padding: 0 !important; /* Remove screen padding for print */
   }
   
   .salary-slip-page, #salary-slip-preview {
     width: 190mm; /* A4 width minus typical margins */
-    height: 270mm; /* A4 height minus typical margins */
-    overflow: hidden !important; /* Prevent content from spilling, important for print */
+    height: auto; /* Allow height to adjust to content, but page-break should handle overflow */
     page-break-inside: avoid !important; /* Try to keep a single slip on one page */
     box-shadow: none !important;
     border: 1px solid #eee !important; /* Light border for print visualization */
     margin: 5mm auto !important; /* Center on page with some margin */
     font-size: 9pt !important; /* General smaller font for print */
+    box-sizing: border-box !important;
   }
 
   .salary-slip-page .p-6, #salary-slip-preview .p-6 {
@@ -182,12 +186,22 @@ body {
   }
 
   /* Adjustments for salary slip layout to be more compact */
-  #salary-slip-preview .grid.md\:grid-cols-2,
-  .salary-slip-page .grid.md\:grid-cols-2 {
+  /* Targets the main 2-column layout grid inside CardContent */
+  #salary-slip-preview .p-6 > .grid.md\:grid-cols-2,
+  .salary-slip-page .p-6 > .grid.md\:grid-cols-2 {
+    display: grid !important;
     grid-template-columns: 1fr 1fr !important; /* Force two columns */
     gap: 0.25rem !important; /* Reduce gap */
   }
   
+  /* Targets the nested 2-column grid for Earnings/Deductions */
+  #salary-slip-preview .p-6 > .grid.md\:grid-cols-2 ~ .grid.md\:grid-cols-2,
+  .salary-slip-page .p-6 > .grid.md\:grid-cols-2 ~ .grid.md\:grid-cols-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.25rem !important;
+  }
+
   #salary-slip-preview .gap-x-8, .salary-slip-page .gap-x-8 {
       column-gap: 0.5rem !important;
   }
@@ -208,12 +222,5 @@ body {
     max-width: 100px !important; /* Smaller logo for print */
     max-height: 35px !important;
     margin-bottom: 0.15rem !important;
-  }
-  
-  /* Ensure Tailwind's responsive prefixes like md: don't interfere with print */
-  /* This is a bit of a general sledgehammer; more specific overrides are better if needed */
-  #salary-slip-preview [class*="md:"],
-  .salary-slip-page [class*="md:"] {
-    /* Example: if md:grid-cols-2 needs to be grid-cols-2 always for print */
   }
 }
