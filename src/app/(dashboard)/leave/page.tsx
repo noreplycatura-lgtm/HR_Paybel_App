@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter, getDaysInMonth } from 'date-fns';
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
 import type { LeaveApplication, OpeningLeaveBalance } from "@/lib/hr-types";
@@ -22,7 +22,7 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual, managed by Edit OB dialog now
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
 
@@ -84,6 +84,21 @@ export default function LeavePage() {
     setCurrentYearState(now.getFullYear());
     setSelectedMonth(months[now.getMonth()]);
     setSelectedYear(now.getFullYear());
+
+    // // Temporary one-time clearing logic - REMOVE AFTER ONE RUN
+    // const hasCleared = sessionStorage.getItem('novita_leave_data_cleared_v_final');
+    // if (!hasCleared) {
+    //     if (typeof window !== 'undefined') {
+    //         localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+    //         localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+    //         setOpeningBalances([]);
+    //         setLeaveApplications([]);
+    //         toast({ title: "Leave Data Reset", description: "Opening balances and leave application history have been cleared. Please upload new opening balances if needed." });
+    //         sessionStorage.setItem('novita_leave_data_cleared_v_final', 'true');
+    //     }
+    // }
+    // // END - Temporary one-time clearing logic
+
   }, []);
 
   React.useEffect(() => {
@@ -91,13 +106,43 @@ export default function LeavePage() {
     if (typeof window !== 'undefined') {
       try {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        setEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
+        if (storedEmployees) {
+            try {
+                setEmployees(JSON.parse(storedEmployees));
+            } catch (e) {
+                console.error("Error parsing employee master from localStorage:", e);
+                setEmployees([]);
+                toast({ title: "Data Error", description: "Could not parse employee master data. List may be empty.", variant: "destructive"});
+            }
+        } else {
+            setEmployees([]);
+        }
 
         const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-        setOpeningBalances(storedOB ? JSON.parse(storedOB) : []);
+        if (storedOB) {
+            try {
+                setOpeningBalances(JSON.parse(storedOB));
+            } catch (e) {
+                console.error("Error parsing opening balances from localStorage:", e);
+                setOpeningBalances([]);
+                toast({ title: "Data Error", description: "Could not parse opening balances. Calculations may be inaccurate.", variant: "destructive"});
+            }
+        } else {
+             setOpeningBalances([]);
+        }
         
         const storedApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-        setLeaveApplications(storedApps ? JSON.parse(storedApps) : []);
+        if (storedApps) {
+           try {
+                setLeaveApplications(JSON.parse(storedApps));
+            } catch (e) {
+                console.error("Error parsing leave applications from localStorage:", e);
+                setLeaveApplications([]);
+                // toast({ title: "Data Error", description: "Could not parse leave applications.", variant: "destructive"}); // Optional: Less critical if not actively used
+            }
+        } else {
+            setLeaveApplications([]);
+        }
 
       } catch (error) {
         console.error("Error loading initial data for Leave page:", error);
@@ -119,13 +164,15 @@ export default function LeavePage() {
 
     setIsLoading(true);
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) {
+    if (monthIndex === -1) { 
       setDisplayData([]);
       setIsLoading(false);
       return;
     }
     
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
+    const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
+    
     const prevMonthDateObject = addMonths(selectedMonthStartDate, -1);
     const prevMonthName = months[getMonth(prevMonthDateObject)];
     const prevMonthYear = getYear(prevMonthDateObject);
@@ -160,22 +207,22 @@ export default function LeavePage() {
           emp, selectedYear, monthIndex, leaveApplications, openingBalances 
         );
 
-        let usedCLFromAttendance = 0;
-        let usedSLFromAttendance = 0;
-        let usedPLFromAttendance = 0;
+        let usedCLInMonthFromAttendance = 0;
+        let usedSLInMonthFromAttendance = 0;
+        let usedPLInMonthFromAttendance = 0;
         const empAttSelectedMonth = attendanceForSelectedMonth.find(att => att.code === emp.code);
         if (empAttSelectedMonth && empAttSelectedMonth.attendance) {
             const daysInSelected = getDaysInMonth(selectedMonthStartDate);
             empAttSelectedMonth.attendance.slice(0, daysInSelected).forEach(status => {
-                if (status === 'CL') usedCLFromAttendance++;
-                if (status === 'SL') usedSLFromAttendance++;
-                if (status === 'PL') usedPLFromAttendance++;
+                if (status === 'CL') usedCLInMonthFromAttendance++;
+                if (status === 'SL') usedSLInMonthFromAttendance++;
+                if (status === 'PL') usedPLInMonthFromAttendance++;
             });
         }
 
-        const finalBalanceCLAtMonthEnd = accruedDetails.balanceCLAtMonthEnd - usedCLFromAttendance;
-        const finalBalanceSLAtMonthEnd = accruedDetails.balanceSLAtMonthEnd - usedSLFromAttendance;
-        const finalBalancePLAtMonthEnd = accruedDetails.balancePLAtMonthEnd - usedPLFromAttendance;
+        const finalBalanceCLAtMonthEnd = accruedDetails.balanceCLAtMonthEnd - usedCLInMonthFromAttendance;
+        const finalBalanceSLAtMonthEnd = accruedDetails.balanceSLAtMonthEnd - usedSLInMonthFromAttendance;
+        const finalBalancePLAtMonthEnd = accruedDetails.balancePLAtMonthEnd - usedPLInMonthFromAttendance;
 
         let usedCLLastMonth = 0;
         let usedSLLastMonth = 0;
@@ -195,7 +242,8 @@ export default function LeavePage() {
         const nextMonthYearVal = getYear(nextMonthDateObject);
         
         const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
-        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart > MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
+
 
         let accrualCLNextMonth = 0;
         let accrualSLNextMonth = 0;
@@ -207,35 +255,35 @@ export default function LeavePage() {
             accrualPLNextMonth = PL_ACCRUAL_RATE;
         }
         
-        let openingCLNextMonth = 0;
-        let openingSLNextMonth = 0;
-        const openingPLNextMonth = finalBalancePLAtMonthEnd + accrualPLNextMonth; 
+        let openingCLForNextMonthCalc = 0;
+        let openingSLForNextMonthCalc = 0;
+        const openingPLForNextMonthCalc = finalBalancePLAtMonthEnd + accrualPLNextMonth; 
 
         if (nextMonthIndexVal === 3) { 
             const obForNextFY = openingBalances.find(
               (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthYearVal
             );
-            openingCLNextMonth = (obForNextFY?.openingCL || 0) + accrualCLNextMonth; 
-            openingSLNextMonth = (obForNextFY?.openingSL || 0) + accrualSLNextMonth; 
+            openingCLForNextMonthCalc = (obForNextFY?.openingCL || 0) + accrualCLNextMonth; 
+            openingSLForNextMonthCalc = (obForNextFY?.openingSL || 0) + accrualSLNextMonth; 
         } else {
-            openingCLNextMonth = finalBalanceCLAtMonthEnd + accrualCLNextMonth;
-            openingSLNextMonth = finalBalanceSLAtMonthEnd + accrualSLNextMonth;
+            openingCLForNextMonthCalc = finalBalanceCLAtMonthEnd + accrualCLNextMonth;
+            openingSLForNextMonthCalc = finalBalanceSLAtMonthEnd + accrualSLNextMonth;
         }
 
         return {
           ...emp,
-          usedCLInMonth: usedCLFromAttendance,
-          usedSLInMonth: usedSLFromAttendance,
-          usedPLInMonth: usedPLFromAttendance,
+          usedCLInMonth: usedCLInMonthFromAttendance,
+          usedSLInMonth: usedSLInMonthFromAttendance,
+          usedPLInMonth: usedPLInMonthFromAttendance,
           balanceCLAtMonthEnd: finalBalanceCLAtMonthEnd,
           balanceSLAtMonthEnd: finalBalanceSLAtMonthEnd,
           balancePLAtMonthEnd: finalBalancePLAtMonthEnd,
           usedCLLastMonth,
           usedSLLastMonth,
           usedPLLastMonth,
-          openingCLNextMonth,
-          openingSLNextMonth,
-          openingPLNextMonth,
+          openingCLNextMonth: openingCLForNextMonthCalc,
+          openingSLNextMonth: openingSLForNextMonthCalc,
+          openingPLNextMonth: openingPLForNextMonthCalc,
         };
     });
 
@@ -808,7 +856,7 @@ export default function LeavePage() {
               )) : (
                 <TableRow>
                   <TableCell colSpan={20} className="text-center text-muted-foreground py-8">
-                    {employees.length === 0 && !isLoading ? "No employee data. (Data saved in browser's local storage)." :
+                    {employees.length === 0 && !isLoading ? "No employee data. Please add employees in Employee Master." :
                      selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
                      "Please select month and year to view leave summary. (Data saved in browser's local storage)."}
                   </TableCell>
@@ -821,5 +869,3 @@ export default function LeavePage() {
     </>
   );
 }
-
-    
