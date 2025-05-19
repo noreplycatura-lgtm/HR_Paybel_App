@@ -14,7 +14,14 @@ import { useToast } from "@/hooks/use-toast";
 
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
-import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
+import {
+  calculateEmployeeLeaveDetailsForPeriod,
+  calculateMonthsOfService,
+  MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL,
+  CL_ACCRUAL_RATE,
+  SL_ACCRUAL_RATE,
+  PL_ACCRUAL_RATE
+} from "@/lib/hr-calculations";
 import type { OpeningLeaveBalance } from "@/lib/hr-types";
 
 
@@ -159,7 +166,7 @@ export default function SalarySlipPage() {
         }
     }
     setIsLoadingEmployees(false);
-  }, []); // Corrected dependency array
+  }, []); 
 
   React.useEffect(() => {
     if (selectedDivision && allEmployees.length > 0) {
@@ -255,6 +262,7 @@ export default function SalarySlipPage() {
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
     
+    // Pass empty array for leaveApplications as attendance data is now the source of truth for used leaves in the month
     const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
         employee, year, monthIndex, [], localOpeningBalances 
     );
@@ -264,17 +272,14 @@ export default function SalarySlipPage() {
     const nextMonthIdx = getMonth(nextMonthDateObject);
     const nextYr = getYear(nextMonthDateObject);
     
-    // For PL, use the balance from current month's end as starting point for next month's accrual.
-    // For CL/SL, if next month is April, it's reset by financial year.
     const closingBalanceCLForSelectedMonth = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth;
     const closingBalanceSLForSelectedMonth = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth;
     const closingBalancePLForSelectedMonth = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
 
 
-    // Get OB for the *next* financial year if next month is April
     const obForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
 
-    if (nextMonthIdx === 3) { // April
+    if (nextMonthIdx === 3) { 
         nextMonthOpeningCL = obForNextFY?.openingCL || 0;
         nextMonthOpeningSL = obForNextFY?.openingSL || 0;
         nextMonthOpeningPL = obForNextFY?.openingPL !== undefined ? obForNextFY.openingPL : closingBalancePLForSelectedMonth;
@@ -608,7 +613,7 @@ export default function SalarySlipPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
                     <div>
                         <h3 className="font-semibold mb-2">Employee Details</h3>
                         <p><strong>Name:</strong> {sData.name}</p>
@@ -627,7 +632,7 @@ export default function SalarySlipPage() {
                         <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
                         <p><strong>Paid Holidays:</strong> {sData.paidHolidays}</p>
                         <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                         <p className="invisible">&nbsp;</p> 
+                        <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
                         <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                         <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -782,7 +787,7 @@ export default function SalarySlipPage() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
                 <div>
                     <h3 className="font-semibold mb-2">Employee Details</h3>
                     <p><strong>Name:</strong> {slipData.name}</p>
@@ -801,7 +806,7 @@ export default function SalarySlipPage() {
                     <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                     <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                     <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                     <p className="invisible">&nbsp;</p> 
+                    <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
                     <Separator className="my-4" />
                     <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear})</h3>
                     <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
