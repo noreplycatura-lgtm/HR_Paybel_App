@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleEmployees } from "@/lib/hr-data"; 
+import { sampleEmployees } from "@/lib/hr-data";
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
@@ -73,10 +73,10 @@ const employeeFormSchema = z.object({
         }
     }
     if (data.revisedGrossMonthlySalary && data.revisedGrossMonthlySalary > 0 && (!data.salaryEffectiveDate || data.salaryEffectiveDate.trim() === "")) {
-      return false; 
+      return false;
     }
     if ((!data.revisedGrossMonthlySalary || data.revisedGrossMonthlySalary === 0) && (data.salaryEffectiveDate && data.salaryEffectiveDate.trim() !== "")) {
-      return false; 
+      return false;
     }
     if (data.salaryEffectiveDate && data.doj && isValid(parseISO(data.salaryEffectiveDate)) && isValid(parseISO(data.doj))) {
         if (isBefore(parseISO(data.salaryEffectiveDate), parseISO(data.doj))) {
@@ -150,23 +150,35 @@ export default function EmployeeMasterPage() {
           if (Array.isArray(parsedEmployees)) {
             setEmployees(parsedEmployees);
           } else {
-             toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please re-upload or add data. Using sample data temporarily.", variant: "destructive", duration: 7000 });
-             setEmployees(sampleEmployees); // Fallback
+            console.error("Employee master data in localStorage is not an array. Initializing with sample data.");
+            toast({
+              title: "Data Error",
+              description: "Stored employee data is corrupted. Initializing with sample data. Please verify and re-upload if necessary. Data is saved locally in your browser.",
+              variant: "destructive",
+              duration: 7000,
+            });
+            setEmployees(sampleEmployees);
+            localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
           }
         } else {
-          // If no data in localStorage, initialize with sampleEmployees and save it.
           setEmployees(sampleEmployees);
           localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
-          toast({ title: "Data Initialized", description: "No existing employee data found. Initialized with sample data.", duration: 5000 });
+          toast({ title: "Data Initialized", description: "No existing employee data found. Initialized with sample data. Data is saved locally in your browser.", duration: 5000 });
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not load employee data. Please re-upload or add data. Using sample data temporarily.", variant: "destructive", duration: 7000 });
-        setEmployees(sampleEmployees); // Fallback
+        toast({
+          title: "Storage Error",
+          description: "Could not load employee data due to a storage error. Initializing with sample data. Data is saved locally in your browser.",
+          variant: "destructive",
+          duration: 7000,
+        });
+        setEmployees(sampleEmployees);
+        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
       }
     }
     setIsLoadingData(false);
-  }, [toast]);
+  }, []); // Runs once on mount
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -174,7 +186,7 @@ export default function EmployeeMasterPage() {
         localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedEmployees));
       } catch (error) {
         console.error("Error saving employees to localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not save employee data.", variant: "destructive" });
+        toast({ title: "Storage Error", description: "Could not save employee data locally.", variant: "destructive" });
       }
     }
   };
@@ -208,7 +220,7 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code, 
+        id: submissionValues.code,
         ...submissionValues,
         dor: submissionValues.dor || undefined,
         revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
@@ -258,7 +270,7 @@ export default function EmployeeMasterPage() {
     if (!employeeToDelete) return;
     const updatedEmployees = employees.filter(emp => emp.id !== employeeToDelete.id);
     setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees); 
+    saveEmployeesToLocalStorage(updatedEmployees);
     setSelectedEmployeeIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(employeeToDelete.id);
@@ -290,13 +302,13 @@ export default function EmployeeMasterPage() {
 
         const expectedHeaders = ["status", "division", "code", "name", "designation", "hq", "doj", "dor", "grossmonthlysalary", "revisedgrossmonthlysalary", "salaryeffectivedate"];
         const headerLine = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/\s+/g, ''));
-        
+
         const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
         if (missingHeaders.length > 0) {
              toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}. Expected: ${expectedHeaders.join(', ')}. Check spelling and ensure all are present.`, variant: "destructive", duration: 9000 });
              return;
         }
-        
+
         const getIndex = (headerName: string) => headerLine.indexOf(headerName);
         const idxStatus = getIndex("status");
         const idxDivision = getIndex("division");
@@ -317,11 +329,11 @@ export default function EmployeeMasterPage() {
         let skippedForDuplicateInCsv = 0;
         let malformedRows = 0;
         let addedCount = 0;
-        let updatedCount = 0; 
+        let updatedCount = 0;
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
-          
+
           if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary, idxRevisedGrossSalary, idxSalaryEffectiveDate )) {
              console.warn(`Skipping row ${rowIndex + 2} in Employee Master CSV: insufficient columns.`);
              malformedRows++;
@@ -339,7 +351,7 @@ export default function EmployeeMasterPage() {
           const grossMonthlySalaryStr = values[idxGrossSalary];
           const revisedGrossMonthlySalaryStr = values[idxRevisedGrossSalary];
           const salaryEffectiveDateStr = values[idxSalaryEffectiveDate];
-          
+
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
           const revisedGrossMonthlySalary = revisedGrossMonthlySalaryStr ? parseFloat(revisedGrossMonthlySalaryStr) : undefined;
 
@@ -349,7 +361,7 @@ export default function EmployeeMasterPage() {
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            status = "Active"; 
+            status = "Active";
             console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
           }
           if (status === "Active") dor = "";
@@ -360,15 +372,17 @@ export default function EmployeeMasterPage() {
             return;
           }
           codesInCsv.add(code);
-          
-          if (currentEmployeesMap.has(code)) { 
+
+          // Check against existing master list from localStorage
+          if (currentEmployeesMap.has(code)) {
+            // For prototype, we'll skip if code exists. Real app might update.
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list. Update via Edit.`);
-            updatedCount++; 
+            updatedCount++; // Or use a different counter for "already exists"
             return;
           }
 
           let formattedDoj = doj;
-          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { 
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
              try { const d = new Date(doj.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
           let formattedDor = dor;
@@ -379,9 +393,9 @@ export default function EmployeeMasterPage() {
           if (salaryEffectiveDateStr && !/^\d{4}-\d{2}-\d{2}$/.test(salaryEffectiveDateStr)) {
              try { const d = new Date(salaryEffectiveDateStr.replace(/[-/.]/g, '/')); if (isValid(d)) formattedSalaryEffectiveDate = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
-          
+
           const employeeData: EmployeeDetail = {
-            id: code, status, division, code, name, designation, hq, 
+            id: code, status, division, code, name, designation, hq,
             doj: formattedDoj, dor: formattedDor || undefined, grossMonthlySalary,
             revisedGrossMonthlySalary: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0) ? revisedGrossMonthlySalary : undefined,
             salaryEffectiveDate: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0 && formattedSalaryEffectiveDate) ? formattedSalaryEffectiveDate : "",
@@ -392,10 +406,16 @@ export default function EmployeeMasterPage() {
 
         let message = "";
         if (newUploadedEmployees.length > 0) {
-            const combinedEmployees = [...employees, ...newUploadedEmployees];
+            // Add to existing employees, ensuring no duplicates by code with what's already in state
+            const combinedEmployees = [...employees];
+            newUploadedEmployees.forEach(newEmp => {
+                if (!combinedEmployees.some(e => e.code === newEmp.code)) {
+                    combinedEmployees.push(newEmp);
+                }
+            });
             setEmployees(combinedEmployees);
-            saveEmployeesToLocalStorage(combinedEmployees); 
-            message += `${newUploadedEmployees.length} new employee(s) added from ${file.name}. `;
+            saveEmployeesToLocalStorage(combinedEmployees);
+            message += `${addedCount} new employee(s) processed from ${file.name}. `;
         } else {
             message += `No new employees were added from ${file.name}. `;
         }
@@ -408,7 +428,7 @@ export default function EmployeeMasterPage() {
           title: "Employee Upload Processed",
           description: message.trim(),
           duration: 9000,
-          variant: newUploadedEmployees.length > 0 ? "default" : "destructive",
+          variant: addedCount > 0 ? "default" : "destructive",
         });
 
       } catch (error) {
@@ -452,7 +472,7 @@ export default function EmployeeMasterPage() {
           (employee.hq && employee.hq.toLowerCase().includes(filterTerm.toLowerCase()))
         );
         const matchesStatusFilter = (
-            statusFilter === "all" || 
+            statusFilter === "all" ||
             (statusFilter === "Active" && employee.status === "Active") ||
             (statusFilter === "Left" && employee.status === "Left")
         );
@@ -499,7 +519,7 @@ export default function EmployeeMasterPage() {
   const confirmDeleteSelectedEmployees = () => {
     const updatedEmployees = employees.filter(emp => !selectedEmployeeIds.has(emp.id));
     setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees); 
+    saveEmployeesToLocalStorage(updatedEmployees);
     toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted.`, variant: "destructive" });
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
@@ -712,28 +732,28 @@ export default function EmployeeMasterPage() {
                           if (!isValid(parsedDate)) {
                             const parts = employee.doj.split(/[-/.]/);
                             let reparsedDate = null;
-                             if (parts.length === 3) { 
+                             if (parts.length === 3) {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) { 
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
-                                } else if (part1 > 1000) { 
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { 
+                                if (part3 > 1000) {
+                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
+                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
+                                } else if (part1 > 1000) {
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
+                                } else {
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj; 
+                            return employee.doj;
                           }
                           return format(parsedDate, "dd-MMM-yy");
                         } catch (e) {
-                          return employee.doj; 
+                          return employee.doj;
                         }
                       }
                       return 'N/A';
@@ -751,13 +771,13 @@ export default function EmployeeMasterPage() {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) { 
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
-                                } else if (part1 > 1000) { 
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { 
+                                if (part3 > 1000) {
+                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
+                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
+                                } else if (part1 > 1000) {
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
+                                } else {
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
@@ -788,13 +808,13 @@ export default function EmployeeMasterPage() {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) { 
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
-                                } else if (part1 > 1000) { 
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { 
+                                if (part3 > 1000) {
+                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
+                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
+                                } else if (part1 > 1000) {
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
+                                } else {
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
@@ -832,7 +852,7 @@ export default function EmployeeMasterPage() {
           </Table>
         </CardContent>
       </Card>
-      
+
       <AlertDialog open={isDeleteSelectedDialogOpen} onOpenChange={setIsDeleteSelectedDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -869,4 +889,3 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
-    

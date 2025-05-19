@@ -26,7 +26,7 @@ interface SalarySheetEntry extends EmployeeDetail {
   monthlyCA: number;
   monthlyOtherAllowance: number;
   monthlyMedical: number;
-  calculatedGross: number; 
+  calculatedGross: number;
   actualBasic: number;
   actualHRA: number;
   actualCA: number;
@@ -109,7 +109,7 @@ export default function SalarySheetPage() {
             setAllEmployees(Array.isArray(parsedEmployees) ? parsedEmployees : []);
         } else {
             setAllEmployees([]);
-            toast({ title: "No Employee Data", description: "Employee master list is empty. Please add employees.", variant: "destructive", duration: 5000 });
+            toast({ title: "No Employee Data", description: "Employee master list is empty. Please add employees. Data is saved locally in your browser.", variant: "destructive", duration: 5000 });
         }
 
         const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
@@ -121,13 +121,13 @@ export default function SalarySheetPage() {
         }
       } catch (error) {
         console.error("Error loading initial master data for salary sheet:", error);
-        toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions. Salary sheet may be incomplete.", variant: "destructive"});
+        toast({ title: "Data Load Error", description: "Could not load employee master or performance deductions. Salary sheet may be incomplete. Data is saved locally in your browser.", variant: "destructive"});
         setAllEmployees([]);
         setAllPerformanceDeductions([]);
       }
     }
     setIsLoadingData(false);
-  }, [toast]);
+  }, []); // Runs once on mount
 
   React.useEffect(() => {
     if (isLoadingData || !selectedMonth || !selectedYear || selectedYear === 0) {
@@ -157,9 +157,12 @@ export default function SalarySheetPage() {
             try {
                 const parsedAtt = JSON.parse(storedAttendance);
                 if (Array.isArray(parsedAtt)) attendanceDataForSelectedMonth = parsedAtt;
-                else { console.warn(`Attendance data for ${selectedMonth} ${selectedYear} is not an array.`); }
+                else { 
+                  console.warn(`Attendance data for ${selectedMonth} ${selectedYear} in localStorage is not an array.`);
+                  toast({title: "Attendance Data Format Error", description: `Stored attendance for ${selectedMonth} ${selectedYear} is corrupted. Using empty data.`, variant: "destructive", duration: 7000});
+                }
             } catch (e) {
-                console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`);
+                console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear} from localStorage:`, e);
                 toast({title: "Attendance Data Corrupted", description: `Could not parse stored attendance for ${selectedMonth} ${selectedYear}. Salary calculations may be affected.`, variant: "destructive", duration: 7000});
             }
         }
@@ -171,9 +174,12 @@ export default function SalarySheetPage() {
             try {
                 const parsedEdits = JSON.parse(storedEdits);
                 if (typeof parsedEdits === 'object' && parsedEdits !== null) salaryEditsForSelectedMonth = parsedEdits;
-                 else { console.warn(`Salary edits for ${selectedMonth} ${selectedYear} is not an object.`); }
+                 else { 
+                   console.warn(`Salary edits for ${selectedMonth} ${selectedYear} in localStorage is not an object.`);
+                   toast({title: "Salary Edits Format Error", description: `Stored salary edits for ${selectedMonth} ${selectedYear} are corrupted. Using defaults.`, variant: "destructive", duration: 7000});
+                 }
             } catch (e) {
-                 console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear}: ${e}`);
+                 console.warn(`Error parsing salary edits for ${selectedMonth} ${selectedYear} from localStorage:`, e);
                  toast({title: "Salary Edits Data Corrupted", description: `Could not parse stored salary edits for ${selectedMonth} ${selectedYear}. Using defaults.`, variant: "destructive", duration: 7000});
             }
         }
@@ -185,19 +191,19 @@ export default function SalarySheetPage() {
     );
 
     const newSalarySheetData = allEmployees
-      .filter(emp => { 
+      .filter(emp => {
         return attendanceDataForSelectedMonth.some(att => att.code === emp.code);
       })
       .map(emp => {
         const empAttendanceRecord = attendanceDataForSelectedMonth.find(att => att.code === emp.code);
 
         if (!empAttendanceRecord || !empAttendanceRecord.attendance) {
-          return null;
+          return null; // Should be caught by filter above, but defensive
         }
 
         const totalDaysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex, 1));
         const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
-        
+
         let daysPaid = 0;
         let weekOffs = 0;
         let fullAbsentDays = 0;
@@ -244,9 +250,9 @@ export default function SalarySheetPage() {
 
 
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0; 
-        const professionalTax = 0; 
-        const providentFund = 0; 
+        const esic = 0;
+        const professionalTax = 0;
+        const providentFund = 0;
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionCombined;
         const netPaid = totalAllowance - totalDeduction;
 
@@ -261,7 +267,7 @@ export default function SalarySheetPage() {
           monthlyCA: monthlyComponents.ca,
           monthlyOtherAllowance: monthlyComponents.otherAllowance,
           monthlyMedical: monthlyComponents.medical,
-          calculatedGross: monthlyComponents.totalGross, 
+          calculatedGross: monthlyComponents.totalGross,
           actualBasic, actualHRA, actualCA, actualOtherAllowance, actualMedical,
           arrears, tds, loan, salaryAdvance, manualOtherDeduction: manualOtherDeductionVal, performanceDeduction: performanceDeductionAmount,
           totalAllowance, esic, professionalTax, providentFund, totalDeduction, netPaid,
@@ -272,7 +278,7 @@ export default function SalarySheetPage() {
 
     setSalarySheetData(newSalarySheetData);
     setIsLoadingCalculations(false);
-  }, [allEmployees, selectedMonth, selectedYear, isLoadingData, allPerformanceDeductions, toast]);
+  }, [allEmployees, selectedMonth, selectedYear, isLoadingData, allPerformanceDeductions]);
 
 
   React.useEffect(() => {
@@ -302,12 +308,12 @@ export default function SalarySheetPage() {
           else if (fieldName === 'tds') updatedEmp.tds = numericValue;
           else if (fieldName === 'loan') updatedEmp.loan = numericValue;
           else if (fieldName === 'salaryAdvance') updatedEmp.salaryAdvance = numericValue;
-          
+
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
           const newTotalOtherDeductionCombined = updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
           const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund +
                                    updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance +
-                                   newTotalOtherDeductionCombined; 
+                                   newTotalOtherDeductionCombined;
           const newNetPaid = newTotalAllowance - newTotalDeduction;
 
           return { ...updatedEmp, totalAllowance: newTotalAllowance, totalDeduction: newTotalDeduction, netPaid: newNetPaid };
@@ -328,7 +334,7 @@ export default function SalarySheetPage() {
         } else {
             updatedEditsForStorage[employeeId]![fieldName] = numericValue;
         }
-        setSalaryEditsForPeriod(updatedEditsForStorage); 
+        setSalaryEditsForPeriod(updatedEditsForStorage);
 
         if (typeof window !== 'undefined') {
             try {
@@ -336,7 +342,7 @@ export default function SalarySheetPage() {
                 localStorage.setItem(editsKey, JSON.stringify(updatedEditsForStorage));
             } catch (error) {
                 console.error("Error saving salary edits to localStorage:", error);
-                toast({ title: "Storage Error", description: "Could not save salary edits.", variant: "destructive" });
+                toast({ title: "Storage Error", description: "Could not save salary edits. Data is saved locally in your browser.", variant: "destructive" });
             }
         }
     }
@@ -348,7 +354,7 @@ export default function SalarySheetPage() {
       return;
     }
     if (allEmployees.length === 0) {
-      toast({ title: "No Data", description: "No employee master data found.", variant: "destructive" });
+      toast({ title: "No Data", description: "No employee master data found. Data is saved locally in your browser.", variant: "destructive" });
       return;
     }
 
@@ -370,7 +376,7 @@ export default function SalarySheetPage() {
         try {
           const parsedAtt = JSON.parse(storedAttendance);
           if (Array.isArray(parsedAtt)) attendanceDataForCsv = parsedAtt;
-        } catch(e) { console.warn("Error parsing attendance for CSV export"); }
+        } catch(e) { console.warn("Error parsing attendance for CSV export from localStorage"); }
       }
 
       const editsKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
@@ -379,7 +385,7 @@ export default function SalarySheetPage() {
         try {
           const parsedEdits = JSON.parse(storedEdits);
           if (typeof parsedEdits === 'object' && parsedEdits !== null) salaryEditsForCsv = parsedEdits;
-        } catch(e) { console.warn("Error parsing salary edits for CSV export"); }
+        } catch(e) { console.warn("Error parsing salary edits for CSV export from localStorage"); }
       }
 
       const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
@@ -391,7 +397,7 @@ export default function SalarySheetPage() {
                     (pd: PerformanceDeductionEntry) => pd.month === selectedMonth && pd.year === selectedYear
                   );
                 }
-            } catch (e) { console.warn("Error parsing performance deductions for CSV export"); }
+            } catch (e) { console.warn("Error parsing performance deductions for CSV export from localStorage"); }
         }
     }
 
@@ -407,16 +413,16 @@ export default function SalarySheetPage() {
             dailyStatuses.forEach(status => {
               if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaid++;
               else if (status === 'HD') { daysPaid += 0.5; halfDaysTaken++; }
-              else if (status === 'W') { weekOffs++; daysPaid++; } 
+              else if (status === 'W') { weekOffs++; daysPaid++; }
               else if (status === 'A') fullAbsentDays++;
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
         } else {
-            if (emp.status === "Active") { // Only consider active employees as fully absent if no attendance record
+            if (emp.status === "Active") {
                  fullAbsentDays = totalDaysInMonth;
-            } else { // For "Left" employees, if no attendance, assume 0 paid days and not absent for whole month
+            } else {
                 daysPaid = 0;
-                fullAbsentDays = 0; 
+                fullAbsentDays = 0;
             }
         }
 
@@ -444,11 +450,10 @@ export default function SalarySheetPage() {
         const totalOtherDeductionCombined = manualOtherDeductionVal + performanceDeductionAmount;
 
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0, professionalTax = 0, providentFund = 0; 
+        const esic = 0, professionalTax = 0, providentFund = 0;
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeductionCombined;
         const netPaid = totalAllowance - totalDeduction;
 
-        // Only include if there's an attendance record OR if the employee is Left (to show their details with 0 pay if no attendance)
         if (empAttendanceRecord || emp.status === "Left") {
             return {
             ...emp, totalDaysInMonth, daysPaid, weekOffs, daysAbsent: daysAbsentCalculated,
@@ -459,26 +464,26 @@ export default function SalarySheetPage() {
             arrears, tds, loan, salaryAdvance, manualOtherDeduction: manualOtherDeductionVal, performanceDeduction: performanceDeductionAmount,
             esic, professionalTax, providentFund,
             totalAllowance, totalDeduction, netPaid,
-            employeeStatus: emp.status as "Active" | "Left", 
+            employeeStatus: emp.status as "Active" | "Left",
             };
         }
-        return null; 
+        return null;
       })
       .filter(emp => emp !== null) as SalarySheetEntry[];
 
     if (dataToExport.length === 0) {
-      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing for all active employees.", variant: "destructive" });
+      toast({ title: "No Data", description: "No employees processed for the selected period to export. Attendance data might be missing for all active employees. Data is saved locally in your browser.", variant: "destructive" });
       return;
     }
 
     const headers = [
-      "Employee Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", 
-      "Total Days", "Day Paid", "Week Off", "Day Absent", 
-      "Monthly Basic", "Monthly HRA", "Monthly CA", "Monthly Other Allowance", "Monthly Medical", "Monthly Gross", 
-      "Basic", "HRA", "CA", "Other Allowance", "Medical", 
-      "Arrears", "Total Allowance", 
-      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Manual Other Ded.", "Performance Ded.", "Total Other Ded.", 
-      "Total Deduction", "Net Paid" 
+      "Employee Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ",
+      "Total Days", "Day Paid", "Week Off", "Day Absent",
+      "Monthly Basic", "Monthly HRA", "Monthly CA", "Monthly Other Allowance", "Monthly Medical", "Monthly Gross",
+      "Basic", "HRA", "CA", "Other Allowance", "Medical",
+      "Arrears", "Total Allowance",
+      "ESIC", "Professional Tax", "PROVFUND", "TDS", "Loan", "Salary Advance", "Manual Other Ded.", "Performance Ded.", "Total Other Ded.",
+      "Total Deduction", "Net Paid"
     ];
     const csvRows = [headers.join(',')];
 
@@ -494,7 +499,7 @@ export default function SalarySheetPage() {
         emp.arrears.toFixed(2), emp.totalAllowance.toFixed(2),
         emp.esic.toFixed(2), emp.professionalTax.toFixed(2), emp.providentFund.toFixed(2), emp.tds.toFixed(2), emp.loan.toFixed(2), emp.salaryAdvance.toFixed(2), emp.manualOtherDeduction.toFixed(2), emp.performanceDeduction.toFixed(2), totalOtherDeductionForEmp.toFixed(2),
         emp.totalDeduction.toFixed(2), emp.netPaid.toFixed(2),
-      ].map(val => `"${String(val).replace(/"/g, '""')}"`); 
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`);
       csvRows.push(row.join(','));
     });
 
@@ -526,7 +531,7 @@ export default function SalarySheetPage() {
     };
 
      const totalRow = [
-        "", "", "", "", "", "", "TOTALS:", "", "", "", "", 
+        "", "", "", "", "", "", "TOTALS:", "", "", "", "",
         totals.monthlyBasic.toFixed(2), totals.monthlyHRA.toFixed(2), totals.monthlyCA.toFixed(2), totals.monthlyOtherAllowance.toFixed(2), totals.monthlyMedical.toFixed(2), totals.calculatedGross.toFixed(2),
         totals.actualBasic.toFixed(2), totals.actualHRA.toFixed(2), totals.actualCA.toFixed(2), totals.actualOtherAllowance.toFixed(2), totals.actualMedical.toFixed(2),
         totals.arrears.toFixed(2), totals.totalAllowance.toFixed(2),
@@ -758,5 +763,3 @@ export default function SalarySheetPage() {
     </>
   );
 }
-
-    

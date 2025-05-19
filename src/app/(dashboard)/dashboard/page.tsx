@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { UserCheck, CalendarCheck, History, DollarSign, HardDrive, UploadCloud, DownloadCloud } from "lucide-react";
-import type { EmployeeDetail } from "@/lib/hr-data"; 
-import { useToast } from "@/hooks/use-toast"; 
+import type { EmployeeDetail } from "@/lib/hr-data";
+import { useToast } from "@/hooks/use-toast";
 import { getMonth, getYear, subMonths, format } from "date-fns";
 import {
   Accordion,
@@ -24,7 +24,7 @@ const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; 
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
@@ -38,13 +38,13 @@ interface StoredEmployeeAttendanceData {
   attendance: string[];
 }
 
-interface StoredUploadContext { 
+interface StoredUploadContext {
   month: string;
   year: number;
 }
 
 export default function DashboardPage() {
-  const { toast } = useToast(); 
+  const { toast } = useToast();
   const [dashboardCards, setDashboardCards] = React.useState([
     { title: "Total Employees", value: "N/A", icon: UserCheck, description: "Active employees", dataAiHint: "team office" },
     { title: "Overall Attendance (Last Upload)", value: "N/A", icon: CalendarCheck, description: "From last uploaded file", dataAiHint: "calendar schedule" },
@@ -64,7 +64,7 @@ export default function DashboardPage() {
     let activeEmployeesCount = 0;
     let overallAttendanceValue = "N/A";
     let attendanceDescription = "From last uploaded file";
-    let totalLeaveRecords = 0; 
+    let totalLeaveRecords = 0;
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
 
@@ -76,9 +76,9 @@ export default function DashboardPage() {
            if (Array.isArray(employeesFromStorage)) {
             activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
            } else {
-            activeEmployeesCount = 0; 
+            activeEmployeesCount = 0;
             console.warn("Employee master data in localStorage is corrupted or not an array. Showing 0.");
-            toast({ title: "Data Warning", description: "Could not properly read employee master data from local storage.", variant: "destructive", duration: 7000 });
+            toast({ title: "Data Warning", description: "Could not properly read employee master data from local storage. Data is saved locally in your browser.", variant: "destructive", duration: 7000 });
            }
         } else {
           activeEmployeesCount = 0;
@@ -110,15 +110,17 @@ export default function DashboardPage() {
                 overallAttendanceValue = "N/A";
                 attendanceDescription = `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} is corrupted.`;
                 console.warn("Last uploaded attendance data is corrupted.");
+                 toast({ title: "Data Warning", description: `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} in localStorage is corrupted. Dashboard may not show latest attendance.`, variant: "destructive", duration: 7000 });
               }
-            } else { 
+            } else {
               overallAttendanceValue = "N/A";
-              attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; 
+              attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`;
             }
           } catch (e) {
             console.error("Error parsing last upload context or its attendance data:", e);
             overallAttendanceValue = "N/A";
             attendanceDescription = "Error reading attendance context.";
+            toast({ title: "Data Warning", description: "Could not properly read last upload context. Dashboard may not show latest attendance.", variant: "destructive", duration: 7000 });
           }
         } else { attendanceDescription = "No attendance data uploaded yet."; }
 
@@ -153,6 +155,7 @@ export default function DashboardPage() {
               console.error("Error parsing last month's attendance for payroll status:", e);
               payrollStatusValue = "Error";
               payrollStatusDescription = `Error reading ${lastMonthName} ${lastMonthYear} attendance`;
+              toast({ title: "Data Warning", description: `Could not read last month's attendance (${lastMonthName} ${lastMonthYear}) for payroll status.`, variant: "destructive", duration: 7000 });
             }
         } else {
            payrollStatusValue = "Pending";
@@ -161,7 +164,7 @@ export default function DashboardPage() {
 
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
-          toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage.", variant: "destructive", duration: 7000});
+          toast({title: "Data Fetch Error", description: "Could not fetch some dashboard data from localStorage. Data is saved locally in your browser.", variant: "destructive", duration: 7000});
           activeEmployeesCount = 0;
           overallAttendanceValue = "N/A";
           attendanceDescription = "Error fetching data.";
@@ -179,7 +182,7 @@ export default function DashboardPage() {
       return card;
     }));
     setIsLoading(false);
-  }, [toast]); 
+  }, []); // Runs once on mount
 
 
   const handleExportData = () => {
@@ -200,14 +203,14 @@ export default function DashboardPage() {
         try {
           allData[key] = JSON.parse(item);
         } catch (e) {
-          allData[key] = item; 
+          allData[key] = item;
         }
       }
     });
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) || 
+      if (key && (key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) ||
                   key.startsWith(LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX) ||
                   key.startsWith(LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX))) {
         const item = localStorage.getItem(key);
@@ -254,14 +257,14 @@ export default function DashboardPage() {
       }
 
       const knownPrefixes = [
-          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX, 
-          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX, 
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
           LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
       ];
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && (knownPrefixes.some(prefix => key.startsWith(prefix)) || 
+          if(key && (knownPrefixes.some(prefix => key.startsWith(prefix)) ||
              [
                 LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
                 LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,

@@ -84,30 +84,28 @@ export default function UserManagementPage() {
           if (Array.isArray(parsedUsers)) {
             usersToSet = parsedUsers;
           } else {
-            console.error("Simulated users data in localStorage is not an array. Resetting to empty.");
-            toast({ 
-                title: "Data Format Error", 
-                description: "Stored user list is corrupted. Please add users again if needed.", 
+            console.error("Simulated users data in localStorage is not an array. Resetting to empty. Data is saved locally in your browser.");
+            toast({
+                title: "Data Format Error",
+                description: "Stored user list is corrupted. Please add users again if needed. Data is saved locally in your browser.",
                 variant: "destructive",
                 duration: 7000,
             });
-            // No automatic deletion, let user decide
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
-        toast({ 
-            title: "Data Load Error", 
-            description: "Could not load user list. Stored data might be corrupted. Please add users again if needed.", 
+        toast({
+            title: "Data Load Error",
+            description: "Could not load user list. Stored data might be corrupted. Please add users again if needed. Data is saved locally in your browser.",
             variant: "destructive",
             duration: 7000,
         });
-         // No automatic deletion, let user decide
       }
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, [toast]);
+  }, []); // Runs once on mount
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -207,7 +205,7 @@ export default function UserManagementPage() {
       description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow. Passwords for simulated users are not stored.`,
     });
   };
-  
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -318,29 +316,29 @@ export default function UserManagementPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center space-x-1">
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleResetPassword(user.username)} 
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleResetPassword(user.username)}
                         title={`Simulate Reset Password for ${user.username}`}
                         disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       <KeyRound className="h-4 w-4" />
                     </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleToggleLock(user.id)} 
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleLock(user.id)}
                         title={user.isLocked ? `Unlock ${user.username}` : `Lock ${user.username}`}
                         disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
                       {user.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                     </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleDeleteUserClick(user)} 
-                        title={`Delete ${user.username}`} 
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteUserClick(user)}
+                        title={`Delete ${user.username}`}
                         className="text-destructive hover:text-destructive/80"
                         disabled={user.username === MAIN_ADMIN_USERNAME}
                     >
@@ -380,4 +378,3 @@ export default function UserManagementPage() {
     </>
   );
 }
-    

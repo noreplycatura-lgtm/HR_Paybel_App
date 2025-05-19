@@ -22,7 +22,7 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual, not fully used
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
 
@@ -43,7 +43,7 @@ interface LeaveDisplayData extends EmployeeDetail {
   openingPLNextMonth: number;
 }
 
-interface MonthlyEmployeeAttendance { 
+interface MonthlyEmployeeAttendance {
   code: string;
   attendance: string[];
 }
@@ -60,7 +60,7 @@ export default function LeavePage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
   const [openingBalances, setOpeningBalances] = React.useState<OpeningLeaveBalance[]>([]);
-  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]); 
+  const [leaveApplications, setLeaveApplications] = React.useState<LeaveApplication[]>([]);
 
   const [currentYearState, setCurrentYearState] = React.useState(0);
   const [selectedMonth, setSelectedMonth] = React.useState<string>('');
@@ -117,7 +117,7 @@ export default function LeavePage() {
         } else {
              setOpeningBalances([]);
         }
-        
+
         const storedApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedApps) {
            try {
@@ -141,26 +141,26 @@ export default function LeavePage() {
       }
     }
     setIsLoading(false);
-  }, [toast]); 
+  }, []); // Runs once on mount
 
   React.useEffect(() => {
-    if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
+    if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0 || isLoading) {
       setDisplayData([]);
-      setIsLoading(false);
+      if (!isLoading && employees.length > 0) setIsLoading(false); // Ensure loading state is correct
       return;
     }
 
     setIsLoading(true);
     const monthIndex = months.indexOf(selectedMonth);
-    if (monthIndex === -1) { 
+    if (monthIndex === -1) {
       setDisplayData([]);
       setIsLoading(false);
       return;
     }
-    
+
     const selectedMonthStartDate = startOfMonth(new Date(selectedYear, monthIndex, 1));
     const selectedMonthEndDate = endOfMonth(selectedMonthStartDate);
-    
+
     const prevMonthDateObject = addMonths(selectedMonthStartDate, -1);
     const prevMonthName = months[getMonth(prevMonthDateObject)];
     const prevMonthYear = getYear(prevMonthDateObject);
@@ -173,7 +173,7 @@ export default function LeavePage() {
         if (currentMonthKeys.rawDataKey) {
             const storedAtt = localStorage.getItem(currentMonthKeys.rawDataKey);
             if (storedAtt) {
-                try { 
+                try {
                   const parsed = JSON.parse(storedAtt);
                   if(Array.isArray(parsed)) attendanceForSelectedMonth = parsed;
                 }
@@ -184,7 +184,7 @@ export default function LeavePage() {
         if (prevMonthKeys.rawDataKey) {
             const storedAttPrev = localStorage.getItem(prevMonthKeys.rawDataKey);
             if (storedAttPrev) {
-                try { 
+                try {
                   const parsed = JSON.parse(storedAttPrev);
                   if(Array.isArray(parsed)) attendanceForPrevMonth = parsed;
                 }
@@ -194,11 +194,11 @@ export default function LeavePage() {
     }
 
     const newDisplayData = employees
-      .filter(emp => emp.status === "Active") 
-      .map(emp => { 
-        
+      .filter(emp => emp.status === "Active")
+      .map(emp => {
+
         const accruedDetails = calculateEmployeeLeaveDetailsForPeriod(
-          emp, selectedYear, monthIndex, leaveApplications, openingBalances 
+          emp, selectedYear, monthIndex, leaveApplications, openingBalances
         );
 
         let usedCLInMonthFromAttendance = 0;
@@ -234,7 +234,7 @@ export default function LeavePage() {
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
         const nextMonthIndexVal = getMonth(nextMonthDateObject);
         const nextMonthYearVal = getYear(nextMonthDateObject);
-        
+
         const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
         const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
@@ -248,17 +248,17 @@ export default function LeavePage() {
             accrualSLNextMonth = SL_ACCRUAL_RATE;
             accrualPLNextMonth = PL_ACCRUAL_RATE;
         }
-        
+
         let openingCLForNextMonthCalc = 0;
         let openingSLForNextMonthCalc = 0;
-        const openingPLForNextMonthCalc = finalBalancePLAtMonthEnd + accrualPLNextMonth; 
+        const openingPLForNextMonthCalc = finalBalancePLAtMonthEnd + accrualPLNextMonth;
 
-        if (nextMonthIndexVal === 3) { 
+        if (nextMonthIndexVal === 3) {
             const obForNextFY = openingBalances.find(
               (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthYearVal
             );
-            openingCLForNextMonthCalc = (obForNextFY?.openingCL || 0) + accrualCLNextMonth; 
-            openingSLForNextMonthCalc = (obForNextFY?.openingSL || 0) + accrualSLNextMonth; 
+            openingCLForNextMonthCalc = (obForNextFY?.openingCL || 0) + accrualCLNextMonth;
+            openingSLForNextMonthCalc = (obForNextFY?.openingSL || 0) + accrualSLNextMonth;
         } else {
             openingCLForNextMonthCalc = finalBalanceCLAtMonthEnd + accrualCLNextMonth;
             openingSLForNextMonthCalc = finalBalanceSLAtMonthEnd + accrualSLNextMonth;
@@ -282,10 +282,10 @@ export default function LeavePage() {
     });
 
     setDisplayData(newDisplayData.filter(d => d !== null) as LeaveDisplayData[]);
-    setSelectedEmployeeIds(new Set()); 
+    setSelectedEmployeeIds(new Set());
     setIsLoading(false);
 
-  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
+  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear, isLoading]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -330,7 +330,7 @@ export default function LeavePage() {
   };
 
   const handleSaveOpeningBalances = () => {
-    if (!editingEmployeeForOB || editingOBYear <= 0) { 
+    if (!editingEmployeeForOB || editingOBYear <= 0) {
       toast({ title: "Error", description: "No employee or invalid financial year selected for editing opening balances.", variant: "destructive"});
       return;
     }
@@ -463,7 +463,7 @@ export default function LeavePage() {
 
             const dataRows = lines.slice(1);
             const newUploadedOpeningBalances: OpeningLeaveBalance[] = [];
-            const employeeCodesInFile = new Set<string>(); 
+            const employeeCodesInFile = new Set<string>();
             let skippedDuplicatesInFile = 0;
             let malformedRows = 0;
 
@@ -503,7 +503,7 @@ export default function LeavePage() {
             let message = "";
             if (newUploadedOpeningBalances.length > 0) {
                 message += `${newUploadedOpeningBalances.length} records processed from ${file.name}. `;
-                
+
                 const existingRecordsMap = new Map(openingBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
                 newUploadedOpeningBalances.forEach(nb => {
                     existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb);
@@ -751,7 +751,7 @@ export default function LeavePage() {
                 <TableHead className="min-w-[150px]">Designation</TableHead>
                 <TableHead className="min-w-[100px]">HQ</TableHead>
                 <TableHead className="min-w-[100px]">DOJ</TableHead>
-                
+
                 <TableHead className="text-center min-w-[100px]">Used CL (Last Mth)</TableHead>
                 <TableHead className="text-center min-w-[100px]">Used SL (Last Mth)</TableHead>
                 <TableHead className="text-center min-w-[100px]">Used PL (Last Mth)</TableHead>
@@ -808,12 +808,12 @@ export default function LeavePage() {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) { 
-                                   if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
-                                   else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
-                                } else if (part1 > 1000) { 
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
+                                if (part3 > 1000) {
+                                   if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
+                                   else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
+                                } else if (part1 > 1000) {
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
                                 } else {
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
@@ -821,11 +821,11 @@ export default function LeavePage() {
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd MMM yyyy");
-                            return emp.doj; 
+                            return emp.doj;
                           }
                           return format(parsedDate, "dd MMM yyyy");
                         } catch (e) {
-                          return emp.doj; 
+                          return emp.doj;
                         }
                       }
                       return 'N/A';
@@ -863,4 +863,3 @@ export default function LeavePage() {
     </>
   );
 }
-
