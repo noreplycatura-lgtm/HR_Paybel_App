@@ -32,18 +32,20 @@ export default function DashboardLayout({
   const [isAuthCheckComplete, setIsAuthCheckComplete] = React.useState(false);
 
   React.useEffect(() => {
+    // This effect runs when the component mounts and when 'router' changes (which should be stable)
     if (typeof window !== 'undefined') {
       const isLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
       if (!isLoggedIn) {
-        router.replace('/login');
+        router.replace('/login'); // Use replace to avoid login page in history
       } else {
-        setIsAuthCheckComplete(true);
+        setIsAuthCheckComplete(true); // Allow rendering children
       }
     }
-  }, [router]);
+  }, [router]); // Dependency array
 
   if (!isAuthCheckComplete) {
-    // Optionally, render a loading spinner or null while auth check is in progress
+    // Render nothing or a loading spinner while auth check is in progress
+    // This prevents rendering children prematurely if the user is not logged in
     return null; 
   }
 
@@ -68,7 +70,7 @@ function AppSidebar() {
     setIsClient(true);
   }, []);
 
-  const renderState = isClient ? sidebarContextState : "collapsed";
+  const renderState = isClient ? sidebarContextState : "collapsed"; // Default to collapsed for SSR/initial render
 
   return (
     <Sidebar collapsible="icon" className="print:hidden">

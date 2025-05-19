@@ -5,8 +5,6 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-// import Image from "next/image"; // No longer needed for logo
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -22,7 +20,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { APP_NAME } from "@/lib/constants"; // Changed COMPANY_NAME to APP_NAME for consistency
 
 const loginFormSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -78,7 +75,6 @@ export function LoginForm() {
           }
         } catch (error) {
           console.error("Error reading co-admin users from localStorage:", error);
-          // Fall through, loginSuccess remains false
         }
       }
     }
@@ -89,11 +85,11 @@ export function LoginForm() {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
       }
+      router.replace("/dashboard"); // Use replace and call before toast
       toast({
         title: "Login Successful",
         description: welcomeMessage,
       });
-      router.push("/dashboard");
     } else {
       toast({
         variant: "destructive",
@@ -107,15 +103,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
-        {/* <Image
-          src="https://placehold.co/150x50.png?text=Novita+Healthcare"
-          alt={`${COMPANY_NAME} Logo`}
-          width={150}
-          height={50}
-          className="mb-4"
-          data-ai-hint="company logo"
-        /> */}
-        <h1 className="text-3xl font-bold mb-2 text-primary">HR PAYROLL APP</h1>
+        <h1 className="text-3xl font-bold mb-2 text-primary uppercase">HR Payroll App</h1>
         <CardTitle className="text-2xl font-bold">Login</CardTitle>
         <CardDescription>Enter your credentials to access the portal.</CardDescription>
       </CardHeader>
@@ -148,11 +136,6 @@ export function LoginForm() {
                 </FormItem>
               )}
             />
-            <div className="flex items-center justify-between">
-              {/* <Link href="#" className="text-sm text-primary hover:underline invisible">
-                Forgot Password?
-              </Link> */}
-            </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Login
