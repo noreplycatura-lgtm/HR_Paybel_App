@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, KeySquare } from "lucide-react";
+import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, KeySquare, Activity } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
 import { getMonth, getYear, subMonths, format } from "date-fns";
@@ -31,7 +31,7 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; 
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // New key
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -92,12 +92,7 @@ export default function DashboardPage() {
     let totalLeaveRecordsCount = 0;
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
-    let illustrativeActivities: ActivityLogEntry[] = [
-      { timestamp: new Date().toISOString(), message: "Attendance for May 2024 uploaded." },
-      { timestamp: subMonths(new Date(), 1).toISOString(), message: "Employee John Doe added to master." },
-      { timestamp: subMonths(new Date(), 2).toISOString(), message: "Salary slip generated for Jane Smith." },
-    ];
-
+    
     if (typeof window !== 'undefined') {
       try {
         // Calculate Total Active Employees
@@ -218,14 +213,19 @@ export default function DashboardPage() {
            payrollStatusDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
         }
 
-        // Load Recent Activities (Illustrative for now)
-        // const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
-        // if (storedActivitiesStr) {
-        //   const parsedActivities: ActivityLogEntry[] = JSON.parse(storedActivitiesStr);
-        //   setRecentActivities(Array.isArray(parsedActivities) ? parsedActivities.slice(0, 5) : illustrativeActivities);
-        // } else {
-           setRecentActivities(illustrativeActivities);
-        // }
+        // Load Recent Activities from localStorage
+        const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+        if (storedActivitiesStr) {
+          try {
+            const parsedActivities: ActivityLogEntry[] = JSON.parse(storedActivitiesStr);
+            setRecentActivities(Array.isArray(parsedActivities) ? parsedActivities.slice(0, 5) : []);
+          } catch (e) {
+            console.error("Error parsing recent activities from localStorage:", e);
+            setRecentActivities([]);
+          }
+        } else {
+           setRecentActivities([]);
+        }
 
 
       } catch (error) {
@@ -234,7 +234,7 @@ export default function DashboardPage() {
           lastMonthSalaryTotalValue = "N/A (Error)";
           totalLeaveRecordsCount = 0;
           payrollStatusValue = "Error";
-          setRecentActivities(illustrativeActivities);
+          setRecentActivities([]);
       }
     }
 
@@ -338,10 +338,15 @@ export default function DashboardPage() {
           LOCAL_STORAGE_SIMULATED_USERS_KEY,
           LOCAL_STORAGE_RECENT_ACTIVITIES_KEY
       ];
+      const knownDynamicPrefixesForClear = [
+        LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+        LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+        LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+      ];
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && (knownDynamicPrefixes.some(prefix => key.startsWith(prefix)) ||
+          if(key && (knownDynamicPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
              knownKeysForClear.includes(key))) {
             keysToRemove.push(key);
           }
@@ -357,6 +362,7 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
+      // Trigger a hard reload to ensure all components re-fetch data
       window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
@@ -387,7 +393,7 @@ export default function DashboardPage() {
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle>Recent Activities</CardTitle>
-              <CardDescription>Latest updates and notifications (Illustrative).</CardDescription>
+              <CardDescription>Latest updates and notifications from your HR portal.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-4 w-3/4 bg-muted rounded animate-pulse mb-2"></div>
@@ -433,8 +439,8 @@ export default function DashboardPage() {
       <div className="grid gap-6 mt-8 md:grid-cols-2">
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Recent Activities</CardTitle>
-            <CardDescription>Latest updates from your HR activities. (Illustrative for now)</CardDescription>
+            <CardTitle className="flex items-center"><Activity className="mr-2 h-5 w-5 text-primary" />Recent Activities</CardTitle>
+            <CardDescription>Latest updates from your HR portal.</CardDescription>
           </CardHeader>
           <CardContent>
             {recentActivities.length > 0 ? (
@@ -585,3 +591,6 @@ export default function DashboardPage() {
     </>
   );
 }
+
+
+    

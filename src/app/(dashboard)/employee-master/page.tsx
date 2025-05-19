@@ -24,6 +24,7 @@ import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // Added for logging
 
 const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -110,6 +111,27 @@ const employeeFormSchema = z.object({
 
 type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
+interface ActivityLogEntry {
+  timestamp: string;
+  message: string;
+}
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = []; // Ensure it's an array
+
+    activities.unshift({ timestamp: new Date().toISOString(), message });
+    activities = activities.slice(0, 10); // Keep last 10 activities
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log:", error);
+  }
+};
+
+
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
   const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
@@ -150,30 +172,31 @@ export default function EmployeeMasterPage() {
           if (Array.isArray(parsedEmployees)) {
             setEmployees(parsedEmployees);
           } else {
-            console.error("Employee master data in localStorage is not an array. Initializing with sample data.");
+            console.error("Employee master data in localStorage is corrupted or not an array. Initializing with sample data. Data is saved locally in your browser.");
             toast({
               title: "Data Error",
-              description: "Stored employee data is corrupted. Initializing with sample data. Please verify and re-upload if necessary. Data is saved locally in your browser.",
+              description: "Stored employee data is corrupted. Please verify and re-upload if necessary. Data is saved locally in your browser.",
               variant: "destructive",
               duration: 7000,
             });
-            setEmployees(sampleEmployees);
+            setEmployees(sampleEmployees); // Use sample as fallback
             localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
           }
         } else {
+          // No data in localStorage, initialize with sample data and save it
           setEmployees(sampleEmployees);
           localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
-          toast({ title: "Data Initialized", description: "No existing employee data found. Initialized with sample data. Data is saved locally in your browser.", duration: 5000 });
+          toast({ title: "Data Initialized", description: "Initialized with sample employee data. Data is saved locally in your browser.", duration: 5000 });
         }
       } catch (error) {
-        console.error("Error loading employees from localStorage:", error);
+        console.error("Error loading/processing employees from localStorage:", error);
         toast({
           title: "Storage Error",
-          description: "Could not load employee data due to a storage error. Initializing with sample data. Data is saved locally in your browser.",
+          description: "Could not load employee data due to a storage error. Data is saved locally in your browser. Initializing with sample data.",
           variant: "destructive",
           duration: 7000,
         });
-        setEmployees(sampleEmployees);
+        setEmployees(sampleEmployees); // Fallback to sample data on error
         localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
       }
     }
@@ -207,6 +230,7 @@ export default function EmployeeMasterPage() {
       );
       setEmployees(updatedEmployees);
       saveEmployeesToLocalStorage(updatedEmployees);
+      addActivityLog(`Employee ${submissionValues.name} (Code: ${submissionValues.code}) details updated.`);
       toast({ title: "Employee Updated", description: `${submissionValues.name}'s details have been updated.` });
     } else {
       const existingEmployee = employees.find(emp => emp.code === submissionValues.code);
@@ -220,7 +244,7 @@ export default function EmployeeMasterPage() {
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code,
+        id: submissionValues.code, // Use code as ID for simplicity in this prototype
         ...submissionValues,
         dor: submissionValues.dor || undefined,
         revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
@@ -229,6 +253,7 @@ export default function EmployeeMasterPage() {
       const updatedEmployees = [...employees, newEmployee];
       setEmployees(updatedEmployees);
       saveEmployeesToLocalStorage(updatedEmployees);
+      addActivityLog(`New employee ${submissionValues.name} (Code: ${submissionValues.code}) added.`);
       toast({ title: "Employee Added", description: `${submissionValues.name} has been added to the master list.` });
     }
     setIsEmployeeFormOpen(false);
@@ -276,6 +301,7 @@ export default function EmployeeMasterPage() {
         newSet.delete(employeeToDelete.id);
         return newSet;
     });
+    addActivityLog(`Employee ${employeeToDelete.name} (Code: ${employeeToDelete.code}) deleted.`);
     toast({
         title: "Employee Removed",
         description: `${employeeToDelete.name} has been removed from the list.`,
@@ -329,7 +355,7 @@ export default function EmployeeMasterPage() {
         let skippedForDuplicateInCsv = 0;
         let malformedRows = 0;
         let addedCount = 0;
-        let updatedCount = 0;
+        let skippedForExistingInMaster = 0;
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
@@ -349,8 +375,8 @@ export default function EmployeeMasterPage() {
           const doj = values[idxDoj];
           let dor = values[idxDor] || "";
           const grossMonthlySalaryStr = values[idxGrossSalary];
-          const revisedGrossMonthlySalaryStr = values[idxRevisedGrossSalary];
-          const salaryEffectiveDateStr = values[idxSalaryEffectiveDate];
+          const revisedGrossMonthlySalaryStr = values[idxRevisedGrossSalary] || "";
+          const salaryEffectiveDateStr = values[idxSalaryEffectiveDate] || "";
 
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
           const revisedGrossMonthlySalary = revisedGrossMonthlySalaryStr ? parseFloat(revisedGrossMonthlySalaryStr) : undefined;
@@ -361,10 +387,10 @@ export default function EmployeeMasterPage() {
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            status = "Active";
+            status = "Active"; // Default if status is invalid
             console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
           }
-          if (status === "Active") dor = "";
+          if (status === "Active") dor = ""; // Clear DOR if active
 
           if (codesInCsv.has(code)) {
             console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to duplicate code within this CSV file.`);
@@ -375,15 +401,14 @@ export default function EmployeeMasterPage() {
 
           // Check against existing master list from localStorage
           if (currentEmployeesMap.has(code)) {
-            // For prototype, we'll skip if code exists. Real app might update.
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list. Update via Edit.`);
-            updatedCount++; // Or use a different counter for "already exists"
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list.`);
+            skippedForExistingInMaster++;
             return;
           }
 
           let formattedDoj = doj;
-          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
-             try { const d = new Date(doj.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { // If not YYYY-MM-DD
+            try { const d = new Date(doj.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
           let formattedDor = dor;
           if (dor && !/^\d{4}-\d{2}-\d{2}$/.test(dor)) {
@@ -406,7 +431,6 @@ export default function EmployeeMasterPage() {
 
         let message = "";
         if (newUploadedEmployees.length > 0) {
-            // Add to existing employees, ensuring no duplicates by code with what's already in state
             const combinedEmployees = [...employees];
             newUploadedEmployees.forEach(newEmp => {
                 if (!combinedEmployees.some(e => e.code === newEmp.code)) {
@@ -415,12 +439,13 @@ export default function EmployeeMasterPage() {
             });
             setEmployees(combinedEmployees);
             saveEmployeesToLocalStorage(combinedEmployees);
-            message += `${addedCount} new employee(s) processed from ${file.name}. `;
+            message += `${addedCount} new employee(s) processed and added from ${file.name}. `;
+            addActivityLog(`Employee Master CSV uploaded: ${file.name} (${addedCount} added).`);
         } else {
             message += `No new employees were added from ${file.name}. `;
         }
 
-        if (updatedCount > 0) message += `${updatedCount} row(s) skipped as employee code already exists in master. `;
+        if (skippedForExistingInMaster > 0) message += `${skippedForExistingInMaster} row(s) skipped as employee code already exists in master. `;
         if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
         if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to missing or invalid data. `;
 
@@ -520,6 +545,7 @@ export default function EmployeeMasterPage() {
     const updatedEmployees = employees.filter(emp => !selectedEmployeeIds.has(emp.id));
     setEmployees(updatedEmployees);
     saveEmployeesToLocalStorage(updatedEmployees);
+    addActivityLog(`${selectedEmployeeIds.size} employee(s) deleted from Employee Master.`);
     toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted.`, variant: "destructive" });
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
@@ -730,30 +756,32 @@ export default function EmployeeMasterPage() {
                         try {
                           const parsedDate = parseISO(employee.doj);
                           if (!isValid(parsedDate)) {
+                            // Attempt to parse common non-ISO formats like DD/MM/YYYY or MM/DD/YYYY
                             const parts = employee.doj.split(/[-/.]/);
                             let reparsedDate = null;
                              if (parts.length === 3) {
                                 const part1 = parseInt(parts[0]);
                                 const part2 = parseInt(parts[1]);
                                 const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) {
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
-                                } else if (part1 > 1000) {
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
-                                } else {
+                                // Try DD-MM-YYYY first, then MM-DD-YYYY
+                                if (part3 > 1000) { // YYYY
+                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); // DD-MM-YYYY
+                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); // MM-DD-YYYY
+                                } else if (part1 > 1000) { // YYYY-MM-DD or YYYY-DD-MM (less common)
+                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); // YYYY-DD-MM
+                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); // YYYY-MM-DD (already tried by parseISO)
+                                } else { // YY
                                    const yearShort = part3 + 2000;
-                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
-                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
+                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1); // DD-MM-YY
+                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2); // MM-DD-YY
                                 }
                             }
                             if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj;
+                            return employee.doj; // Return original if reparsing fails
                           }
                           return format(parsedDate, "dd-MMM-yy");
                         } catch (e) {
-                          return employee.doj;
+                          return employee.doj; // Return original on any error
                         }
                       }
                       return 'N/A';
@@ -889,3 +917,6 @@ export default function EmployeeMasterPage() {
     </>
   );
 }
+
+
+    
