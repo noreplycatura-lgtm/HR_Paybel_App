@@ -89,3 +89,131 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide everything by default for print */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Make the printable area and its children visible */
+  #salary-slip-printable-area,
+  #salary-slip-printable-area *,
+  #salary-slip-preview,
+  #salary-slip-preview * {
+    visibility: visible;
+  }
+
+  /* Position the printable area at the top-left for printing */
+  #salary-slip-printable-area,
+  #salary-slip-preview {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%; /* Use full width for browser to handle scaling to paper */
+    margin: 0; /* Remove screen margins for print */
+    padding: 0; /* Remove screen padding for print */
+    box-sizing: border-box;
+  }
+  
+  .salary-slip-page, #salary-slip-preview {
+    width: 190mm; /* A4 width minus typical margins */
+    height: 270mm; /* A4 height minus typical margins */
+    overflow: hidden !important; /* Prevent content from spilling, important for print */
+    page-break-inside: avoid !important; /* Try to keep a single slip on one page */
+    box-shadow: none !important;
+    border: 1px solid #eee !important; /* Light border for print visualization */
+    margin: 5mm auto !important; /* Center on page with some margin */
+    font-size: 9pt !important; /* General smaller font for print */
+  }
+
+  .salary-slip-page .p-6, #salary-slip-preview .p-6 {
+    padding: 0.5rem !important; /* Reduce padding significantly */
+  }
+  .salary-slip-page .text-sm, #salary-slip-preview .text-sm {
+    font-size: 8pt !important;
+  }
+  .salary-slip-page .text-xs, #salary-slip-preview .text-xs {
+    font-size: 7pt !important;
+  }
+  .salary-slip-page .text-lg, #salary-slip-preview .text-lg {
+    font-size: 10pt !important; /* Section titles */
+  }
+  .salary-slip-page .text-2xl, #salary-slip-preview .text-2xl {
+    font-size: 14pt !important; /* Main Salary Slip title */
+  }
+
+  .salary-slip-page h3, #salary-slip-preview h3 {
+    margin-bottom: 0.15rem !important; /* Reduce space after headers */
+    font-size: 9pt !important;
+  }
+  .salary-slip-page .py-1, #salary-slip-preview .py-1 {
+    padding-top: 0.05rem !important;
+    padding-bottom: 0.05rem !important;
+  }
+  .salary-slip-page .my-4, #salary-slip-preview .my-4 { /* Separator margins */
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  .salary-slip-page .my-6, #salary-slip-preview .my-6 { /* Separator margins */
+    margin-top: 0.4rem !important;
+    margin-bottom: 0.4rem !important;
+  }
+   .salary-slip-page .mt-8, #salary-slip-preview .mt-8 { /* Final text margin */
+    margin-top: 0.75rem !important;
+  }
+
+  /* Hide non-printable elements */
+  .no-print, .no-print * {
+    display: none !important;
+  }
+
+  /* For bulk printing, ensure each slip starts on a new page */
+  .print-page-break-before {
+    page-break-before: always !important;
+    margin-top: 5mm !important; /* Add margin for the new page */
+  }
+
+  /* Adjustments for salary slip layout to be more compact */
+  #salary-slip-preview .grid.md\:grid-cols-2,
+  .salary-slip-page .grid.md\:grid-cols-2 {
+    grid-template-columns: 1fr 1fr !important; /* Force two columns */
+    gap: 0.25rem !important; /* Reduce gap */
+  }
+  
+  #salary-slip-preview .gap-x-8, .salary-slip-page .gap-x-8 {
+      column-gap: 0.5rem !important;
+  }
+  #salary-slip-preview .gap-y-4, .salary-slip-page .gap-y-4 {
+      row-gap: 0.2rem !important;
+  }
+  #salary-slip-preview .mb-6, .salary-slip-page .mb-6 {
+      margin-bottom: 0.5rem !important;
+  }
+
+
+  #salary-slip-preview .flex.flex-col.sm\:flex-row,
+  .salary-slip-page .flex.flex-col.sm\:flex-row {
+    flex-direction: row !important;
+  }
+  
+  #salary-slip-preview img, .salary-slip-page img {
+    max-width: 100px !important; /* Smaller logo for print */
+    max-height: 35px !important;
+    margin-bottom: 0.15rem !important;
+  }
+  
+  /* Ensure Tailwind's responsive prefixes like md: don't interfere with print */
+  /* This is a bit of a general sledgehammer; more specific overrides are better if needed */
+  #salary-slip-preview [class*="md:"],
+  .salary-slip-page [class*="md:"] {
+    /* Example: if md:grid-cols-2 needs to be grid-cols-2 always for print */
+  }
+}
