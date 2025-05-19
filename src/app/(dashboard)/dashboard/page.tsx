@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2 } from "lucide-react";
+import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2, KeySquare } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
 import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth } from "date-fns";
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 
-// LocalStorage Keys
+// LocalStorage Keys - Ensure these match across the application
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
@@ -91,7 +91,6 @@ export default function DashboardPage() {
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
     let employeeMasterList: EmployeeDetail[] = [];
-    let allSalaryEdits: Record<string, SalarySheetEdits> = {};
     let allPerfDeductions: PerformanceDeductionEntry[] = [];
     
     if (typeof window !== 'undefined') {
@@ -118,8 +117,6 @@ export default function DashboardPage() {
             if(Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
         }
 
-
-        // Calculate Last 5 Months' Salary Total
         const monthlyTotals: MonthlySalaryTotal[] = [];
         let fiveMonthGrandTotal = 0;
 
@@ -172,8 +169,7 @@ export default function DashboardPage() {
                 const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
 
                 const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-                // ESIC, PT, PF are 0 for prototype
-                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction;
+                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; // ESIC, PT, PF are 0
                 monthNetTotal += (totalAllowance - totalDeductionValue);
               }
             });
@@ -181,10 +177,9 @@ export default function DashboardPage() {
           monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthNetTotal });
           fiveMonthGrandTotal += monthNetTotal;
         }
-        setLastFiveMonthsSalaryData(monthlyTotals.reverse()); // Show most recent of the 5 first
+        setLastFiveMonthsSalaryData(monthlyTotals.reverse());
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
         setIsLoadingSalaries(false);
-
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveAppsStr) {
@@ -238,7 +233,6 @@ export default function DashboardPage() {
            setRecentActivities([]);
         }
 
-
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
           activeEmployeesCount = 0;
@@ -248,6 +242,7 @@ export default function DashboardPage() {
           setLastFiveMonthsSalaryData([]);
           setGrandTotalLastFiveMonths(0);
           setIsLoadingSalaries(false);
+          toast({ title: "Dashboard Data Error", description: "Could not load some data. Figures may be inaccurate.", variant: "destructive" });
       }
     }
     setDashboardCards(prevCards => prevCards.map(card => {
@@ -255,7 +250,7 @@ export default function DashboardPage() {
       if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecordsCount.toString() };
       if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
       return card;
-    }).filter(card => card.title !== "Last Month's Salary Total")); // Remove old salary card
+    }).filter(card => card.title !== "Last Month's Salary Total"));
     setIsLoading(false);
   }, []);
 
@@ -263,6 +258,8 @@ export default function DashboardPage() {
   const handleExportData = () => {
     if (typeof window === 'undefined') return;
     const allData: Record<string, any> = {};
+    
+    // Ensure this list contains ALL fixed keys used by the application
     const knownFixedKeys = [
       LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
       LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
@@ -285,6 +282,7 @@ export default function DashboardPage() {
       }
     });
 
+    // Ensure this list contains ALL dynamic prefixes used by the application
     const knownDynamicPrefixes = [
       LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
       LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
@@ -293,6 +291,8 @@ export default function DashboardPage() {
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
+      // Check if the key starts with any of the known dynamic prefixes
+      // AND also ensure we don't re-add keys already handled by knownFixedKeys (though unlikely to be an issue here)
       if (key && knownDynamicPrefixes.some(prefix => key.startsWith(prefix))) {
         const item = localStorage.getItem(key);
         if (item) {
@@ -338,6 +338,7 @@ export default function DashboardPage() {
         return;
       }
 
+      // Keys to be cleared before import
       const knownKeysForClear = [
           LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
@@ -352,6 +353,7 @@ export default function DashboardPage() {
         LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
         LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
       ];
+
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -373,7 +375,7 @@ export default function DashboardPage() {
       window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
-      toast({ title: "Import Error", description: "Could not parse or import JSON data. Check format.", variant: "destructive" });
+      toast({ title: "Import Error", description: "Could not parse or import JSON data. Check format and ensure it's valid JSON from a previous export.", variant: "destructive", duration: 7000 });
     }
   };
 
@@ -457,7 +459,8 @@ export default function DashboardPage() {
           <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
           <CardDescription>
             Manually export or import all application data stored in your browser's local storage.
-            This is a prototype feature. Importing data will overwrite existing local data.
+            This export includes all entered employees, monthly attendance, leave balances, salary edits, performance deductions, recent activities, and user accounts. 
+            It does NOT export the application code itself. Importing data will overwrite existing local data.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -539,7 +542,7 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No salary data available for the last five months to display totals.</p>
+            <p className="text-sm text-muted-foreground">No salary data available for the last five months to display totals. Ensure attendance and employee master data are present for previous months.</p>
           )}
         </CardContent>
       </Card>
@@ -621,3 +624,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
