@@ -62,7 +62,7 @@ interface SimulatedUser {
   isLocked: boolean;
 }
 
-const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
+const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 
 export default function UserManagementPage() {
@@ -78,7 +78,7 @@ export default function UserManagementPage() {
     if (typeof window !== 'undefined') {
       let usersToSet: SimulatedUser[] = [];
       try {
-        const storedUsers = localStorage.getItem(SIMULATED_USERS_STORAGE_KEY);
+        const storedUsers = localStorage.getItem(LOCAL_STORAGE_SIMULATED_USERS_KEY);
         if (storedUsers) {
           const parsedUsers: SimulatedUser[] = JSON.parse(storedUsers);
           if (Array.isArray(parsedUsers)) {
@@ -87,32 +87,32 @@ export default function UserManagementPage() {
             console.error("Simulated users data in localStorage is not an array. Resetting to empty.");
             toast({ 
                 title: "Data Format Error", 
-                description: "Stored user list is corrupted. Resetting to empty.", 
+                description: "Stored user list is corrupted. Please add users again if needed.", 
                 variant: "destructive",
                 duration: 7000,
             });
-            saveSimulatedUsersToLocalStorage([]); // Reset to empty
+            // No automatic deletion, let user decide
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
         toast({ 
             title: "Data Load Error", 
-            description: "Could not load user list. Stored data might be corrupted. Resetting to empty.", 
+            description: "Could not load user list. Stored data might be corrupted. Please add users again if needed.", 
             variant: "destructive",
             duration: 7000,
         });
-        saveSimulatedUsersToLocalStorage([]); // Reset to empty on error
+         // No automatic deletion, let user decide
       }
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, [toast]); // Added toast to dependency array as it's used in the effect
+  }, [toast]);
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(SIMULATED_USERS_STORAGE_KEY, JSON.stringify(users));
+        localStorage.setItem(LOCAL_STORAGE_SIMULATED_USERS_KEY, JSON.stringify(users));
       } catch (error) {
         console.error("Error saving simulated users to localStorage:", error);
         toast({ title: "Storage Error", description: "Could not save user list locally.", variant: "destructive" });

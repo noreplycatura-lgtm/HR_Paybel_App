@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { sampleEmployees } from "@/lib/hr-data"; // Keep for initial seed if localStorage is empty
+import { sampleEmployees } from "@/lib/hr-data"; 
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
@@ -150,9 +150,8 @@ export default function EmployeeMasterPage() {
           if (Array.isArray(parsedEmployees)) {
             setEmployees(parsedEmployees);
           } else {
-             toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Using sample data.", variant: "destructive", duration: 7000 });
-             setEmployees(sampleEmployees);
-             localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
+             toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please re-upload or add data. Using sample data temporarily.", variant: "destructive", duration: 7000 });
+             setEmployees(sampleEmployees); // Fallback
           }
         } else {
           // If no data in localStorage, initialize with sampleEmployees and save it.
@@ -162,9 +161,8 @@ export default function EmployeeMasterPage() {
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not load employee data. Using sample data.", variant: "destructive", duration: 7000 });
-        setEmployees(sampleEmployees);
-        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(sampleEmployees));
+        toast({ title: "Storage Error", description: "Could not load employee data. Please re-upload or add data. Using sample data temporarily.", variant: "destructive", duration: 7000 });
+        setEmployees(sampleEmployees); // Fallback
       }
     }
     setIsLoadingData(false);
@@ -549,56 +547,58 @@ export default function EmployeeMasterPage() {
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                 <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField control={form.control} name="code" render={({ field }) => (
-                    <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="designation" render={({ field }) => (
-                    <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="status" render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                            <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                            <SelectItem value="Active">Active</SelectItem>
-                            <SelectItem value="Left">Left</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                        </FormItem>
-                    )} />
-                    <FormField control={form.control} name="division" render={({ field }) => (
-                    <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                     <FormField control={form.control} name="hq" render={({ field }) => (
-                    <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name="doj" render={({ field }) => (
-                    <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                     <FormField control={form.control} name="dor" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Date of Resignation</FormLabel>
-                            <FormControl><Input type="date" {...field} disabled={statusInForm === "Active"} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                    <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                    <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                     <FormField control={form.control} name="revisedGrossMonthlySalary" render={({ field }) => (
-                    <FormItem><FormLabel>Revised Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" placeholder="Optional" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                     <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
-                    <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
+                 <fieldset>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="code" render={({ field }) => (
+                      <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="name" render={({ field }) => (
+                      <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="designation" render={({ field }) => (
+                      <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="status" render={({ field }) => (
+                          <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                              <FormControl>
+                              <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                              <SelectItem value="Active">Active</SelectItem>
+                              <SelectItem value="Left">Left</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <FormMessage />
+                          </FormItem>
+                      )} />
+                      <FormField control={form.control} name="division" render={({ field }) => (
+                      <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                       <FormField control={form.control} name="hq" render={({ field }) => (
+                      <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="doj" render={({ field }) => (
+                      <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                       <FormField control={form.control} name="dor" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Date of Resignation</FormLabel>
+                              <FormControl><Input type="date" {...field} disabled={statusInForm === "Active"} /></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )} />
+                      <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
+                      <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                       <FormField control={form.control} name="revisedGrossMonthlySalary" render={({ field }) => (
+                      <FormItem><FormLabel>Revised Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" placeholder="Optional" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                       <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
+                      <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
                  </fieldset>
                 <DialogFooter>
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
@@ -722,7 +722,7 @@ export default function EmployeeMasterPage() {
                                 } else if (part1 > 1000) { 
                                     if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
                                     else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { // Try DD-MM-YY or MM-DD-YY assuming year 2000+
+                                } else { 
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
@@ -757,7 +757,7 @@ export default function EmployeeMasterPage() {
                                 } else if (part1 > 1000) { 
                                     if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
                                     else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { // Try DD-MM-YY or MM-DD-YY assuming year 2000+
+                                } else { 
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
@@ -794,7 +794,7 @@ export default function EmployeeMasterPage() {
                                 } else if (part1 > 1000) { 
                                     if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
                                     else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { // Try DD-MM-YY or MM-DD-YY assuming year 2000+
+                                } else { 
                                    const yearShort = part3 + 2000;
                                    if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
                                    else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);

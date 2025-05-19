@@ -77,7 +77,8 @@ export default function DashboardPage() {
             activeEmployeesCount = employeesFromStorage.filter(emp => emp.status === "Active").length;
            } else {
             activeEmployeesCount = 0; 
-            console.warn("Employee master data in localStorage is corrupted. Showing 0.");
+            console.warn("Employee master data in localStorage is corrupted or not an array. Showing 0.");
+            toast({ title: "Data Warning", description: "Could not properly read employee master data from local storage.", variant: "destructive", duration: 7000 });
            }
         } else {
           activeEmployeesCount = 0;
@@ -91,22 +92,32 @@ export default function DashboardPage() {
             const storedAttendance = localStorage.getItem(attendanceKey);
             if (storedAttendance) {
               const rawData: StoredEmployeeAttendanceData[] = JSON.parse(storedAttendance);
-              let totalPresent = 0;
-              let totalRelevantDays = 0;
-              rawData.forEach(emp => {
-                emp.attendance.forEach(status => {
-                  if (['P', 'A', 'HD'].includes(status.toUpperCase())) {
-                    totalRelevantDays++;
-                    if (status.toUpperCase() === 'P') totalPresent++;
-                    else if (status.toUpperCase() === 'HD') totalPresent += 0.5;
-                  }
+              if (Array.isArray(rawData)) {
+                let totalPresent = 0;
+                let totalRelevantDays = 0;
+                rawData.forEach(emp => {
+                  emp.attendance.forEach(status => {
+                    if (['P', 'A', 'HD'].includes(status.toUpperCase())) {
+                      totalRelevantDays++;
+                      if (status.toUpperCase() === 'P') totalPresent++;
+                      else if (status.toUpperCase() === 'HD') totalPresent += 0.5;
+                    }
+                  });
                 });
-              });
-              overallAttendanceValue = totalRelevantDays > 0 ? `${((totalPresent / totalRelevantDays) * 100).toFixed(1)}%` : "N/A";
-              attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
-            } else { attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; }
+                overallAttendanceValue = totalRelevantDays > 0 ? `${((totalPresent / totalRelevantDays) * 100).toFixed(1)}%` : "N/A";
+                attendanceDescription = `Based on ${lastUploadContext.month} ${lastUploadContext.year} upload`;
+              } else {
+                overallAttendanceValue = "N/A";
+                attendanceDescription = `Attendance data for ${lastUploadContext.month} ${lastUploadContext.year} is corrupted.`;
+                console.warn("Last uploaded attendance data is corrupted.");
+              }
+            } else { 
+              overallAttendanceValue = "N/A";
+              attendanceDescription = `No attendance data for ${lastUploadContext.month} ${lastUploadContext.year}.`; 
+            }
           } catch (e) {
-            console.error("Error parsing last upload context:", e);
+            console.error("Error parsing last upload context or its attendance data:", e);
+            overallAttendanceValue = "N/A";
             attendanceDescription = "Error reading attendance context.";
           }
         } else { attendanceDescription = "No attendance data uploaded yet."; }
@@ -119,6 +130,7 @@ export default function DashboardPage() {
             } catch (e) {
               console.error("Error parsing leave applications:", e);
               totalLeaveRecords = 0;
+              toast({ title: "Data Warning", description: "Could not read leave application data from local storage.", variant: "destructive", duration: 7000 });
             }
         }
 
@@ -440,4 +452,3 @@ export default function DashboardPage() {
     </>
   );
 }
-

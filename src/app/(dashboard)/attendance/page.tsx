@@ -49,21 +49,18 @@ const editEmployeeStatusFormSchema = z.object({
         return false;
     }
   }, { message: "Valid Date of Resignation (YYYY-MM-DD) is required"}),
-}).refine((data, ctx) => {
-  const { dor } = data;
-  // @ts-ignore 
-  const doj = ctx.path[0]?.doj; 
-  if (doj && dor && isValid(parseISO(doj)) && isValid(parseISO(dor))) {
-    if (isBefore(parseISO(dor), parseISO(doj))) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "DOR cannot be before DOJ.",
-        path: ["dor"],
-      });
+  // @ts-ignore - This is a bit of a hack to get DOJ context for validation
+  doj: z.string().optional(), 
+}).refine((data) => {
+  if (data.doj && data.dor && isValid(parseISO(data.doj)) && isValid(parseISO(data.dor))) {
+    if (isBefore(parseISO(data.dor), parseISO(data.doj))) {
       return false;
     }
   }
   return true;
+}, {
+  message: "DOR cannot be before DOJ.",
+  path: ["dor"],
 });
 
 type EditEmployeeStatusFormValues = z.infer<typeof editEmployeeStatusFormSchema>;
@@ -106,7 +103,7 @@ export default function AttendancePage() {
 
   const statusEditForm = useForm<EditEmployeeStatusFormValues>({
     resolver: zodResolver(editEmployeeStatusFormSchema),
-    defaultValues: { dor: "" },
+    defaultValues: { dor: "", doj: "" },
   });
 
   React.useEffect(() => {
@@ -131,8 +128,8 @@ export default function AttendancePage() {
           if (Array.isArray(parsedMaster)) {
             setEmployeeMasterList(parsedMaster);
           } else {
-            setEmployeeMasterList([]); // Fallback for corrupted data
-            toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please check Employee Master page.", variant: "destructive", duration: 7000 });
+            setEmployeeMasterList([]);
+            toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Please check Employee Master page. Using empty list.", variant: "destructive", duration: 7000 });
           }
         } else {
           setEmployeeMasterList([]);
@@ -140,7 +137,7 @@ export default function AttendancePage() {
       } catch (error) {
         console.error("Error loading employee master from localStorage:", error);
         setEmployeeMasterList([]);
-        toast({ title: "Storage Error", description: "Could not load employee master data.", variant: "destructive", duration: 7000 });
+        toast({ title: "Storage Error", description: "Could not load employee master data. Using empty list.", variant: "destructive", duration: 7000 });
       }
     }
     setIsLoadingState(false); 
@@ -166,7 +163,7 @@ export default function AttendancePage() {
             setRawAttendanceData(parsedRawData);
             setUploadedFileName(storedFilename || null);
           } else {
-            toast({ title: "Data Error", description: `Attendance data for ${selectedMonth} ${selectedYear} in localStorage is corrupted.`, variant: "destructive", duration: 7000 });
+            toast({ title: "Data Error", description: `Attendance data for ${selectedMonth} ${selectedYear} in localStorage is corrupted. Data not loaded. Please re-upload if needed.`, variant: "destructive", duration: 7000 });
             setRawAttendanceData([]);
             setUploadedFileName(null);
           }
@@ -176,7 +173,7 @@ export default function AttendancePage() {
         }
       } catch (error) {
         console.error(`Error loading attendance data for ${selectedMonth} ${selectedYear} from localStorage:`, error);
-        toast({ title: "Storage Error", description: `Could not load attendance data for ${selectedMonth} ${selectedYear}.`, variant: "destructive", duration: 7000 });
+        toast({ title: "Storage Error", description: `Could not load attendance data for ${selectedMonth} ${selectedYear}. Data may be corrupted.`, variant: "destructive", duration: 7000 });
         setRawAttendanceData([]);
         setUploadedFileName(null);
       }
@@ -609,7 +606,6 @@ export default function AttendancePage() {
             localStorage.removeItem(rawDataKey);
             localStorage.removeItem(filenameKey);
             
-            // Check if this was the last uploaded context and clear it too
             const lastUploadContextStr = localStorage.getItem(LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY);
             if (lastUploadContextStr) {
                 const lastUploadContext = JSON.parse(lastUploadContextStr);
@@ -706,7 +702,7 @@ export default function AttendancePage() {
 
   const handleOpenEditEmployeeStatusDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForStatus(employee);
-    statusEditForm.reset({ dor: employee.dor || "" }); 
+    statusEditForm.reset({ dor: employee.dor || "", doj: employee.doj }); 
     setIsEditEmployeeStatusDialogOpen(true);
   };
 

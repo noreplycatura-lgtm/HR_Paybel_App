@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter, getDaysInMonth } from 'date-fns';
+import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter, getDaysInMonth } from "date-fns";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
 import type { LeaveApplication, OpeningLeaveBalance } from "@/lib/hr-types";
@@ -22,7 +22,7 @@ import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1"; // Conceptual, not fully used
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 
 
@@ -84,21 +84,6 @@ export default function LeavePage() {
     setCurrentYearState(now.getFullYear());
     setSelectedMonth(months[now.getMonth()]);
     setSelectedYear(now.getFullYear());
-
-    // // Temporary one-time clearing logic - REMOVE AFTER ONE RUN
-    // const hasCleared = sessionStorage.getItem('novita_leave_data_cleared_v_final');
-    // if (!hasCleared) {
-    //     if (typeof window !== 'undefined') {
-    //         localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-    //         localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-    //         setOpeningBalances([]);
-    //         setLeaveApplications([]);
-    //         toast({ title: "Leave Data Reset", description: "Opening balances and leave application history have been cleared. Please upload new opening balances if needed." });
-    //         sessionStorage.setItem('novita_leave_data_cleared_v_final', 'true');
-    //     }
-    // }
-    // // END - Temporary one-time clearing logic
-
   }, []);
 
   React.useEffect(() => {
@@ -108,11 +93,12 @@ export default function LeavePage() {
         const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployees) {
             try {
-                setEmployees(JSON.parse(storedEmployees));
+                const parsed = JSON.parse(storedEmployees);
+                setEmployees(Array.isArray(parsed) ? parsed : []);
             } catch (e) {
                 console.error("Error parsing employee master from localStorage:", e);
                 setEmployees([]);
-                toast({ title: "Data Error", description: "Could not parse employee master data. List may be empty.", variant: "destructive"});
+                toast({ title: "Data Error", description: "Could not parse employee master data. List may be empty or show defaults.", variant: "destructive"});
             }
         } else {
             setEmployees([]);
@@ -121,7 +107,8 @@ export default function LeavePage() {
         const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
         if (storedOB) {
             try {
-                setOpeningBalances(JSON.parse(storedOB));
+                const parsedOB = JSON.parse(storedOB);
+                setOpeningBalances(Array.isArray(parsedOB) ? parsedOB : []);
             } catch (e) {
                 console.error("Error parsing opening balances from localStorage:", e);
                 setOpeningBalances([]);
@@ -134,11 +121,12 @@ export default function LeavePage() {
         const storedApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedApps) {
            try {
-                setLeaveApplications(JSON.parse(storedApps));
+                const parsedApps = JSON.parse(storedApps);
+                setLeaveApplications(Array.isArray(parsedApps) ? parsedApps : []);
             } catch (e) {
                 console.error("Error parsing leave applications from localStorage:", e);
                 setLeaveApplications([]);
-                // toast({ title: "Data Error", description: "Could not parse leave applications.", variant: "destructive"}); // Optional: Less critical if not actively used
+                 toast({ title: "Data Error", description: "Could not load leave applications. Leave history might be incomplete.", variant: "destructive" });
             }
         } else {
             setLeaveApplications([]);
@@ -185,7 +173,10 @@ export default function LeavePage() {
         if (currentMonthKeys.rawDataKey) {
             const storedAtt = localStorage.getItem(currentMonthKeys.rawDataKey);
             if (storedAtt) {
-                try { attendanceForSelectedMonth = JSON.parse(storedAtt); }
+                try { 
+                  const parsed = JSON.parse(storedAtt);
+                  if(Array.isArray(parsed)) attendanceForSelectedMonth = parsed;
+                }
                 catch (e) { console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`); }
             }
         }
@@ -193,7 +184,10 @@ export default function LeavePage() {
         if (prevMonthKeys.rawDataKey) {
             const storedAttPrev = localStorage.getItem(prevMonthKeys.rawDataKey);
             if (storedAttPrev) {
-                try { attendanceForPrevMonth = JSON.parse(storedAttPrev); }
+                try { 
+                  const parsed = JSON.parse(storedAttPrev);
+                  if(Array.isArray(parsed)) attendanceForPrevMonth = parsed;
+                }
                 catch (e) { console.warn(`Error parsing attendance for ${prevMonthName} ${prevMonthYear}: ${e}`); }
             }
         }
@@ -856,9 +850,9 @@ export default function LeavePage() {
               )) : (
                 <TableRow>
                   <TableCell colSpan={20} className="text-center text-muted-foreground py-8">
-                    {employees.length === 0 && !isLoading ? "No employee data. Please add employees in Employee Master." :
-                     selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period." :
-                     "Please select month and year to view leave summary. (Data saved in browser's local storage)."}
+                    {employees.length === 0 && !isLoading ? "No employee data. Please add employees in Employee Master. (Data is saved in your browser's local storage)." :
+                     selectedMonth && selectedYear > 0 && !isLoading ? "No active employees or no data to display for the selected period. (Data is saved in your browser's local storage)." :
+                     "Please select month and year to view leave summary. (Data is saved in your browser's local storage)."}
                   </TableCell>
                 </TableRow>
               )}
@@ -869,3 +863,4 @@ export default function LeavePage() {
     </>
   );
 }
+
