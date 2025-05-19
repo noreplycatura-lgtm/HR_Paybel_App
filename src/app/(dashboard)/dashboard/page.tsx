@@ -8,16 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, KeySquare, Activity } from "lucide-react";
+import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2 } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
-import { getMonth, getYear, subMonths, format } from "date-fns";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth } from "date-fns";
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 
@@ -31,18 +25,13 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // New key
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface StoredEmployeeAttendanceData {
   code: string;
   attendance: string[];
-}
-
-interface StoredUploadContext {
-  month: string;
-  year: number;
 }
 
 interface SalarySheetEdits {
@@ -66,16 +55,25 @@ interface ActivityLogEntry {
   message: string;
 }
 
+interface MonthlySalaryTotal {
+  monthYear: string;
+  total: number;
+}
+
 
 export default function DashboardPage() {
   const { toast } = useToast();
   const [dashboardCards, setDashboardCards] = React.useState([
     { title: "Total Employees", value: "N/A", icon: UserCheck, description: "Active employees", dataAiHint: "team office" },
-    { title: "Last Month's Salary Total", value: "N/A", icon: DollarSign, description: "Grand total net pay for last month", dataAiHint: "money payment calculator" },
     { title: "Total Leave Records", value: "N/A", icon: History, description: "All recorded leave entries", dataAiHint: "documents list" },
     { title: "Payroll Status (Last Mth)", value: "N/A", icon: FileText, description: "For previous month", dataAiHint: "report checkmark" },
     { title: "Storage Used", value: "N/A (Conceptual)", icon: HardDrive, description: "Uploaded data size (Conceptual)", dataAiHint: "data storage" },
   ]);
+
+  const [lastFiveMonthsSalaryData, setLastFiveMonthsSalaryData] = React.useState<MonthlySalaryTotal[]>([]);
+  const [grandTotalLastFiveMonths, setGrandTotalLastFiveMonths] = React.useState<number>(0);
+  const [isLoadingSalaries, setIsLoadingSalaries] = React.useState(true);
+
   const [isLoading, setIsLoading] = React.useState(true);
   const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
@@ -86,99 +84,108 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     setIsLoading(true);
+    setIsLoadingSalaries(true);
+
     let activeEmployeesCount = 0;
-    let lastMonthSalaryTotalValue = "N/A";
-    let lastMonthSalaryDescription = "Grand total net pay for last month";
     let totalLeaveRecordsCount = 0;
     let payrollStatusValue = "N/A";
     let payrollStatusDescription = "For previous month";
+    let employeeMasterList: EmployeeDetail[] = [];
+    let allSalaryEdits: Record<string, SalarySheetEdits> = {};
+    let allPerfDeductions: PerformanceDeductionEntry[] = [];
     
     if (typeof window !== 'undefined') {
       try {
-        // Calculate Total Active Employees
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        let employeeMasterList: EmployeeDetail[] = [];
         if (storedEmployeesStr) {
           const parsedEmployees = JSON.parse(storedEmployeesStr);
           if (Array.isArray(parsedEmployees)) {
             employeeMasterList = parsedEmployees;
             activeEmployeesCount = parsedEmployees.filter(emp => emp.status === "Active").length;
           } else {
-            console.warn("Employee master data in localStorage is corrupted or not an array. Defaulting to 0 active employees.");
-            activeEmployeesCount = 0;
+             activeEmployeesCount = 0;
+             employeeMasterList = [];
+             console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
           }
         } else {
-          activeEmployeesCount = 0;
+           activeEmployeesCount = 0;
+           employeeMasterList = [];
         }
 
-        // Calculate Last Month's Salary Total
-        const lastMonthDate = subMonths(new Date(), 1);
-        const prevMonthName = months[getMonth(lastMonthDate)];
-        const prevMonthYear = getYear(lastMonthDate);
-        lastMonthSalaryDescription = `Grand total net pay for ${prevMonthName} ${prevMonthYear}`;
-        
-        const attendanceKeyPrevMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
-        const salaryEditsKeyPrevMonth = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${prevMonthName}_${prevMonthYear}`;
-        
-        const storedAttendancePrevMonthStr = localStorage.getItem(attendanceKeyPrevMonth);
-        const storedSalaryEditsPrevMonthStr = localStorage.getItem(salaryEditsKeyPrevMonth);
-        const storedPerformanceDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        const storedPerfDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        if (storedPerfDeductionsStr) {
+            const parsedPerfDeductions = JSON.parse(storedPerfDeductionsStr);
+            if(Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
+        }
 
-        let grandTotalNetPaid = 0;
-        let processedEmployeesForSalary = 0;
 
-        if (storedAttendancePrevMonthStr && employeeMasterList.length > 0) {
-          const attendancePrevMonth: StoredEmployeeAttendanceData[] = JSON.parse(storedAttendancePrevMonthStr);
-          const salaryEditsPrevMonth: Record<string, SalarySheetEdits> = storedSalaryEditsPrevMonthStr ? JSON.parse(storedSalaryEditsPrevMonthStr) : {};
-          const performanceDeductionsAll: PerformanceDeductionEntry[] = storedPerformanceDeductionsStr ? JSON.parse(storedPerformanceDeductionsStr) : [];
+        // Calculate Last 5 Months' Salary Total
+        const monthlyTotals: MonthlySalaryTotal[] = [];
+        let fiveMonthGrandTotal = 0;
+
+        for (let i = 1; i <= 5; i++) {
+          const targetDate = subMonths(new Date(), i);
+          const monthName = months[getMonth(targetDate)];
+          const year = getYear(targetDate);
+          let monthNetTotal = 0;
+
+          const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
+          const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
           
-          const performanceDeductionsPrevMonth = performanceDeductionsAll.filter(pd => pd.month === prevMonthName && pd.year === prevMonthYear);
+          const storedAttendanceStr = localStorage.getItem(attendanceKey);
+          const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
+          
+          const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
+          const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
+          const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
 
-          employeeMasterList.forEach(emp => {
-            const empAttendanceRecord = attendancePrevMonth.find(att => att.code === emp.code);
-            if (empAttendanceRecord) {
-              processedEmployeesForSalary++;
-              const totalDaysInPrevMonth = new Date(prevMonthYear, getMonth(lastMonthDate) + 1, 0).getDate();
-              let daysPaid = 0;
-              empAttendanceRecord.attendance.slice(0, totalDaysInPrevMonth).forEach(status => {
-                if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
-                else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
-              });
-              daysPaid = Math.min(daysPaid, totalDaysInPrevMonth);
+          if (attendanceForMonth.length > 0 && employeeMasterList.length > 0) {
+            employeeMasterList.forEach(emp => {
+              const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+              if (empAttendanceRecord) {
+                const totalDaysInMonth = new Date(year, getMonth(targetDate) + 1, 0).getDate();
+                let daysPaid = 0;
+                empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
+                  if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
+                  else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
+                });
+                daysPaid = Math.min(daysPaid, totalDaysInMonth);
 
-              const monthlyComps = calculateMonthlySalaryComponents(emp, prevMonthYear, getMonth(lastMonthDate));
-              const payFactor = totalDaysInPrevMonth > 0 ? daysPaid / totalDaysInPrevMonth : 0;
-              
-              const actualBasic = monthlyComps.basic * payFactor;
-              const actualHRA = monthlyComps.hra * payFactor;
-              const actualCA = monthlyComps.ca * payFactor;
-              const actualMedical = monthlyComps.medical * payFactor;
-              const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
+                const monthlyComps = calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
+                const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+                
+                const actualBasic = monthlyComps.basic * payFactor;
+                const actualHRA = monthlyComps.hra * payFactor;
+                const actualCA = monthlyComps.ca * payFactor;
+                const actualMedical = monthlyComps.medical * payFactor;
+                const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
 
-              const empEdits = salaryEditsPrevMonth[emp.id] || {};
-              const arrears = empEdits.arrears ?? 0;
-              const tds = empEdits.tds ?? 0;
-              const loan = empEdits.loan ?? 0;
-              const salaryAdvance = empEdits.salaryAdvance ?? 0;
-              const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
-              
-              const perfDeductionEntry = performanceDeductionsPrevMonth.find(pd => pd.employeeCode === emp.code);
-              const performanceDeduction = perfDeductionEntry?.amount || 0;
-              const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
+                const empEdits = salaryEditsForMonth[emp.id] || {};
+                const arrears = empEdits.arrears ?? 0;
+                const tds = empEdits.tds ?? 0;
+                const loan = empEdits.loan ?? 0;
+                const salaryAdvance = empEdits.salaryAdvance ?? 0;
+                const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
+                
+                const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
+                const performanceDeduction = perfDeductionEntry?.amount || 0;
+                const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
 
-              const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-              const esic = 0, profTax = 0, pf = 0; // Assuming these are 0 for prototype
-              const totalDeduction = esic + profTax + pf + tds + loan + salaryAdvance + totalOtherDeduction;
-              grandTotalNetPaid += (totalAllowance - totalDeduction);
-            }
-          });
-          lastMonthSalaryTotalValue = processedEmployeesForSalary > 0 ? `₹${grandTotalNetPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A (No Data)";
-        } else {
-           lastMonthSalaryTotalValue = "N/A (Missing Attendance)";
+                const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+                // ESIC, PT, PF are 0 for prototype
+                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction;
+                monthNetTotal += (totalAllowance - totalDeductionValue);
+              }
+            });
+          }
+          monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthNetTotal });
+          fiveMonthGrandTotal += monthNetTotal;
         }
+        setLastFiveMonthsSalaryData(monthlyTotals.reverse()); // Show most recent of the 5 first
+        setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
+        setIsLoadingSalaries(false);
 
 
-        // Calculate Total Leave Records
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveAppsStr) {
             try {
@@ -192,7 +199,12 @@ export default function DashboardPage() {
           totalLeaveRecordsCount = 0;
         }
 
-        // Determine Payroll Status for Last Month (based on attendance upload)
+        const lastMonthDate = subMonths(new Date(), 1);
+        const prevMonthName = months[getMonth(lastMonthDate)];
+        const prevMonthYear = getYear(lastMonthDate);
+        const attendanceKeyPrevMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
+        const storedAttendancePrevMonthStr = localStorage.getItem(attendanceKeyPrevMonth);
+
         if (storedAttendancePrevMonthStr) {
             try {
               const parsedLastMonthAtt = JSON.parse(storedAttendancePrevMonthStr);
@@ -213,7 +225,6 @@ export default function DashboardPage() {
            payrollStatusDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
         }
 
-        // Load Recent Activities from localStorage
         const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
         if (storedActivitiesStr) {
           try {
@@ -231,21 +242,20 @@ export default function DashboardPage() {
       } catch (error) {
           console.error("Dashboard: Error fetching data from localStorage:", error);
           activeEmployeesCount = 0;
-          lastMonthSalaryTotalValue = "N/A (Error)";
           totalLeaveRecordsCount = 0;
           payrollStatusValue = "Error";
           setRecentActivities([]);
+          setLastFiveMonthsSalaryData([]);
+          setGrandTotalLastFiveMonths(0);
+          setIsLoadingSalaries(false);
       }
     }
-
     setDashboardCards(prevCards => prevCards.map(card => {
       if (card.title === "Total Employees") return { ...card, value: activeEmployeesCount.toString() };
-      if (card.title === "Last Month's Salary Total") return { ...card, value: lastMonthSalaryTotalValue, description: lastMonthSalaryDescription };
       if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecordsCount.toString() };
       if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
-      // Storage Used remains conceptual
       return card;
-    }));
+    }).filter(card => card.title !== "Last Month's Salary Total")); // Remove old salary card
     setIsLoading(false);
   }, []);
 
@@ -328,7 +338,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Clear existing known application data
       const knownKeysForClear = [
           LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
@@ -353,7 +362,6 @@ export default function DashboardPage() {
       }
       keysToRemove.forEach(key => localStorage.removeItem(key));
 
-
       for (const key in dataToImport) {
         if (Object.prototype.hasOwnProperty.call(dataToImport, key)) {
           localStorage.setItem(key, JSON.stringify(dataToImport[key]));
@@ -362,7 +370,6 @@ export default function DashboardPage() {
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setImportDataJson("");
-      // Trigger a hard reload to ensure all components re-fetch data
       window.location.reload(); 
     } catch (error) {
       console.error("Error importing data:", error);
@@ -371,11 +378,19 @@ export default function DashboardPage() {
   };
 
 
-  if (isLoading) {
+  if (isLoading && isLoadingSalaries) {
     return (
       <>
-        <PageHeader title="Dashboard" description="Overview of HR activities. (Data saved in browser's local storage)" />
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <PageHeader title="Dashboard" description="Overview of HR activities. (This software operates on offline data stored in your browser's local storage)." />
+        <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader><CardTitle>Prototype Data Management (Local Storage)</CardTitle></CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-4">
+            <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Exporting...</Button>
+            <Button variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing...</Button>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {dashboardCards.map((card, index) => (
                  <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -389,6 +404,20 @@ export default function DashboardPage() {
                 </Card>
             ))}
         </div>
+        <Card className="mt-6 shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CardTitle>Last 5 Months' Salary Totals</CardTitle>
+            <CardDescription>Grand total net pay for the last five months.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-6 w-1/4 bg-muted rounded animate-pulse mb-2"></div>
+            <div className="h-6 w-1/3 bg-muted rounded animate-pulse mb-2"></div>
+            <div className="h-6 w-1/4 bg-muted rounded animate-pulse mb-2"></div>
+            <div className="h-6 w-1/3 bg-muted rounded animate-pulse mb-2"></div>
+            <div className="h-6 w-1/4 bg-muted rounded animate-pulse mb-4"></div>
+            <div className="h-8 w-1/2 bg-muted rounded animate-pulse"></div>
+          </CardContent>
+        </Card>
          <div className="grid gap-6 mt-8 md:grid-cols-2">
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
@@ -404,8 +433,8 @@ export default function DashboardPage() {
           </Card>
           <Card className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Quick Links & Shortcuts</CardTitle>
-              <CardDescription>Access common tasks quickly. (Shortcuts are conceptual)</CardDescription>
+              <CardTitle>Quick Links</CardTitle>
+              <CardDescription>Access common tasks quickly.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col space-y-2">
                 <div className="h-4 w-1/2 bg-muted rounded animate-pulse mb-2"></div>
@@ -421,8 +450,55 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Overview of HR activities. (Data saved in browser's local storage)" />
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <PageHeader title="Dashboard" description="Overview of HR activities. (This software operates on offline data stored in your browser's local storage)." />
+      
+      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
+        <CardHeader>
+          <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
+          <CardDescription>
+            Manually export or import all application data stored in your browser's local storage.
+            This is a prototype feature. Importing data will overwrite existing local data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
+          <Button onClick={handleExportData} variant="outline">
+            <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
+          </Button>
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Import Local Storage Data</DialogTitle>
+                <DialogDescription>
+                  Paste the JSON string you previously exported here. This will overwrite all current local data for this application.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <Label htmlFor="import-json-area">JSON Data to Import:</Label>
+                <Textarea
+                  id="import-json-area"
+                  value={importDataJson}
+                  onChange={(e) => setImportDataJson(e.target.value)}
+                  rows={15}
+                  placeholder="Paste your exported JSON data here..."
+                />
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button type="button" onClick={handleImportData}>Import Data & Reload</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {dashboardCards.map((card, index) => (
           <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -436,6 +512,38 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      <Card className="mt-6 shadow-md hover:shadow-lg transition-shadow">
+        <CardHeader>
+          <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>Last 5 Months' Salary Totals</CardTitle>
+          <CardDescription>Grand total net pay for the last five months, based on available data.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingSalaries ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Calculating salaries...</p>
+            </div>
+          ) : lastFiveMonthsSalaryData.length > 0 ? (
+            <div className="space-y-2">
+              {lastFiveMonthsSalaryData.map((item, index) => (
+                <div key={index} className="flex justify-between text-sm">
+                  <span>{item.monthYear}:</span>
+                  <span className="font-medium">₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              ))}
+              <hr className="my-2"/>
+              <div className="flex justify-between font-bold text-base pt-1">
+                <span>Grand Total (Last 5 Months):</span>
+                <span>₹{grandTotalLastFiveMonths.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No salary data available for the last five months to display totals.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 mt-8 md:grid-cols-2">
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
@@ -459,99 +567,21 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Quick Links & Shortcuts</CardTitle>
-            <CardDescription>Access common tasks quickly. (Shortcuts are conceptual)</CardDescription>
+            <CardTitle>Quick Links</CardTitle>
+            <CardDescription>Access common tasks quickly.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center">
-              <a href="/employee-master" className="text-primary hover:underline">Employee Master</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + E</span>
-            </div>
-             <div className="flex justify-between items-center">
-              <a href="/attendance" className="text-primary hover:underline">Attendance</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + A</span>
-            </div>
-             <div className="flex justify-between items-center">
-               <a href="/leave" className="text-primary hover:underline">Manage Leaves</a>
-               <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + L</span>
-            </div>
-             <div className="flex justify-between items-center">
-              <a href="/salary-sheet" className="text-primary hover:underline">Salary Sheet</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + S</span>
-            </div>
-             <div className="flex justify-between items-center">
-              <a href="/performance-deduction" className="text-primary hover:underline">Performance Deduction</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + P</span>
-            </div>
-            <div className="flex justify-between items-center">
-             <a href="/salary-slip" className="text-primary hover:underline">Generate Salary Slip</a>
-             <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + I</span>
-            </div>
-             <div className="flex justify-between items-center">
-              <a href="/reports" className="text-primary hover:underline">View Reports</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + R</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <a href="/user-management" className="text-primary hover:underline">User Management</a>
-              <span className="text-xs text-muted-foreground flex items-center"><KeySquare className="mr-1 h-3 w-3" /> Alt + U</span>
-            </div>
+          <CardContent className="space-y-2">
+            <a href="/employee-master" className="block text-primary hover:underline">Employee Master</a>
+            <a href="/attendance" className="block text-primary hover:underline">Attendance</a>
+            <a href="/leave" className="block text-primary hover:underline">Manage Leaves</a>
+            <a href="/salary-sheet" className="block text-primary hover:underline">Salary Sheet</a>
+            <a href="/performance-deduction" className="block text-primary hover:underline">Performance Deduction</a>
+            <a href="/salary-slip" className="block text-primary hover:underline">Generate Salary Slip</a>
+            <a href="/reports" className="block text-primary hover:underline">View Reports</a>
+            <a href="/user-management" className="block text-primary hover:underline">User Management</a>
           </CardContent>
         </Card>
       </div>
-
-      <Accordion type="single" collapsible className="w-full mt-8">
-        <AccordionItem value="item-1">
-          <AccordionTrigger className="text-base font-semibold">Prototype Data Management (Local Storage)</AccordionTrigger>
-          <AccordionContent>
-            <Card className="shadow-md hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>Local Storage Data Tools</CardTitle>
-                <CardDescription>
-                  Manually export or import all application data stored in your browser's local storage.
-                  This is a prototype feature to help transfer data between browsers/computers for testing.
-                  Use with caution: Importing data will overwrite existing local data for this application.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={handleExportData} variant="outline">
-                  <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
-                </Button>
-                <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[600px]">
-                    <DialogHeader>
-                      <DialogTitle>Import Local Storage Data</DialogTitle>
-                      <DialogDescription>
-                        Paste the JSON string you previously exported here. This will overwrite all current local data for this application.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <Label htmlFor="import-json-area">JSON Data to Import:</Label>
-                      <Textarea
-                        id="import-json-area"
-                        value={importDataJson}
-                        onChange={(e) => setImportDataJson(e.target.value)}
-                        rows={15}
-                        placeholder="Paste your exported JSON data here..."
-                      />
-                    </div>
-                    <DialogFooter>
-                      <DialogClose asChild>
-                        <Button type="button" variant="outline">Cancel</Button>
-                      </DialogClose>
-                      <Button type="button" onClick={handleImportData}>Import Data & Reload</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </CardContent>
-            </Card>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
 
       <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
@@ -591,6 +621,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-
-    
