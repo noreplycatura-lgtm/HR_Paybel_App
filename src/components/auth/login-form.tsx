@@ -57,10 +57,12 @@ export function LoginForm() {
 
     let loginSuccess = false;
     let welcomeMessage = "";
+    let isAdminLogin = false;
 
     if (values.username === MAIN_ADMIN_USERNAME && values.password === MAIN_ADMIN_PASSWORD) {
       loginSuccess = true;
-      welcomeMessage = "Welcome, Main Admin!";
+      welcomeMessage = "Welcome, Ajay Singh!";
+      isAdminLogin = true;
     } else {
       if (typeof window !== 'undefined') {
         try {
@@ -69,7 +71,6 @@ export function LoginForm() {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
             if (coAdminUser && !coAdminUser.isLocked) {
-              // For co-admin, password check is not implemented in this prototype
               loginSuccess = true;
               welcomeMessage = `Welcome, ${values.username}!`;
             }

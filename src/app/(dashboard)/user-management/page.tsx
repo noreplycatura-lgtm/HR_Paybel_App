@@ -5,7 +5,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { useRouter } from "next/navigation"; // Added useRouter
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2, LogOut } from "lucide-react"; // Added LogOut
+import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const newUserFormSchema = z.object({
@@ -63,9 +63,10 @@ interface SimulatedUser {
 }
 
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const MAIN_ADMIN_USERNAME = "asingh0402";
+const MAIN_ADMIN_USERNAME = "asingh0402"; // This is the login credential
+const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh"; // This is for display
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1"; // Added login status key
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 interface ActivityLogEntry {
   timestamp: string;
@@ -89,7 +90,7 @@ const addActivityLog = (message: string) => {
 
 export default function UserManagementPage() {
   const { toast } = useToast();
-  const router = useRouter(); // Added router
+  const router = useRouter();
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = React.useState(false);
   const [simulatedUsers, setSimulatedUsers] = React.useState<SimulatedUser[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -107,17 +108,17 @@ export default function UserManagementPage() {
             usersToSet = parsedUsers;
           } else {
             console.warn("Simulated users data in localStorage is corrupted. Initializing empty.");
-            // toast({ title: "Data Error", description: "Stored user list is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+             toast({ title: "Data Error", description: "Stored user list is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
-        // toast({
-        //     title: "Data Load Error",
-        //     description: "Could not load user list. Stored data might be corrupted. Please add users again if needed. Data is saved locally in your browser.",
-        //     variant: "destructive",
-        //     duration: 7000,
-        // });
+        toast({
+            title: "Data Load Error",
+            description: "Could not load user list. Stored data might be corrupted. Using empty list. Data is saved locally in your browser.",
+            variant: "destructive",
+            duration: 7000,
+        });
       }
       setSimulatedUsers(usersToSet);
     }
@@ -147,7 +148,7 @@ export default function UserManagementPage() {
     if (values.username === MAIN_ADMIN_USERNAME) {
       toast({
         title: "Cannot Create User",
-        description: `Username '${MAIN_ADMIN_USERNAME}' is reserved for the Main Admin.`,
+        description: `Username '${MAIN_ADMIN_USERNAME}' is reserved for the Main Admin (${MAIN_ADMIN_DISPLAY_NAME}).`,
         variant: "destructive",
       });
       return;
@@ -225,6 +226,7 @@ export default function UserManagementPage() {
       localStorage.removeItem(LOGGED_IN_STATUS_KEY);
     }
     router.replace('/login');
+    addActivityLog('User logged out.');
     toast({ title: "Logged Out", description: "You have been successfully logged out." });
   };
 
@@ -240,7 +242,7 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description={`Manage co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
+        description={`Manage co-admin accounts. Main Admin: ${MAIN_ADMIN_DISPLAY_NAME} (Username: ${MAIN_ADMIN_USERNAME}) - Not manageable here.`}
       >
         <Button onClick={handleLogout} variant="outline">
           <LogOut className="mr-2 h-4 w-4" />
@@ -255,7 +257,10 @@ export default function UserManagementPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4 pt-6">
-          <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
+          <Dialog open={isCreateUserDialogOpen} onOpenChange={(isOpen) => {
+            setIsCreateUserDialogOpen(isOpen);
+            if (!isOpen) form.reset();
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -316,7 +321,7 @@ export default function UserManagementPage() {
         <CardHeader>
           <CardTitle>Simulated Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
+            List of co-admin users. The Main Admin ({MAIN_ADMIN_DISPLAY_NAME}) is not listed here.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
