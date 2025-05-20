@@ -159,7 +159,6 @@ export default function SalarySlipPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
 
-  // States for Multi-Month Slip Generation
   const [selectedDivisionForMultiMonth, setSelectedDivisionForMultiMonth] = React.useState<string | undefined>();
   const [filteredEmployeesForMultiMonth, setFilteredEmployeesForMultiMonth] = React.useState<EmployeeDetail[]>([]);
   const [selectedEmployeeForMultiMonth, setSelectedEmployeeForMultiMonth] = React.useState<string | undefined>();
@@ -209,7 +208,7 @@ export default function SalarySlipPage() {
         }
     }
     setIsLoadingEmployees(false);
-  }, [toast]); // Added toast dependency
+  }, []);
 
   React.useEffect(() => {
     if (selectedDivision && allEmployees.length > 0) {
@@ -217,21 +216,12 @@ export default function SalarySlipPage() {
       setFilteredEmployeesForSlip(filtered);
       if (selectedEmployeeId && !filtered.some(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
-        setSlipData(null);
-        setShowSlip(false);
       }
-    } else if (selectedDivision) {
+    } else {
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
-      setSlipData(null);
-      setShowSlip(false);
-    } else {
-      setFilteredEmployeesForSlip([]); 
-      setSelectedEmployeeId(undefined);
-      setSlipData(null);
-      setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]);
+  }, [selectedDivision, allEmployees]);
 
 
   React.useEffect(() => {
@@ -241,14 +231,11 @@ export default function SalarySlipPage() {
       if (selectedEmployeeForMultiMonth && !filtered.some(emp => emp.id === selectedEmployeeForMultiMonth)) {
         setSelectedEmployeeForMultiMonth(undefined);
       }
-    } else if (selectedDivisionForMultiMonth) {
+    } else { 
       setFilteredEmployeesForMultiMonth([]);
-      setSelectedEmployeeForMultiMonth(undefined);
-    } else {
-      setFilteredEmployeesForMultiMonth([]);
-      setSelectedEmployeeForMultiMonth(undefined);
+      setSelectedEmployeeForMultiMonth(undefined); 
     }
-  }, [selectedDivisionForMultiMonth, allEmployees, selectedEmployeeForMultiMonth]);
+  }, [selectedDivisionForMultiMonth, allEmployees]);
 
 
   const generateSlipDataForEmployee = (
@@ -269,7 +256,6 @@ export default function SalarySlipPage() {
             parsedEmployeeDOJ = tempDOJ;
         } else {
             console.warn(`Employee ${employee.code} has an invalid DOJ string: "${employee.doj}" in master data. Cannot parse for slip generation.`);
-            // No toast here to avoid spamming during bulk operations
             return null;
         }
     } else {
@@ -281,13 +267,11 @@ export default function SalarySlipPage() {
     const selectedPeriodEndDate = endOfMonth(selectedPeriodStartDate);
 
     if (isAfter(parsedEmployeeDOJ, selectedPeriodEndDate)) {
-      // console.warn(`Employee ${employee.code} (DOJ: ${employee.doj}) not joined by ${month} ${year}. Skipping slip.`);
       return null;
     }
     if (employee.dor) {
       const employeeDOR = parseISO(employee.dor);
       if (isValid(employeeDOR) && isBefore(employeeDOR, selectedPeriodStartDate)) {
-        // console.warn(`Employee ${employee.code} (DOR: ${employee.dor}) left before ${month} ${year}. Skipping slip.`);
         return null;
       }
     }
@@ -307,8 +291,8 @@ export default function SalarySlipPage() {
             }
         }
 
-        if (!attendanceForMonthEmployee) { // If no attendance record found for this employee and month, cannot generate slip
-            // console.warn(`No attendance data found for ${employee.name} (${employee.code}) for ${month} ${year}. Cannot generate slip.`);
+        if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
+             console.warn(`No attendance data found for ${employee.name} (${employee.code}) for ${month} ${year}. Cannot generate slip.`);
             return null;
         }
 
@@ -323,7 +307,7 @@ export default function SalarySlipPage() {
             }
         }
     } else {
-        return null; // Cannot generate slip without window context for localStorage
+        return null; 
     }
     
 
@@ -417,7 +401,6 @@ export default function SalarySlipPage() {
         nextMonthOpeningPL = closingBalancePLForSelectedMonth;
     }
 
-    // Add next month's accrual if eligible
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
@@ -429,7 +412,7 @@ export default function SalarySlipPage() {
 
     return {
       employeeId: employee.code, name: employee.name, designation: employee.designation,
-      joinDate: isValid(parsedEmployeeDOJ) ? format(parsedEmployeeDOJ, "dd MMM yyyy") : "N/A",
+      joinDate: (parsedEmployeeDOJ && isValid(parsedEmployeeDOJ)) ? format(parsedEmployeeDOJ, "dd MMM yyyy") : "N/A",
       division: employee.division || "N/A", totalDaysInMonth: totalDaysInMonthValue, actualPayDays: actualPayDaysValue,
       earnings: earningsList, deductions: deductionsList,
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
@@ -501,7 +484,7 @@ export default function SalarySlipPage() {
           emp, selectedMonth, selectedYear,
           openingBalances, allPerformanceDeductions, allLeaveApplications
       );
-      if (slipSummaryData) { // Only include if slip could be generated (i.e., employee active and attendance found)
+      if (slipSummaryData) {
          csvRows.push([
           `"${emp.code}-${emp.name}-${emp.designation}"`,
           salaryComponents.totalGross.toFixed(2),
@@ -895,7 +878,7 @@ export default function SalarySlipPage() {
           </Select>
            <Select value={selectedDivision} onValueChange={(value) => {
              setSelectedDivision(value);
-             setSelectedEmployeeId(undefined); // Reset employee when division changes
+             setSelectedEmployeeId(undefined); 
              setShowSlip(false);
              setSlipData(null);
            }}>
@@ -937,13 +920,13 @@ export default function SalarySlipPage() {
           <CardDescription>Generate and print all salary slips for a single employee over a selected date range.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-            <div className="md:col-span-2">
+           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+            
                  <Select 
                     value={selectedDivisionForMultiMonth} 
                     onValueChange={(value) => {
                         setSelectedDivisionForMultiMonth(value);
-                        setSelectedEmployeeForMultiMonth(undefined); // Reset employee when division changes
+                        setSelectedEmployeeForMultiMonth(undefined); 
                     }}
                 >
                     <SelectTrigger>
@@ -954,7 +937,7 @@ export default function SalarySlipPage() {
                         <SelectItem value="Wellness">Wellness Division</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
+            
              <Select 
                 value={selectedEmployeeForMultiMonth} 
                 onValueChange={setSelectedEmployeeForMultiMonth}
@@ -977,6 +960,9 @@ export default function SalarySlipPage() {
                 )}
                 </SelectContent>
             </Select>
+            <div/> {/* Spacer for grid alignment */}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
             <Select value={fromMonthMulti} onValueChange={setFromMonthMulti}>
               <SelectTrigger> <SelectValue placeholder="From Month" /> </SelectTrigger>
               <SelectContent> {months.map(m => <SelectItem key={`from-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
@@ -985,10 +971,9 @@ export default function SalarySlipPage() {
               <SelectTrigger> <SelectValue placeholder="From Year" /> </SelectTrigger>
               <SelectContent> {availableYears.map(y => <SelectItem key={`from-multi-${y}`} value={y.toString()}>{y}</SelectItem>)} </SelectContent>
             </Select>
-
+            <div/> {/* Spacer for grid alignment */}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-            <div className="md:col-span-3" /> {/* Spacer */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
              <Select value={toMonthMulti} onValueChange={setToMonthMulti}>
               <SelectTrigger> <SelectValue placeholder="To Month" /> </SelectTrigger>
               <SelectContent> {months.map(m => <SelectItem key={`to-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
@@ -1179,9 +1164,8 @@ function convertToWords(num: number): string {
   if (words === "" && wholePart === 0 && decimalPart === 0) {
      words = "Zero";
   } else if (words === "" && wholePart === 0 && decimalPart > 0) {
-    // Handles cases like 0.50
   } else if (words === "" && wholePart > 0) {
-     words = "Error In Conversion"; // Should not happen if inWords is correct
+     words = "Error In Conversion"; 
   }
 
   if (decimalPart > 0) {
@@ -1201,5 +1185,6 @@ function convertToWords(num: number): string {
   if (words.trim() === "Zero") return "Zero Rupees Only";
   if (words.trim() === "Error In Conversion") return "Error In Conversion";
 
-  return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 ? " Only" : "") : 'Zero Rupees Only';
+  return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 && !words.endsWith("Paise") ? " Only" : "") : 'Zero Rupees Only';
 }
+
