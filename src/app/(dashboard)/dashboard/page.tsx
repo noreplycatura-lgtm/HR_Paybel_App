@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2, KeySquare } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +67,7 @@ export default function DashboardPage() {
   const [dashboardCards, setDashboardCards] = React.useState([
     { title: "Total Employees", value: "N/A", icon: UserCheck, description: "0 Active, 0 Left", dataAiHint: "team office" },
     { title: "Total Leave Records", value: "N/A", icon: History, description: "All recorded leave entries", dataAiHint: "documents list" },
-    { title: "Payroll Status (Last Mth)", value: "N/A", icon: FileText, description: "For previous month", dataAiHint: "report checkmark" },
+    { title: "Last Month's Salary Total", value: "N/A", icon: DollarSign, description: "For previous month", dataAiHint: "report checkmark" },
     { title: "Storage Used", value: "N/A", icon: HardDrive, description: "Approx. size of app data", dataAiHint: "data storage" },
   ]);
 
@@ -78,7 +79,7 @@ export default function DashboardPage() {
   const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
   const [exportedDataJson, setExportedDataJson] = React.useState("");
-  const [importDataJson, setImportDataJson] = React.useState("");
+  const [selectedImportFile, setSelectedImportFile] = React.useState<File | null>(null);
   const [recentActivities, setRecentActivities] = React.useState<ActivityLogEntry[]>([]);
 
 
@@ -128,7 +129,6 @@ export default function DashboardPage() {
             if(Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
         }
 
-        // Calculate Storage Used
         let totalAppSpecificBytes = 0;
         const appKeys = [
           LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
@@ -148,7 +148,7 @@ export default function DashboardPage() {
         appKeys.forEach(key => {
           const item = localStorage.getItem(key);
           if (item) {
-            totalAppSpecificBytes += item.length; // Assuming 1 char ~ 1 byte for approximation
+            totalAppSpecificBytes += item.length; 
           }
         });
 
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                 const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
 
                 const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; // ESIC, PT, PF are 0
+                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
                 monthNetTotal += (totalAllowance - totalDeductionValue);
               }
             });
@@ -295,12 +295,12 @@ export default function DashboardPage() {
     setDashboardCards(prevCards => prevCards.map(card => {
       if (card.title === "Total Employees") return { ...card, value: totalEmployeesCount.toString(), description: `${activeEmployeesCount} Active, ${leftEmployeesCount} Left` };
       if (card.title === "Total Leave Records") return { ...card, value: totalLeaveRecordsCount.toString() };
-      if (card.title === "Payroll Status (Last Mth)") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
+      if (card.title === "Last Month's Salary Total") return { ...card, value: payrollStatusValue, description: payrollStatusDescription };
       if (card.title === "Storage Used") return { ...card, value: storageUsedValue, description: "Approx. size of app data in local storage" };
       return card;
     }));
     setIsLoading(false);
-  }, []);
+  }, [toast]);
 
 
   const handleExportData = () => {
@@ -344,7 +344,7 @@ export default function DashboardPage() {
             allData[key] = JSON.parse(item);
           } catch (e) {
             allData[key] = item;
-            console.warn(`Could not parse JSON for prefixed key ${key} during export, storing as raw string.`);
+            console.warn(`Could not parse prefixed key ${key} during export, storing as raw string.`);
           }
         }
       }
@@ -370,56 +370,72 @@ export default function DashboardPage() {
     toast({ title: "Download Started", description: "hr_payroll_app_data_export.json is being downloaded." });
   };
 
+  const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedImportFile(file);
+    } else {
+      setSelectedImportFile(null);
+    }
+  };
+
   const handleImportData = () => {
-    if (typeof window === 'undefined' || !importDataJson) {
-      toast({ title: "No Data", description: "Please paste the JSON data to import.", variant: "destructive" });
+    if (typeof window === 'undefined' || !selectedImportFile) {
+      toast({ title: "No File Selected", description: "Please select a JSON file to import.", variant: "destructive" });
       return;
     }
-    try {
-      const dataToImport = JSON.parse(importDataJson);
-      if (typeof dataToImport !== 'object' || dataToImport === null) {
-        toast({ title: "Invalid JSON", description: "The provided text is not a valid JSON object.", variant: "destructive" });
-        return;
-      }
 
-      const knownKeysForClear = [
-          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
-          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-          LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-          LOCAL_STORAGE_OPENING_BALANCES_KEY,
-          LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-          LOCAL_STORAGE_SIMULATED_USERS_KEY,
-          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY
-      ];
-      const knownDynamicPrefixesForClear = [
-        LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-        LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-        LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
-      ];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const fileContent = event.target?.result as string;
+        const dataToImport = JSON.parse(fileContent);
 
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if(key && (knownDynamicPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
-             knownKeysForClear.includes(key))) {
-            keysToRemove.push(key);
-          }
-      }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-
-      for (const key in dataToImport) {
-        if (Object.prototype.hasOwnProperty.call(dataToImport, key)) {
-          localStorage.setItem(key, JSON.stringify(dataToImport[key]));
+        if (typeof dataToImport !== 'object' || dataToImport === null) {
+          toast({ title: "Invalid JSON", description: "The selected file does not contain a valid JSON object.", variant: "destructive" });
+          return;
         }
+
+        const knownKeysForClear = [
+            LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+            LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+            LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+            LOCAL_STORAGE_OPENING_BALANCES_KEY,
+            LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+            LOCAL_STORAGE_SIMULATED_USERS_KEY,
+            LOCAL_STORAGE_RECENT_ACTIVITIES_KEY
+        ];
+        const knownDynamicPrefixesForClear = [
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+        ];
+
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if(key && (knownDynamicPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
+               knownKeysForClear.includes(key))) {
+              keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
+        for (const key in dataToImport) {
+          if (Object.prototype.hasOwnProperty.call(dataToImport, key)) {
+            localStorage.setItem(key, JSON.stringify(dataToImport[key]));
+          }
+        }
+        toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
+        setIsImportDialogOpen(false);
+        setSelectedImportFile(null);
+        window.location.reload(); 
+      } catch (error) {
+        console.error("Error importing data:", error);
+        toast({ title: "Import Error", description: "Could not parse or import JSON data from the file. Check format and ensure it's valid JSON from a previous export.", variant: "destructive", duration: 7000 });
       }
-      toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
-      setIsImportDialogOpen(false);
-      setImportDataJson("");
-      window.location.reload(); 
-    } catch (error) {
-      console.error("Error importing data:", error);
-      toast({ title: "Import Error", description: "Could not parse or import JSON data. Check format and ensure it's valid JSON from a previous export.", variant: "destructive", duration: 7000 });
-    }
+    };
+    reader.readAsText(selectedImportFile);
   };
 
 
@@ -517,7 +533,10 @@ export default function DashboardPage() {
           <Button onClick={handleExportData} variant="outline">
             <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
           </Button>
-          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+          <Dialog open={isImportDialogOpen} onOpenChange={(isOpen) => {
+            setIsImportDialogOpen(isOpen);
+            if (!isOpen) setSelectedImportFile(null); // Reset file on dialog close
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
@@ -527,24 +546,25 @@ export default function DashboardPage() {
               <DialogHeader>
                 <DialogTitle>Import Local Storage Data</DialogTitle>
                 <DialogDescription>
-                  Paste the JSON string you previously exported here. This will overwrite all current local data for this application.
+                  Select a JSON file you previously exported. This will overwrite all current local data for this application.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <Label htmlFor="import-json-area">JSON Data to Import:</Label>
-                <Textarea
-                  id="import-json-area"
-                  value={importDataJson}
-                  onChange={(e) => setImportDataJson(e.target.value)}
-                  rows={15}
-                  placeholder="Paste your exported JSON data here..."
+                <Label htmlFor="import-json-file">Select JSON File:</Label>
+                <Input
+                  id="import-json-file"
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportFileChange}
+                  className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                 />
+                {selectedImportFile && <p className="text-sm text-muted-foreground">Selected: {selectedImportFile.name}</p>}
               </div>
               <DialogFooter>
                 <DialogClose asChild>
                   <Button type="button" variant="outline">Cancel</Button>
                 </DialogClose>
-                <Button type="button" onClick={handleImportData}>Import Data & Reload</Button>
+                <Button type="button" onClick={handleImportData} disabled={!selectedImportFile}>Import Data & Reload</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -674,5 +694,5 @@ export default function DashboardPage() {
     </>
   );
 }
-
+  
     
