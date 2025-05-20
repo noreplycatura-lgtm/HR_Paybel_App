@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { UserCircle, PanelLeft } from "lucide-react";
+import { UserCircle, PanelLeft, LogOut } from "lucide-react"; // Added LogOut
 import Image from "next/image";
+import { useRouter } from "next/navigation"; // Added useRouter
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,9 +17,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useToast } from "@/hooks/use-toast"; // Added useToast
+
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 export function TopNavbar() {
   const { toggleSidebar, isMobile } = useSidebar();
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
+    }
+    router.replace('/login');
+    toast({ title: "Logged Out", description: "You have been successfully logged out." });
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 print:hidden">
@@ -56,7 +70,11 @@ export function TopNavbar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            {/* Login/Logout options removed as login is disabled */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

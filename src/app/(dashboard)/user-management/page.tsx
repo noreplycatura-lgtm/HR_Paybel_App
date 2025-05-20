@@ -5,6 +5,7 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import { useRouter } from "next/navigation"; // Added useRouter
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2, LogOut } from "lucide-react"; // Added LogOut
 import { useToast } from "@/hooks/use-toast";
 
 const newUserFormSchema = z.object({
@@ -64,6 +65,7 @@ interface SimulatedUser {
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1"; // Added login status key
 
 interface ActivityLogEntry {
   timestamp: string;
@@ -87,6 +89,7 @@ const addActivityLog = (message: string) => {
 
 export default function UserManagementPage() {
   const { toast } = useToast();
+  const router = useRouter(); // Added router
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = React.useState(false);
   const [simulatedUsers, setSimulatedUsers] = React.useState<SimulatedUser[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -104,17 +107,17 @@ export default function UserManagementPage() {
             usersToSet = parsedUsers;
           } else {
             console.warn("Simulated users data in localStorage is corrupted. Initializing empty.");
-            toast({ title: "Data Error", description: "Stored user list is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+            // toast({ title: "Data Error", description: "Stored user list is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
           }
         }
       } catch (error) {
         console.error("Error loading/processing simulated users from localStorage:", error);
-        toast({
-            title: "Data Load Error",
-            description: "Could not load user list. Stored data might be corrupted. Please add users again if needed. Data is saved locally in your browser.",
-            variant: "destructive",
-            duration: 7000,
-        });
+        // toast({
+        //     title: "Data Load Error",
+        //     description: "Could not load user list. Stored data might be corrupted. Please add users again if needed. Data is saved locally in your browser.",
+        //     variant: "destructive",
+        //     duration: 7000,
+        // });
       }
       setSimulatedUsers(usersToSet);
     }
@@ -169,7 +172,7 @@ export default function UserManagementPage() {
     addActivityLog(`Co-admin user '${values.username}' created.`);
     toast({
       title: "Co-Admin User Added",
-      description: `User '${values.username}' has been added to the list. Login functionality for co-admins depends on the main login page configuration.`,
+      description: `User '${values.username}' has been added.`,
     });
     setIsCreateUserDialogOpen(false);
     form.reset();
@@ -213,8 +216,16 @@ export default function UserManagementPage() {
     addActivityLog(`Password reset attempted for co-admin '${username}'.`);
     toast({
       title: "Prototype Action",
-      description: `Password reset for user '${username}' is a simulated action. In a real system, this would trigger a reset flow.`,
+      description: `Password reset for user '${username}' is a simulated action.`,
     });
+  };
+
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LOGGED_IN_STATUS_KEY);
+    }
+    router.replace('/login');
+    toast({ title: "Logged Out", description: "You have been successfully logged out." });
   };
 
   if (isLoading) {
@@ -229,13 +240,18 @@ export default function UserManagementPage() {
     <>
       <PageHeader
         title="User Management"
-        description={`Manage co-admin accounts for this prototype. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here). Actual login functionality is separate.`}
-      />
+        description={`Manage co-admin accounts. Main Admin: ${MAIN_ADMIN_USERNAME} (Not manageable here).`}
+      >
+        <Button onClick={handleLogout} variant="outline">
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </PageHeader>
       <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle>Account Controls</CardTitle>
           <CardDescription>
-            Create new co-admin users (simulated).
+            Create new co-admin users.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-4 pt-6">
@@ -300,7 +316,7 @@ export default function UserManagementPage() {
         <CardHeader>
           <CardTitle>Simulated Co-Admin Accounts</CardTitle>
           <CardDescription>
-            List of co-admin users created for this prototype. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
+            List of co-admin users. The Main Admin ({MAIN_ADMIN_USERNAME}) is not listed here.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">

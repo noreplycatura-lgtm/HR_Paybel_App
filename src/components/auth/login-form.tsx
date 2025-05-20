@@ -53,7 +53,7 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500)); // Shorter delay for testing
+    await new Promise(resolve => setTimeout(resolve, 300)); 
 
     let loginSuccess = false;
     let welcomeMessage = "";
@@ -68,16 +68,14 @@ export function LoginForm() {
           if (storedUsersStr) {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
-            // For co-admin, password check is not implemented in this prototype
-            // We only check if the user exists and is not locked.
             if (coAdminUser && !coAdminUser.isLocked) {
+              // For co-admin, password check is not implemented in this prototype
               loginSuccess = true;
               welcomeMessage = `Welcome, ${values.username}!`;
             }
           }
         } catch (error) {
           console.error("Error reading co-admin users from localStorage:", error);
-          // Fall through to login failed
         }
       }
     }
@@ -88,8 +86,6 @@ export function LoginForm() {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
       }
-      // It's important that router.replace is called *before* any other async operations
-      // or state updates that might delay or interfere with navigation.
       router.replace("/dashboard");
       toast({
         title: "Login Successful",

@@ -5,6 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { PanelLeft } from "lucide-react";
+import { useRouter } from "next/navigation"; // Import useRouter
 
 import {
   SidebarProvider,
@@ -19,13 +20,40 @@ import { Button } from "@/components/ui/button";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { TopNavbar } from "@/components/layout/top-navbar";
 import { NAV_ITEMS, COMPANY_NAME } from "@/lib/constants";
+import { Loader2 } from "lucide-react";
+
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Login check logic has been removed for direct access.
+  const router = useRouter();
+  const [isAuthCheckComplete, setIsAuthCheckComplete] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = localStorage.getItem(LOGGED_IN_STATUS_KEY) === 'true';
+      if (!isLoggedIn) {
+        router.replace('/login');
+      } else {
+        setIsAuthCheckComplete(true);
+      }
+    } else {
+      // Should not happen in client component, but as a fallback
+      router.replace('/login');
+    }
+  }, [router]);
+
+  if (!isAuthCheckComplete) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider defaultOpen={false}>
        <div className="flex min-h-screen w-full flex-col bg-muted/40">
