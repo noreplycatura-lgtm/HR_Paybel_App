@@ -5,7 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { PanelLeft } from "lucide-react";
-import { useRouter } from "next/navigation"; // Import useRouter
+import { useRouter } from "next/navigation"; 
 
 import {
   SidebarProvider,
@@ -41,7 +41,6 @@ export default function DashboardLayout({
         setIsAuthCheckComplete(true);
       }
     } else {
-      // Should not happen in client component, but as a fallback
       router.replace('/login');
     }
   }, [router]);
@@ -56,14 +55,12 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider defaultOpen={false}>
-       <div className="flex min-h-screen w-full flex-col bg-muted/40">
-        <AppSidebar />
-        <div className="flex flex-1 flex-col sm:gap-4 sm:py-4">
-          <TopNavbar />
-          <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
-            {children}
-          </main>
-        </div>
+      <AppSidebar />
+      <div className="flex flex-1 flex-col bg-muted/40 md:peer-data-[state=expanded]:pl-[var(--sidebar-width)] md:peer-data-[state=collapsed]:pl-[var(--sidebar-width-icon)] transition-[padding-left] duration-200 ease-linear">
+        <TopNavbar />
+        <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
+          {children}
+        </main>
       </div>
     </SidebarProvider>
   );
