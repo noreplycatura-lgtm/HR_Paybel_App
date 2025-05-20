@@ -69,7 +69,7 @@ const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; // Added for logging
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
 interface SalarySlipDataType {
   employeeId: string;
@@ -160,6 +160,8 @@ export default function SalarySlipPage() {
   const [isLoadingEmployees, setIsLoadingEmployees] = React.useState(true);
 
   // States for Multi-Month Slip Generation
+  const [selectedDivisionForMultiMonth, setSelectedDivisionForMultiMonth] = React.useState<string | undefined>();
+  const [filteredEmployeesForMultiMonth, setFilteredEmployeesForMultiMonth] = React.useState<EmployeeDetail[]>([]);
   const [selectedEmployeeForMultiMonth, setSelectedEmployeeForMultiMonth] = React.useState<string | undefined>();
   const [fromMonthMulti, setFromMonthMulti] = React.useState<string>('');
   const [fromYearMulti, setFromYearMulti] = React.useState<number>(0);
@@ -207,7 +209,7 @@ export default function SalarySlipPage() {
         }
     }
     setIsLoadingEmployees(false);
-  }, []);
+  }, [toast]); // Added toast dependency
 
   React.useEffect(() => {
     if (selectedDivision && allEmployees.length > 0) {
@@ -224,12 +226,29 @@ export default function SalarySlipPage() {
       setSlipData(null);
       setShowSlip(false);
     } else {
-      setFilteredEmployeesForSlip([]); // Clear if no division selected
+      setFilteredEmployeesForSlip([]); 
       setSelectedEmployeeId(undefined);
       setSlipData(null);
       setShowSlip(false);
     }
-  }, [selectedDivision, allEmployees]);
+  }, [selectedDivision, allEmployees, selectedEmployeeId]);
+
+
+  React.useEffect(() => {
+    if (selectedDivisionForMultiMonth && allEmployees.length > 0) {
+      const filtered = allEmployees.filter(emp => emp.division === selectedDivisionForMultiMonth);
+      setFilteredEmployeesForMultiMonth(filtered);
+      if (selectedEmployeeForMultiMonth && !filtered.some(emp => emp.id === selectedEmployeeForMultiMonth)) {
+        setSelectedEmployeeForMultiMonth(undefined);
+      }
+    } else if (selectedDivisionForMultiMonth) {
+      setFilteredEmployeesForMultiMonth([]);
+      setSelectedEmployeeForMultiMonth(undefined);
+    } else {
+      setFilteredEmployeesForMultiMonth([]);
+      setSelectedEmployeeForMultiMonth(undefined);
+    }
+  }, [selectedDivisionForMultiMonth, allEmployees, selectedEmployeeForMultiMonth]);
 
 
   const generateSlipDataForEmployee = (
@@ -249,7 +268,8 @@ export default function SalarySlipPage() {
         if (isValid(tempDOJ)) {
             parsedEmployeeDOJ = tempDOJ;
         } else {
-            console.warn(`Employee ${employee.code} has an invalid DOJ string: "${employee.doj}" in master data.`);
+            console.warn(`Employee ${employee.code} has an invalid DOJ string: "${employee.doj}" in master data. Cannot parse for slip generation.`);
+            // No toast here to avoid spamming during bulk operations
             return null;
         }
     } else {
@@ -261,13 +281,13 @@ export default function SalarySlipPage() {
     const selectedPeriodEndDate = endOfMonth(selectedPeriodStartDate);
 
     if (isAfter(parsedEmployeeDOJ, selectedPeriodEndDate)) {
-      console.warn(`Employee ${employee.code} (DOJ: ${employee.doj}) not joined by ${month} ${year}. Skipping slip.`);
+      // console.warn(`Employee ${employee.code} (DOJ: ${employee.doj}) not joined by ${month} ${year}. Skipping slip.`);
       return null;
     }
     if (employee.dor) {
       const employeeDOR = parseISO(employee.dor);
       if (isValid(employeeDOR) && isBefore(employeeDOR, selectedPeriodStartDate)) {
-        console.warn(`Employee ${employee.code} (DOR: ${employee.dor}) left before ${month} ${year}. Skipping slip.`);
+        // console.warn(`Employee ${employee.code} (DOR: ${employee.dor}) left before ${month} ${year}. Skipping slip.`);
         return null;
       }
     }
@@ -287,6 +307,11 @@ export default function SalarySlipPage() {
             }
         }
 
+        if (!attendanceForMonthEmployee) { // If no attendance record found for this employee and month, cannot generate slip
+            // console.warn(`No attendance data found for ${employee.name} (${employee.code}) for ${month} ${year}. Cannot generate slip.`);
+            return null;
+        }
+
         const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${month}_${year}`;
         const storedSalaryEditsForMonth = localStorage.getItem(salaryEditsStorageKey);
         if (storedSalaryEditsForMonth) {
@@ -297,12 +322,10 @@ export default function SalarySlipPage() {
                  console.warn(`Error parsing salary edits for ${month} ${year} for employee ${employee.code}:`, e);
             }
         }
+    } else {
+        return null; // Cannot generate slip without window context for localStorage
     }
-
-    if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
-      console.warn(`No attendance data found for employee ${employee.code} for ${month} ${year}. Cannot generate slip.`);
-      return null;
-    }
+    
 
     const attendanceStatuses: string[] = attendanceForMonthEmployee.attendance;
     const salaryEdits = salaryEditsForEmployee || {};
@@ -380,12 +403,12 @@ export default function SalarySlipPage() {
 
     const obForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
 
-    if (nextMonthIdx === 3) { // April
+    if (nextMonthIdx === 3) { 
         nextMonthOpeningCL = obForNextFY?.openingCL || 0;
         nextMonthOpeningSL = obForNextFY?.openingSL || 0;
         if (obForNextFY && obForNextFY.openingPL !== undefined) {
           nextMonthOpeningPL = obForNextFY.openingPL;
-        } else { // If no specific OB for new FY, PL carries forward
+        } else { 
           nextMonthOpeningPL = closingBalancePLForSelectedMonth;
         }
     } else {
@@ -394,6 +417,7 @@ export default function SalarySlipPage() {
         nextMonthOpeningPL = closingBalancePLForSelectedMonth;
     }
 
+    // Add next month's accrual if eligible
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
@@ -561,8 +585,8 @@ export default function SalarySlipPage() {
   };
 
   const handleGenerateMultiMonthSlips = () => {
-    if (!selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0) {
-      toast({ title: "Selection Missing", description: "Please select an employee and a valid date range for multi-month slips.", variant: "destructive" });
+    if (!selectedDivisionForMultiMonth || !selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0) {
+      toast({ title: "Selection Missing", description: "Please select division, employee, and a valid date range for multi-month slips.", variant: "destructive" });
       return;
     }
 
@@ -869,7 +893,12 @@ export default function SalarySlipPage() {
                 {availableYears.map(year => <SelectItem key={`single-year-${year}`} value={year.toString()}>{year}</SelectItem>)}
             </SelectContent>
           </Select>
-           <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+           <Select value={selectedDivision} onValueChange={(value) => {
+             setSelectedDivision(value);
+             setSelectedEmployeeId(undefined); // Reset employee when division changes
+             setShowSlip(false);
+             setSlipData(null);
+           }}>
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select Division" />
             </SelectTrigger>
@@ -894,7 +923,7 @@ export default function SalarySlipPage() {
           </Select>
           <Button
             onClick={handleGenerateSlip}
-            disabled={!selectedMonth || !selectedEmployeeId || !selectedYear || !selectedDivision || isLoading}
+            disabled={!selectedMonth || !selectedEmployeeId || selectedYear === 0 || !selectedDivision || isLoading}
           >
             {isLoading && !bulkSlipsData.length && showSlip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
              Generate Single Slip
@@ -908,25 +937,46 @@ export default function SalarySlipPage() {
           <CardDescription>Generate and print all salary slips for a single employee over a selected date range.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
             <div className="md:col-span-2">
-                <Select value={selectedEmployeeForMultiMonth} onValueChange={setSelectedEmployeeForMultiMonth}>
+                 <Select 
+                    value={selectedDivisionForMultiMonth} 
+                    onValueChange={(value) => {
+                        setSelectedDivisionForMultiMonth(value);
+                        setSelectedEmployeeForMultiMonth(undefined); // Reset employee when division changes
+                    }}
+                >
                     <SelectTrigger>
-                    <SelectValue placeholder="Select Employee" />
+                        <SelectValue placeholder="Select Division" />
                     </SelectTrigger>
                     <SelectContent>
-                    {allEmployees.length > 0 ? (
-                        allEmployees.map(emp => (
-                        <SelectItem key={`multi-emp-${emp.id}`} value={emp.id}>
-                            {emp.name} ({emp.code}) - {emp.division}
-                        </SelectItem>
-                        ))
-                    ) : (
-                        <SelectItem value="no-emp-multi" disabled>No employees loaded</SelectItem>
-                    )}
+                        <SelectItem value="FMCG">FMCG Division</SelectItem>
+                        <SelectItem value="Wellness">Wellness Division</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
+             <Select 
+                value={selectedEmployeeForMultiMonth} 
+                onValueChange={setSelectedEmployeeForMultiMonth}
+                disabled={!selectedDivisionForMultiMonth || filteredEmployeesForMultiMonth.length === 0}
+            >
+                <SelectTrigger>
+                <SelectValue placeholder="Select Employee" />
+                </SelectTrigger>
+                <SelectContent>
+                {filteredEmployeesForMultiMonth.length > 0 ? (
+                    filteredEmployeesForMultiMonth.map(emp => (
+                    <SelectItem key={`multi-emp-${emp.id}`} value={emp.id}>
+                        {emp.name} ({emp.code}) - {emp.status}
+                    </SelectItem>
+                    ))
+                ) : (
+                    <SelectItem value="no-emp-multi-filtered" disabled>
+                        {selectedDivisionForMultiMonth ? `No employees in ${selectedDivisionForMultiMonth}` : "Select division first"}
+                    </SelectItem>
+                )}
+                </SelectContent>
+            </Select>
             <Select value={fromMonthMulti} onValueChange={setFromMonthMulti}>
               <SelectTrigger> <SelectValue placeholder="From Month" /> </SelectTrigger>
               <SelectContent> {months.map(m => <SelectItem key={`from-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
@@ -938,7 +988,7 @@ export default function SalarySlipPage() {
 
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-            <div className="md:col-span-2" /> {/* Spacer */}
+            <div className="md:col-span-3" /> {/* Spacer */}
              <Select value={toMonthMulti} onValueChange={setToMonthMulti}>
               <SelectTrigger> <SelectValue placeholder="To Month" /> </SelectTrigger>
               <SelectContent> {months.map(m => <SelectItem key={`to-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
@@ -949,8 +999,8 @@ export default function SalarySlipPage() {
             </Select>
              <Button
               onClick={handleGenerateMultiMonthSlips}
-              disabled={!selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0 || isLoadingMultiMonth}
-              className="md:mt-auto" // Align button with inputs on larger screens
+              disabled={!selectedDivisionForMultiMonth || !selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0 || isLoadingMultiMonth}
+              className="md:mt-auto" 
             >
               {isLoadingMultiMonth ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
               Generate & Print Multi-Month Slips
@@ -1002,7 +1052,7 @@ export default function SalarySlipPage() {
                     <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
                     <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
                     <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                     <p className="invisible">&nbsp;</p> {/* Placeholder for alignment */}
+                     <p className="invisible">&nbsp;</p> 
                     <Separator className="my-4" />
                     <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear > 0 ? selectedYear : ''})</h3>
                     <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -1139,13 +1189,11 @@ function convertToWords(num: number): string {
         words += ' Rupees and ' + inWords(decimalPart) + ' Paise';
     } else if (wholePart === 0 && (words === "Zero" || words === "")) {
         words = inWords(decimalPart) + ' Paise';
-    } else { // Should not normally be reached if wholePart > 0 and words is empty
+    } else { 
         words = inWords(decimalPart) + ' Paise';
     }
   } else if (words && words !== "Zero" && wholePart !== 0 && decimalPart === 0) {
     words += ' Rupees';
-  } else if (words === "Zero" && wholePart === 0 && decimalPart === 0) {
-    // "Zero Rupees Only" will be handled below
   }
 
 
@@ -1155,7 +1203,3 @@ function convertToWords(num: number): string {
 
   return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 ? " Only" : "") : 'Zero Rupees Only';
 }
-
-    
-
-    
