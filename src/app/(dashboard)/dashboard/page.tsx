@@ -60,10 +60,15 @@ interface ActivityLogEntry {
 
 interface MonthlySalaryTotal {
   monthYear: string;
-  total: number;
-  employeeCount: number;
-  statusCounts: { Active: number; Left: number };
-  designationCounts: Record<string, number>;
+  totalNetPay: number;
+  processedEmployeeCount: number;
+  overallStatusCounts: { Active: number; Left: number };
+  designationDetails: Record<string, {
+    activeCount: number;
+    leftCount: number;
+    activeNetPay: number;
+    leftNetPay: number;
+  }>;
 }
 
 
@@ -116,9 +121,11 @@ export default function DashboardPage() {
           } else {
              console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
              employeeMasterList = []; 
+             // No sampleEmployees fallback here, use what's in localStorage or empty
           }
         } else {
           employeeMasterList = []; 
+          // No sampleEmployees fallback here either
         }
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
@@ -130,7 +137,10 @@ export default function DashboardPage() {
               console.error("Error parsing leave applications from localStorage:", e);
               totalLeaveRecordsCount = 0;
             }
+        } else {
+            totalLeaveRecordsCount = 0;
         }
+
 
         const storedPerfDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
         if (storedPerfDeductionsStr) {
@@ -157,7 +167,7 @@ export default function DashboardPage() {
         appKeys.forEach(key => {
           const item = localStorage.getItem(key);
           if (item) {
-            totalAppSpecificBytes += item.length; 
+            totalAppSpecificBytes += new TextEncoder().encode(item).length;
           }
         });
 
@@ -174,7 +184,7 @@ export default function DashboardPage() {
             if (matchedPrefix) {
               const item = localStorage.getItem(key);
               if (item) {
-                totalAppSpecificBytes += item.length;
+                totalAppSpecificBytes += new TextEncoder().encode(item).length;
               }
             }
           }
@@ -201,9 +211,9 @@ export default function DashboardPage() {
           const monthName = months[getMonth(targetDate)];
           const year = getYear(targetDate);
           let monthNetTotal = 0;
-          let processedEmployeeCount = 0;
-          const currentMonthStatusCounts: { Active: number; Left: number } = { Active: 0, Left: 0 };
-          const currentMonthDesignationCounts: Record<string, number> = {};
+          let processedEmployeeCountForMonth = 0;
+          const currentMonthOverallStatusCounts: { Active: number; Left: number } = { Active: 0, Left: 0 };
+          const currentMonthDesignationDetails: Record<string, { activeCount: number; leftCount: number; activeNetPay: number; leftNetPay: number;}> = {};
 
 
           const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
@@ -264,25 +274,37 @@ export default function DashboardPage() {
 
                 const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
                 const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
-                monthNetTotal += (totalAllowance - totalDeductionValue);
+                const netPayForMonthForEmp = (totalAllowance - totalDeductionValue);
+                monthNetTotal += netPayForMonthForEmp;
 
-                processedEmployeeCount++;
-                currentMonthStatusCounts[emp.status] = (currentMonthStatusCounts[emp.status] || 0) + 1;
-                currentMonthDesignationCounts[emp.designation] = (currentMonthDesignationCounts[emp.designation] || 0) + 1;
+                processedEmployeeCountForMonth++;
+                currentMonthOverallStatusCounts[emp.status] = (currentMonthOverallStatusCounts[emp.status] || 0) + 1;
+                
+                const desig = emp.designation || "N/A";
+                if (!currentMonthDesignationDetails[desig]) {
+                  currentMonthDesignationDetails[desig] = { activeCount: 0, leftCount: 0, activeNetPay: 0, leftNetPay: 0 };
+                }
+                if (emp.status === "Active") {
+                  currentMonthDesignationDetails[desig].activeCount++;
+                  currentMonthDesignationDetails[desig].activeNetPay += netPayForMonthForEmp;
+                } else if (emp.status === "Left") {
+                  currentMonthDesignationDetails[desig].leftCount++;
+                  currentMonthDesignationDetails[desig].leftNetPay += netPayForMonthForEmp;
+                }
 
               }
             });
           }
           monthlyTotals.push({ 
             monthYear: `${monthName} ${year}`, 
-            total: monthNetTotal,
-            employeeCount: processedEmployeeCount,
-            statusCounts: currentMonthStatusCounts,
-            designationCounts: currentMonthDesignationCounts,
+            totalNetPay: monthNetTotal,
+            processedEmployeeCount: processedEmployeeCountForMonth,
+            overallStatusCounts: currentMonthOverallStatusCounts,
+            designationDetails: currentMonthDesignationDetails,
           });
           fiveMonthGrandTotal += monthNetTotal;
         }
-        setLastFiveMonthsSalaryData(monthlyTotals.reverse());
+        setLastFiveMonthsSalaryData(monthlyTotals.reverse()); // Show most recent first
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
         setIsLoadingSalaries(false);
 
@@ -338,7 +360,7 @@ export default function DashboardPage() {
       return card;
     }));
     setIsLoading(false);
-  }, [toast]);
+  }, []);
 
 
   const handleExportData = () => {
@@ -674,18 +696,30 @@ export default function DashboardPage() {
                 <AccordionItem value={`item-${index}`} key={index} className="border px-4 rounded-md shadow-sm">
                   <AccordionTrigger className="py-3 text-left hover:no-underline">
                     <div className="flex flex-col sm:flex-row justify-between w-full items-start sm:items-center">
-                        <span className="font-medium">{item.monthYear}: ₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        <span className="text-xs text-muted-foreground sm:ml-4 mt-1 sm:mt-0">Processed for {item.employeeCount} employee(s)</span>
+                        <span className="font-medium">{item.monthYear}: ₹{item.totalNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="text-xs text-muted-foreground sm:ml-4 mt-1 sm:mt-0">Processed for {item.processedEmployeeCount} employee(s)</span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-3 text-sm text-muted-foreground space-y-1">
-                    <p><strong>Status:</strong> Active: {item.statusCounts.Active}, Left: {item.statusCounts.Left}</p>
+                    <p><strong>Overall Status:</strong> Active: {item.overallStatusCounts.Active}, Left: {item.overallStatusCounts.Left}</p>
                     <div>
-                      <strong>Designations:</strong>
-                      {Object.keys(item.designationCounts).length > 0 ? (
-                        <ul className="list-disc list-inside ml-4 text-xs">
-                          {Object.entries(item.designationCounts).map(([designation, count]) => (
-                            <li key={designation}>{designation}: {count}</li>
+                      <strong>Designation Details:</strong>
+                      {Object.keys(item.designationDetails).length > 0 ? (
+                        <ul className="list-disc list-inside ml-4 text-xs space-y-0.5">
+                          {Object.entries(item.designationDetails).map(([designation, details]) => (
+                            <li key={designation}>
+                              <span className="font-medium">{designation}:</span>
+                              {details.activeCount > 0 && (
+                                <span className="ml-2">
+                                  Active: {details.activeCount} (Net: ₹{details.activeNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                </span>
+                              )}
+                              {details.leftCount > 0 && (
+                                <span className={`${details.activeCount > 0 ? 'ml-2' : 'ml-2'}`}>
+                                  Left: {details.leftCount} (Net: ₹{details.leftNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                </span>
+                              )}
+                            </li>
                           ))}
                         </ul>
                       ) : (
@@ -786,6 +820,8 @@ export default function DashboardPage() {
   );
 }
     
+    
+
     
 
     
