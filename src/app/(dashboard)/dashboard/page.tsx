@@ -30,6 +30,7 @@ const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -178,7 +179,8 @@ export default function DashboardPage() {
           LOCAL_STORAGE_SIMULATED_USERS_KEY,
           LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY
+          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
+          LOGGED_IN_STATUS_KEY
         ];
         const appPrefixes = [
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
@@ -392,7 +394,7 @@ export default function DashboardPage() {
       return card;
     }));
     setIsLoading(false);
-  }, []);
+  }, [toast]);
 
 
   const handleExportData = () => {
@@ -861,3 +863,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
