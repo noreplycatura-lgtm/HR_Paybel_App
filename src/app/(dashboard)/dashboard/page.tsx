@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2, KeySquare } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
-import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth } from "date-fns";
+import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth, parseISO, isValid, isAfter, isBefore, getDaysInMonth } from "date-fns";
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -61,6 +61,9 @@ interface ActivityLogEntry {
 interface MonthlySalaryTotal {
   monthYear: string;
   total: number;
+  employeeCount: number;
+  statusCounts: { Active: number; Left: number };
+  designationCounts: Record<string, number>;
 }
 
 
@@ -112,7 +115,10 @@ export default function DashboardPage() {
             leftEmployeesCount = parsedEmployees.filter(emp => emp.status === "Left").length;
           } else {
              console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
+             employeeMasterList = []; // Ensure it's an array
           }
+        } else {
+          employeeMasterList = []; // Ensure it's an array if no data found
         }
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
@@ -195,6 +201,10 @@ export default function DashboardPage() {
           const monthName = months[getMonth(targetDate)];
           const year = getYear(targetDate);
           let monthNetTotal = 0;
+          let processedEmployeeCount = 0;
+          const currentMonthStatusCounts: { Active: number; Left: number } = { Active: 0, Left: 0 };
+          const currentMonthDesignationCounts: Record<string, number> = {};
+
 
           const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
           const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
@@ -209,8 +219,23 @@ export default function DashboardPage() {
           if (attendanceForMonth.length > 0 && employeeMasterList.length > 0) {
             employeeMasterList.forEach(emp => {
               const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+              
+              // Check if employee was active during this month
+              const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
+              const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
+              const currentMonthStart = startOfMonth(targetDate);
+              const currentMonthEnd = endOfMonth(targetDate);
+
+              if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) {
+                  return; // Joined after this month
+              }
+              if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) {
+                  return; // Left before this month
+              }
+
+
               if (empAttendanceRecord) {
-                const totalDaysInMonth = new Date(year, getMonth(targetDate) + 1, 0).getDate();
+                const totalDaysInMonth = getDaysInMonth(targetDate);
                 let daysPaid = 0;
                 empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
                   if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
@@ -241,10 +266,22 @@ export default function DashboardPage() {
                 const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
                 const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
                 monthNetTotal += (totalAllowance - totalDeductionValue);
+
+                // Increment counts for employees whose salary was processed
+                processedEmployeeCount++;
+                currentMonthStatusCounts[emp.status] = (currentMonthStatusCounts[emp.status] || 0) + 1;
+                currentMonthDesignationCounts[emp.designation] = (currentMonthDesignationCounts[emp.designation] || 0) + 1;
+
               }
             });
           }
-          monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthNetTotal });
+          monthlyTotals.push({ 
+            monthYear: `${monthName} ${year}`, 
+            total: monthNetTotal,
+            employeeCount: processedEmployeeCount,
+            statusCounts: currentMonthStatusCounts,
+            designationCounts: currentMonthDesignationCounts,
+          });
           fiveMonthGrandTotal += monthNetTotal;
         }
         setLastFiveMonthsSalaryData(monthlyTotals.reverse());
@@ -545,7 +582,7 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
           <CardDescription>
-             Manually export all application data (employees, attendance, leaves, edits, etc.) or import previously exported data.
+             Manually export all application data (employees, attendance, leaves, salary edits, performance deductions, users, activities) or import previously exported data.
              This data is stored in your browser's local storage. Importing data will overwrite existing local data for this application.
           </CardDescription>
         </CardHeader>
@@ -625,7 +662,7 @@ export default function DashboardPage() {
       <Card className="mt-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>Last 5 Months' Salary Totals</CardTitle>
-          <CardDescription>Grand total net pay for the last five months, based on available data.</CardDescription>
+          <CardDescription>Breakdown of net pay and processed employee counts for the last five months, based on available data.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingSalaries ? (
@@ -634,19 +671,39 @@ export default function DashboardPage() {
               <p className="ml-2 text-muted-foreground">Calculating salaries...</p>
             </div>
           ) : lastFiveMonthsSalaryData.length > 0 ? (
-            <div className="space-y-2">
+            <Accordion type="multiple" className="w-full space-y-2">
               {lastFiveMonthsSalaryData.map((item, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span>{item.monthYear}:</span>
-                  <span className="font-medium">₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
+                <AccordionItem value={`item-${index}`} key={index} className="border px-4 rounded-md shadow-sm">
+                  <AccordionTrigger className="py-3 text-left hover:no-underline">
+                    <div className="flex flex-col sm:flex-row justify-between w-full items-start sm:items-center">
+                        <span className="font-medium">{item.monthYear}: ₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="text-xs text-muted-foreground sm:ml-4 mt-1 sm:mt-0">Processed for {item.employeeCount} employee(s)</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-3 text-sm text-muted-foreground space-y-1">
+                    <p><strong>Status:</strong> Active: {item.statusCounts.Active}, Left: {item.statusCounts.Left}</p>
+                    <div>
+                      <strong>Designations:</strong>
+                      {Object.keys(item.designationCounts).length > 0 ? (
+                        <ul className="list-disc list-inside ml-4 text-xs">
+                          {Object.entries(item.designationCounts).map(([designation, count]) => (
+                            <li key={designation}>{designation}: {count}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-xs ml-1">N/A</span>
+                      )}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
               ))}
-              <hr className="my-2"/>
-              <div className="flex justify-between font-bold text-base pt-1">
-                <span>Grand Total (Last 5 Months):</span>
-                <span>₹{grandTotalLastFiveMonths.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
+              <CardFooter className="pt-4 px-0 border-t">
+                <div className="flex justify-between font-bold text-base w-full">
+                    <span>Grand Total (Last 5 Months Net Pay):</span>
+                    <span>₹{grandTotalLastFiveMonths.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </CardFooter>
+            </Accordion>
           ) : (
             <p className="text-sm text-muted-foreground">No salary data available for the last five months to display totals. Ensure attendance and employee master data are present for previous months.</p>
           )}
@@ -731,4 +788,6 @@ export default function DashboardPage() {
   );
 }
   
+    
+
     
