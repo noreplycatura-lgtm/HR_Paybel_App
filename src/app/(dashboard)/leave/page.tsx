@@ -160,13 +160,16 @@ export default function LeavePage() {
         setLeaveApplications([]);
       }
     }
-    setIsLoading(false);
+    // Reset isLoading to false only after initial setup, not on every data change
+    if (selectedMonth && selectedYear > 0) {
+        setIsLoading(false);
+    }
   }, []); 
 
   React.useEffect(() => {
-    if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0 || isLoading) {
+    if (!selectedMonth || !selectedYear || selectedYear === 0 || employees.length === 0) {
       setDisplayData([]);
-      if (!isLoading && employees.length > 0) setIsLoading(false); 
+      if (employees.length > 0) setIsLoading(false); // Only stop loading if employees are loaded
       return;
     }
 
@@ -183,7 +186,7 @@ export default function LeavePage() {
 
     const prevMonthDateObject = addMonths(selectedMonthStartDate, -1);
     const prevMonthName = months[getMonth(prevMonthDateObject)];
-    const prevMonthYear = getYear(prevMonthDateObject);
+    const prevMonthYearValue = getYear(prevMonthDateObject);
 
     let attendanceForSelectedMonth: MonthlyEmployeeAttendance[] = [];
     let attendanceForPrevMonth: MonthlyEmployeeAttendance[] = [];
@@ -200,7 +203,7 @@ export default function LeavePage() {
                 catch (e) { console.warn(`Error parsing attendance for ${selectedMonth} ${selectedYear}: ${e}`); }
             }
         }
-        const prevMonthKeys = getDynamicAttendanceStorageKeys(prevMonthName, prevMonthYear);
+        const prevMonthKeys = getDynamicAttendanceStorageKeys(prevMonthName, prevMonthYearValue);
         if (prevMonthKeys.rawDataKey) {
             const storedAttPrev = localStorage.getItem(prevMonthKeys.rawDataKey);
             if (storedAttPrev) {
@@ -208,7 +211,7 @@ export default function LeavePage() {
                   const parsed = JSON.parse(storedAttPrev);
                   if(Array.isArray(parsed)) attendanceForPrevMonth = parsed;
                 }
-                catch (e) { console.warn(`Error parsing attendance for ${prevMonthName} ${prevMonthYear}: ${e}`); }
+                catch (e) { console.warn(`Error parsing attendance for ${prevMonthName} ${prevMonthYearValue}: ${e}`); }
             }
         }
     }
@@ -258,7 +261,6 @@ export default function LeavePage() {
         const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
         const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
-
         let accrualCLNextMonth = 0;
         let accrualSLNextMonth = 0;
         let accrualPLNextMonth = 0;
@@ -305,7 +307,7 @@ export default function LeavePage() {
     setSelectedEmployeeIds(new Set());
     setIsLoading(false);
 
-  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear, isLoading]);
+  }, [employees, openingBalances, leaveApplications, selectedMonth, selectedYear]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -410,14 +412,36 @@ export default function LeavePage() {
         });
         return;
     }
+    
+    let csvPrevMonthDisplay = "Last Mth";
+    let csvSelectedMonthDisplay = "Sel. Mth";
+    let csvEomSelectedMonthDisplay = "EOM Sel. Mth";
+    let csvNextMonthDisplay = "Next Mth";
+
+    if (selectedMonth && selectedYear > 0) {
+        const monthIndex = months.indexOf(selectedMonth);
+        if (monthIndex !== -1) {
+        const currentDateObject = new Date(selectedYear, monthIndex, 1);
+        
+        csvSelectedMonthDisplay = `${selectedMonth.substring(0,3)} ${selectedYear}`;
+        csvEomSelectedMonthDisplay = `EOM ${selectedMonth.substring(0,3)} ${selectedYear}`;
+
+        const prevMonthDateObject = addMonths(currentDateObject, -1);
+        csvPrevMonthDisplay = `${months[getMonth(prevMonthDateObject)].substring(0,3)} ${getYear(prevMonthDateObject)}`;
+
+        const nextMonthDateObject = addMonths(currentDateObject, 1);
+        csvNextMonthDisplay = `${months[getMonth(nextMonthDateObject)].substring(0,3)} ${getYear(nextMonthDateObject)}`;
+        }
+    }
+
 
     const csvRows: string[][] = [];
     const headers = [
       "Division", "Code", "Name", "Designation", "HQ", "DOJ",
-      `Used CL (Last Mth)`, `Used SL (Last Mth)`, `Used PL (Last Mth)`,
-      `Used CL (${selectedMonth} ${selectedYear})`, `Used SL (${selectedMonth} ${selectedYear})`, `Used PL (${selectedMonth} ${selectedYear})`,
-      `Balance CL (EOM ${selectedMonth} ${selectedYear})`, `Balance SL (EOM ${selectedMonth} ${selectedYear})`, `Balance PL (EOM ${selectedMonth} ${selectedYear})`,
-      `Opening CL (Next Mth)`, `Opening SL (Next Mth)`, `Opening PL (Next Mth)`
+      `Used CL (${csvPrevMonthDisplay})`, `Used SL (${csvPrevMonthDisplay})`, `Used PL (${csvPrevMonthDisplay})`,
+      `Used CL (${csvSelectedMonthDisplay})`, `Used SL (${csvSelectedMonthDisplay})`, `Used PL (${csvSelectedMonthDisplay})`,
+      `Balance CL (${csvEomSelectedMonthDisplay})`, `Balance SL (${csvEomSelectedMonthDisplay})`, `Balance PL (${csvEomSelectedMonthDisplay})`,
+      `Opening CL (${csvNextMonthDisplay})`, `Opening SL (${csvNextMonthDisplay})`, `Opening PL (${csvNextMonthDisplay})`
     ];
     csvRows.push(headers);
 
@@ -625,6 +649,27 @@ export default function LeavePage() {
   const isAllSelected = activeEmployeesInDisplay.length > 0 && selectedEmployeeIds.size === activeEmployeesInDisplay.length;
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < activeEmployeesInDisplay.length;
 
+  let prevMonthDisplay = "Last Mth";
+  let currentSelectedMonthDisplay = "Sel. Mth";
+  let eomSelectedMonthDisplay = "EOM Sel. Mth";
+  let nextMonthDisplay = "Next Mth";
+
+  if (selectedMonth && selectedYear > 0) {
+    const monthIndex = months.indexOf(selectedMonth);
+    if (monthIndex !== -1) {
+      const currentDateObject = new Date(selectedYear, monthIndex, 1);
+      
+      currentSelectedMonthDisplay = `${selectedMonth.substring(0,3)} ${selectedYear}`;
+      eomSelectedMonthDisplay = `EOM ${selectedMonth.substring(0,3)} ${selectedYear}`;
+
+      const prevMonthDateObject = addMonths(currentDateObject, -1);
+      prevMonthDisplay = `${months[getMonth(prevMonthDateObject)].substring(0,3)} ${getYear(prevMonthDateObject)}`;
+
+      const nextMonthDateObject = addMonths(currentDateObject, 1);
+      nextMonthDisplay = `${months[getMonth(nextMonthDateObject)].substring(0,3)} ${getYear(nextMonthDateObject)}`;
+    }
+  }
+
 
   if (isLoading && employees.length === 0 && !selectedMonth && !selectedYear && currentYearState === 0) {
     return (
@@ -638,7 +683,7 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description="View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after 5 months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month are sourced from attendance data; balances can go negative. (Data is saved in browser's local storage)."
+        description={`View employee leave balances. CL/SL (0.6/month) and PL (1.2/month) accrue after ${MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL} months service. CL/SL reset Apr-Mar; PL carries forward. Opening balances can be uploaded or edited. Used leaves for the month (${currentSelectedMonthDisplay}) are sourced from attendance data; balances can go negative. (Data is saved in browser's local storage).`}
       >
         <Button variant="destructive" onClick={handleDeleteSelectedOpeningBalances} disabled={selectedEmployeeIds.size === 0}>
             <Trash2 className="mr-2 h-4 w-4" /> Clear Selected OB ({selectedEmployeeIds.size})
@@ -665,7 +710,7 @@ export default function LeavePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Clearing Opening Balances</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to clear the opening balances for {selectedEmployeeIds.size} selected employee(s) for the financial year corresponding to {selectedMonth} {selectedYear}? This action cannot be undone (from local storage).
+              Are you sure you want to clear the opening balances for {selectedEmployeeIds.size} selected employee(s) for the financial year corresponding to {selectedMonth} {selectedYear > 0 ? selectedYear : ''}? This action cannot be undone (from local storage).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -749,10 +794,10 @@ export default function LeavePage() {
 
       <Card className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle>Employee Leave Summary for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
+          <CardTitle>Employee Leave Summary for {currentSelectedMonthDisplay}</CardTitle>
           <CardDescription>
             Balances are calculated at the end of the selected month. Used leaves (CL/SL/PL) for the month are sourced from attendance data for that month.
-            <br/>Only 'Active' employees are shown. Leave accrual starts after 5 months of service. Balances can go negative. (Data is saved in browser's local storage).
+            <br/>Only 'Active' employees are shown. Leave accrual starts after {MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL} months of service. Balances can go negative. (Data is saved in browser's local storage).
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -775,21 +820,21 @@ export default function LeavePage() {
                 <TableHead className="min-w-[100px]">HQ</TableHead>
                 <TableHead className="min-w-[100px]">DOJ</TableHead>
 
-                <TableHead className="text-center min-w-[100px]">Used CL (Last Mth)</TableHead>
-                <TableHead className="text-center min-w-[100px]">Used SL (Last Mth)</TableHead>
-                <TableHead className="text-center min-w-[100px]">Used PL (Last Mth)</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used CL (${prevMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used SL (${prevMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used PL (${prevMonthDisplay})`}</TableHead>
 
-                <TableHead className="text-center min-w-[100px]">Used CL (Sel. Mth)</TableHead>
-                <TableHead className="text-center min-w-[100px]">Used SL (Sel. Mth)</TableHead>
-                <TableHead className="text-center min-w-[100px]">Used PL (Sel. Mth)</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used CL (${currentSelectedMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used SL (${currentSelectedMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[140px]">{`Used PL (${currentSelectedMonthDisplay})`}</TableHead>
 
-                <TableHead className="text-center min-w-[110px] font-semibold">Balance CL (EOM)</TableHead>
-                <TableHead className="text-center min-w-[110px] font-semibold">Balance SL (EOM)</TableHead>
-                <TableHead className="text-center min-w-[110px] font-semibold">Balance PL (EOM)</TableHead>
+                <TableHead className="text-center min-w-[150px] font-semibold">{`Balance CL (${eomSelectedMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[150px] font-semibold">{`Balance SL (${eomSelectedMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[150px] font-semibold">{`Balance PL (${eomSelectedMonthDisplay})`}</TableHead>
 
-                <TableHead className="text-center min-w-[110px]">Opening CL (Next Mth)</TableHead>
-                <TableHead className="text-center min-w-[110px]">Opening SL (Next Mth)</TableHead>
-                <TableHead className="text-center min-w-[110px]">Opening PL (Next Mth)</TableHead>
+                <TableHead className="text-center min-w-[150px]">{`Opening CL (${nextMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[150px]">{`Opening SL (${nextMonthDisplay})`}</TableHead>
+                <TableHead className="text-center min-w-[150px]">{`Opening PL (${nextMonthDisplay})`}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -886,3 +931,6 @@ export default function LeavePage() {
     </>
   );
 }
+
+
+    
