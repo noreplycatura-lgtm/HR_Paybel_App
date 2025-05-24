@@ -30,10 +30,13 @@ const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1"; 
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+
 
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -43,7 +46,9 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = []; 
 
-    activities.unshift({ timestamp: new Date().toISOString(), message });
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -150,6 +155,7 @@ export default function AttendancePage() {
             setEmployeeMasterList([]); 
             console.error("Employee master data in localStorage is corrupted. Please check Employee Master page. Using empty list.");
             toast({ title: "Data Error", description: "Employee master data in localStorage is corrupted. Using empty list.", variant: "destructive", duration: 7000 });
+            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
           }
         } else {
           setEmployeeMasterList([]); 
@@ -186,7 +192,7 @@ export default function AttendancePage() {
             toast({ title: "Data Error", description: `Attendance data for ${selectedMonth} ${selectedYear} in localStorage is corrupted. Data not loaded. Please re-upload if needed.`, variant: "destructive", duration: 7000 });
             setRawAttendanceData([]);
             setUploadedFileName(null);
-            localStorage.removeItem(rawDataKey); // Remove corrupted item
+            localStorage.removeItem(rawDataKey); 
             localStorage.removeItem(filenameKey);
           }
         } else {
@@ -201,7 +207,7 @@ export default function AttendancePage() {
       }
     }
     setIsLoadingState(false);
-  }, [selectedMonth, selectedYear, toast]);
+  }, [selectedMonth, selectedYear]);
 
 
   React.useEffect(() => {
@@ -583,6 +589,7 @@ export default function AttendancePage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
+    addActivityLog(`Attendance report for ${selectedMonth} ${selectedYear} downloaded.`);
     toast({
       title: "Download Started",
       description: `Attendance report for ${selectedMonth} ${selectedYear} is being downloaded.`,

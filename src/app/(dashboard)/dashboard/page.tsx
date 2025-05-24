@@ -29,6 +29,8 @@ const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -56,7 +58,26 @@ interface PerformanceDeductionEntry {
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = [];
+
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
+    activities = activities.slice(0, 10);
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log from dashboard:", error);
+  }
+};
+
 
 interface MonthlySalaryTotal {
   monthYear: string;
@@ -156,7 +177,8 @@ export default function DashboardPage() {
           LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
           LOCAL_STORAGE_SIMULATED_USERS_KEY,
           LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
-          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY
+          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY
         ];
         const appPrefixes = [
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
@@ -384,7 +406,9 @@ export default function DashboardPage() {
       LOCAL_STORAGE_OPENING_BALANCES_KEY,
       LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
       LOCAL_STORAGE_SIMULATED_USERS_KEY,
-      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY 
+      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
+      LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
+      LOGGED_IN_STATUS_KEY
     ];
 
     knownFixedKeys.forEach(key => {
@@ -473,7 +497,9 @@ export default function DashboardPage() {
           LOCAL_STORAGE_OPENING_BALANCES_KEY,
           LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
           LOCAL_STORAGE_SIMULATED_USERS_KEY,
-          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY
+          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
+          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
+          LOGGED_IN_STATUS_KEY
       ];
       const knownDynamicPrefixesForClear = [
         LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
@@ -496,6 +522,7 @@ export default function DashboardPage() {
           localStorage.setItem(key, JSON.stringify(dataToImport[key]));
         }
       }
+      addActivityLog("All application data imported from JSON.");
       toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setSelectedImportFile(null);
@@ -536,8 +563,8 @@ export default function DashboardPage() {
           <CardHeader>
               <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
               <CardDescription>
-                Manually export all application data (employees, attendance, leaves, salary edits, performance deductions, users, activities) or import previously exported data.
-                This data is stored in your browser's local storage. Importing data will overwrite existing local data for this application.
+                Manually export all application data from local storage (employees, attendance, leaves, etc.) or import previously exported data.
+                Importing data will overwrite existing local data for this application.
               </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -612,8 +639,8 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
           <CardDescription>
-             Manually export all application data (employees, attendance, leaves, salary edits, performance deductions, users, activities) or import previously exported data.
-             This data is stored in your browser's local storage. Importing data will overwrite existing local data for this application.
+             Manually export all application data from local storage (employees, attendance, leaves, etc.) or import previously exported data.
+             Importing data will overwrite existing local data for this application.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -769,7 +796,7 @@ export default function DashboardPage() {
                 {recentActivities.map((activity, index) => (
                   <li key={index} className="text-sm">
                      {activity.message}
-                     <span className="text-xs text-muted-foreground ml-2">({format(new Date(activity.timestamp), "dd MMM, p")})</span>
+                     <span className="text-xs text-muted-foreground ml-1">(by {activity.user || 'System'} - {format(new Date(activity.timestamp), "dd MMM, p")})</span>
                   </li>
                 ))}
               </ul>
@@ -783,7 +810,7 @@ export default function DashboardPage() {
             <CardTitle>Quick Links</CardTitle>
             <CardDescription>Access common tasks quickly.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="flex flex-col space-y-2">
             <a href="/employee-master" className="block text-primary hover:underline">Employee Master</a>
             <a href="/attendance" className="block text-primary hover:underline">Attendance</a>
             <a href="/leave" className="block text-primary hover:underline">Manage Leaves</a>
@@ -834,11 +861,3 @@ export default function DashboardPage() {
     </>
   );
 }
-    
-    
-
-    
-
-    
-
-    

@@ -70,6 +70,7 @@ const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_
 const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 interface SalarySlipDataType {
   employeeId: string;
@@ -117,6 +118,7 @@ interface PerformanceDeductionEntry {
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -126,7 +128,9 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
 
-    activities.unshift({ timestamp: new Date().toISOString(), message });
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -221,7 +225,7 @@ export default function SalarySlipPage() {
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
     }
-  }, [selectedDivision, allEmployees]);
+  }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
 
   React.useEffect(() => {
@@ -235,7 +239,7 @@ export default function SalarySlipPage() {
       setFilteredEmployeesForMultiMonth([]);
       setSelectedEmployeeForMultiMonth(undefined); 
     }
-  }, [selectedDivisionForMultiMonth, allEmployees]);
+  }, [selectedDivisionForMultiMonth, allEmployees, selectedEmployeeForMultiMonth]);
 
 
   const generateSlipDataForEmployee = (
@@ -292,8 +296,7 @@ export default function SalarySlipPage() {
         }
 
         if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
-             console.warn(`No attendance data found for ${employee.name} (${employee.code}) for ${month} ${year}. Cannot generate slip.`);
-            return null;
+            return null; // No slip if no attendance
         }
 
         const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${month}_${year}`;
@@ -449,7 +452,7 @@ export default function SalarySlipPage() {
       setShowSlip(true);
       addActivityLog(`Salary slip generated for ${employee.name} (${selectedMonth} ${selectedYear}).`);
     } else {
-      toast({ title: "Data Error or Ineligible", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}, or employee was not active/employed during this period.`, variant: "destructive", duration: 7000 });
+      toast({ title: "Cannot Generate Slip", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}, or employee was not active/employed during this period.`, variant: "destructive", duration: 7000 });
       setSlipData(null);
       setShowSlip(false);
     }
@@ -513,6 +516,7 @@ export default function SalarySlipPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
+    addActivityLog(`Salary summaries CSV for ${selectedDivision} (${selectedMonth} ${selectedYear}) downloaded.`);
     toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} division (${selectedMonth} ${selectedYear}) generated.` });
     setIsLoading(false);
   };
@@ -672,7 +676,7 @@ export default function SalarySlipPage() {
         document.title = originalTitle;
       };
     }
-  }, [isBulkPrintingView, bulkSlipsData, toast, selectedDivision, selectedMonth, selectedYear]);
+  }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear]);
 
 
   const currentCompanyDetails = selectedDivision
@@ -1164,6 +1168,7 @@ function convertToWords(num: number): string {
   if (words === "" && wholePart === 0 && decimalPart === 0) {
      words = "Zero";
   } else if (words === "" && wholePart === 0 && decimalPart > 0) {
+    // Handled below
   } else if (words === "" && wholePart > 0) {
      words = "Error In Conversion"; 
   }
@@ -1187,4 +1192,3 @@ function convertToWords(num: number): string {
 
   return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 && !words.endsWith("Paise") ? " Only" : "") : 'Zero Rupees Only';
 }
-

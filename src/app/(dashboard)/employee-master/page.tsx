@@ -19,12 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
-// import { sampleEmployees } from "@/lib/hr-data"; // No longer using direct sample import for initialization
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -114,6 +114,7 @@ type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -123,7 +124,9 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = []; 
 
-    activities.unshift({ timestamp: new Date().toISOString(), message });
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -180,8 +183,11 @@ export default function EmployeeMasterPage() {
               duration: 7000,
             });
             setEmployees([]); 
+            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Remove corrupted item
           }
         } else {
+          // No data in localStorage, initialize with empty or sample if needed.
+          // For now, we'll let it be empty if nothing is there.
           setEmployees([]); 
         }
       } catch (error) {

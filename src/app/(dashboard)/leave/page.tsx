@@ -25,12 +25,13 @@ const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-const ONE_TIME_CLEAR_FLAG_KEY = "novita_leave_data_cleared_once_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -40,7 +41,9 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
 
-    activities.unshift({ timestamp: new Date().toISOString(), message });
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -105,18 +108,6 @@ export default function LeavePage() {
   React.useEffect(() => {
     setIsLoading(true);
     if (typeof window !== 'undefined') {
-      // const alreadyCleared = sessionStorage.getItem(ONE_TIME_CLEAR_FLAG_KEY);
-      // if (!alreadyCleared) {
-      //   localStorage.removeItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-      //   localStorage.removeItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-      //   setOpeningBalances([]);
-      //   setLeaveApplications([]);
-      //   sessionStorage.setItem(ONE_TIME_CLEAR_FLAG_KEY, 'true');
-      //   toast({ title: "Leave Data Reset", description: "Opening balances and leave application history have been cleared. Please upload new opening balances if needed.", duration: 7000 });
-      //   addActivityLog("Leave data (opening balances, application history) reset.");
-      // }
-
-
       try {
         const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
         if (storedEmployeesStr) {
@@ -236,17 +227,15 @@ export default function LeavePage() {
         let openingSLForNextMonthCalc = 0;
         let openingPLForNextMonthCalc = 0;
         
-        // Find OB for the FY that the *next month* falls into
         const nextMonthFYStartYear = nextMonthIndexVal >= 3 ? nextMonthYearVal : nextMonthYearVal -1;
         const obForNextMonthFY = openingBalances.find(
           (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthFYStartYear
         );
 
 
-        if (nextMonthIndexVal === 3) { // Next month is April - Financial Year Rollover for CL/SL
+        if (nextMonthIndexVal === 3) { 
             openingCLForNextMonthCalc = (obForNextMonthFY?.openingCL || 0);
             openingSLForNextMonthCalc = (obForNextMonthFY?.openingSL || 0);
-            // For PL, it's closing of current + accrual, unless an OB is specified for new FY
             openingPLForNextMonthCalc = (obForNextMonthFY?.openingPL !== undefined) ? obForNextMonthFY.openingPL : closingBalancePLSelectedMonth;
         } else {
             openingCLForNextMonthCalc = closingBalanceCLSelectedMonth;
@@ -433,6 +422,7 @@ export default function LeavePage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
+    addActivityLog(`Leave report for ${selectedMonth} ${selectedYear} (selected employees) downloaded.`);
     toast({
       title: "Download Started",
       description: `Leave report for selected employees (${selectedMonth} ${selectedYear}) is being downloaded.`,
@@ -858,4 +848,3 @@ export default function LeavePage() {
     </>
   );
 }
-

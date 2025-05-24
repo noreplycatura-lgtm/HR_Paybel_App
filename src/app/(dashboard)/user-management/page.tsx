@@ -63,14 +63,17 @@ interface SimulatedUser {
 }
 
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const MAIN_ADMIN_USERNAME = "asingh0402"; // This is the login credential
-const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh"; // This is for display
+const MAIN_ADMIN_USERNAME = "asingh0402"; 
+const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh"; 
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+
 
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
+  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -80,7 +83,9 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = []; 
 
-    activities.unshift({ timestamp: new Date().toISOString(), message });
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -224,9 +229,10 @@ export default function UserManagementPage() {
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(LOGGED_IN_STATUS_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY);
     }
-    router.replace('/login');
     addActivityLog('User logged out.');
+    router.replace('/login');
     toast({ title: "Logged Out", description: "You have been successfully logged out." });
   };
 

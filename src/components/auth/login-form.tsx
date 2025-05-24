@@ -36,7 +36,9 @@ interface SimulatedUser {
 const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 const MAIN_ADMIN_PASSWORD = "123456";
+const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh";
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 export function LoginForm() {
   const router = useRouter();
@@ -57,12 +59,12 @@ export function LoginForm() {
 
     let loginSuccess = false;
     let welcomeMessage = "";
-    let isAdminLogin = false;
+    let userDisplayNameForLog = "Unknown User";
 
     if (values.username === MAIN_ADMIN_USERNAME && values.password === MAIN_ADMIN_PASSWORD) {
       loginSuccess = true;
-      welcomeMessage = "Welcome, Ajay Singh!";
-      isAdminLogin = true;
+      welcomeMessage = `Welcome, ${MAIN_ADMIN_DISPLAY_NAME}!`;
+      userDisplayNameForLog = MAIN_ADMIN_DISPLAY_NAME;
     } else {
       if (typeof window !== 'undefined') {
         try {
@@ -71,8 +73,10 @@ export function LoginForm() {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
             if (coAdminUser && !coAdminUser.isLocked) {
+              // For co-admins, we'll assume the password check is simplified/skipped for prototype
               loginSuccess = true;
-              welcomeMessage = `Welcome, ${values.username}!`;
+              welcomeMessage = `Welcome, ${coAdminUser.username}!`;
+              userDisplayNameForLog = coAdminUser.username;
             }
           }
         } catch (error) {
@@ -86,6 +90,7 @@ export function LoginForm() {
     if (loginSuccess) {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
+        localStorage.setItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY, userDisplayNameForLog);
       }
       router.replace("/dashboard");
       toast({

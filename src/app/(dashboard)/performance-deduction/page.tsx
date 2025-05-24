@@ -22,6 +22,8 @@ import { format, parseISO, isValid } from "date-fns";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -43,6 +45,29 @@ const deductionFormSchema = z.object({
 });
 
 type DeductionFormValues = z.infer<typeof deductionFormSchema>;
+
+interface ActivityLogEntry {
+  timestamp: string;
+  message: string;
+  user: string;
+}
+
+const addActivityLog = (message: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+    let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
+    if (!Array.isArray(activities)) activities = [];
+
+    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
+
+    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
+    activities = activities.slice(0, 10);
+    localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
+  } catch (error) {
+    console.error("Error adding to activity log:", error);
+  }
+};
 
 export default function PerformanceDeductionPage() {
   const { toast } = useToast();
@@ -84,7 +109,7 @@ export default function PerformanceDeductionPage() {
       }
     }
     setIsLoadingData(false);
-  }, [toast]);
+  }, []);
 
   const saveDeductionsToLocalStorage = (deductions: PerformanceDeductionEntry[]) => {
     if (typeof window !== 'undefined') {
@@ -122,8 +147,10 @@ export default function PerformanceDeductionPage() {
     const existingIndex = performanceDeductions.findIndex(d => d.id === uniqueId);
     if (existingIndex > -1) {
       updatedDeductions = performanceDeductions.map((d, i) => i === existingIndex ? newDeduction : d);
+      addActivityLog(`Performance deduction for ${selectedEmployee.name} (${values.month} ${values.year}) updated to ${values.amount}.`);
     } else {
       updatedDeductions = [...performanceDeductions, newDeduction];
+      addActivityLog(`Performance deduction of ${values.amount} for ${selectedEmployee.name} (${values.month} ${values.year}) added.`);
     }
     
     setPerformanceDeductions(updatedDeductions);
@@ -234,6 +261,7 @@ export default function PerformanceDeductionPage() {
           const finalDeductions = Array.from(updatedDeductionsMap.values());
           setPerformanceDeductions(finalDeductions);
           saveDeductionsToLocalStorage(finalDeductions);
+          addActivityLog(`Performance deductions CSV uploaded: ${file.name} (${addedCount} added, ${updatedCount} updated).`);
           toast({ title: "Deductions Uploaded", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''} Data saved to local storage.` });
         } else {
           toast({ title: "No Valid Data", description: `No valid deduction records found in the uploaded CSV. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
@@ -256,6 +284,7 @@ export default function PerformanceDeductionPage() {
     const updatedDeductions = performanceDeductions.filter(d => d.id !== deductionToDelete.id);
     setPerformanceDeductions(updatedDeductions);
     saveDeductionsToLocalStorage(updatedDeductions);
+    addActivityLog(`Performance deduction for ${deductionToDelete.employeeName} (${deductionToDelete.month} ${deductionToDelete.year}) deleted.`);
     toast({ title: "Deduction Deleted", description: `Deduction for ${deductionToDelete.employeeName} for ${deductionToDelete.month} ${deductionToDelete.year} deleted.`, variant: "destructive" });
     setDeductionToDelete(null);
   };
@@ -293,6 +322,7 @@ export default function PerformanceDeductionPage() {
     const updatedDeductions = performanceDeductions.filter(d => !selectedDeductionIds.has(d.id));
     setPerformanceDeductions(updatedDeductions);
     saveDeductionsToLocalStorage(updatedDeductions);
+    addActivityLog(`${selectedDeductionIds.size} performance deduction(s) deleted.`);
     toast({ title: "Deductions Deleted", description: `${selectedDeductionIds.size} deduction(s) deleted.`, variant: "destructive" });
     setSelectedDeductionIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
@@ -535,4 +565,3 @@ export default function PerformanceDeductionPage() {
     </>
   );
 }
-    
