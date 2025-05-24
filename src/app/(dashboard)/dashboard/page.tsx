@@ -115,10 +115,10 @@ export default function DashboardPage() {
             leftEmployeesCount = parsedEmployees.filter(emp => emp.status === "Left").length;
           } else {
              console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
-             employeeMasterList = []; // Ensure it's an array
+             employeeMasterList = []; 
           }
         } else {
-          employeeMasterList = []; // Ensure it's an array if no data found
+          employeeMasterList = []; 
         }
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
@@ -220,17 +220,16 @@ export default function DashboardPage() {
             employeeMasterList.forEach(emp => {
               const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
               
-              // Check if employee was active during this month
               const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
               const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
               const currentMonthStart = startOfMonth(targetDate);
               const currentMonthEnd = endOfMonth(targetDate);
 
               if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) {
-                  return; // Joined after this month
+                  return; 
               }
               if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) {
-                  return; // Left before this month
+                  return; 
               }
 
 
@@ -267,7 +266,6 @@ export default function DashboardPage() {
                 const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
                 monthNetTotal += (totalAllowance - totalDeductionValue);
 
-                // Increment counts for employees whose salary was processed
                 processedEmployeeCount++;
                 currentMonthStatusCounts[emp.status] = (currentMonthStatusCounts[emp.status] || 0) + 1;
                 currentMonthDesignationCounts[emp.designation] = (currentMonthDesignationCounts[emp.designation] || 0) + 1;
@@ -414,7 +412,7 @@ export default function DashboardPage() {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedImportFile(file);
-      setPastedImportJson(""); // Clear pasted JSON if a file is selected
+      setPastedImportJson(""); 
     } else {
       setSelectedImportFile(null);
     }
@@ -423,7 +421,7 @@ export default function DashboardPage() {
   const handlePastedJsonChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPastedImportJson(event.target.value);
     if (event.target.value) {
-      setSelectedImportFile(null); // Clear selected file if JSON is pasted
+      setSelectedImportFile(null); 
     }
   };
 
@@ -506,7 +504,7 @@ export default function DashboardPage() {
           <CardHeader>
               <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
               <CardDescription>
-                Manually export all application data (employees, attendance, leaves, edits, etc.) or import previously exported data.
+                Manually export all application data (employees, attendance, leaves, salary edits, performance deductions, users, activities) or import previously exported data.
                 This data is stored in your browser's local storage. Importing data will overwrite existing local data for this application.
               </CardDescription>
           </CardHeader>
@@ -788,4 +786,6 @@ export default function DashboardPage() {
   );
 }
     
+    
+
     
