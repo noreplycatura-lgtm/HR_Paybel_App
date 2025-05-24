@@ -63,6 +63,8 @@ interface MonthlySalaryTotal {
   totalNetPay: number;
   processedEmployeeCount: number;
   overallStatusCounts: { Active: number; Left: number };
+  overallActiveNetPay: number;
+  overallLeftNetPay: number;
   designationDetails: Record<string, {
     activeCount: number;
     leftCount: number;
@@ -121,11 +123,9 @@ export default function DashboardPage() {
           } else {
              console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
              employeeMasterList = []; 
-             // No sampleEmployees fallback here, use what's in localStorage or empty
           }
         } else {
           employeeMasterList = []; 
-          // No sampleEmployees fallback here either
         }
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
@@ -213,6 +213,8 @@ export default function DashboardPage() {
           let monthNetTotal = 0;
           let processedEmployeeCountForMonth = 0;
           const currentMonthOverallStatusCounts: { Active: number; Left: number } = { Active: 0, Left: 0 };
+          let currentMonthOverallActiveNetPay = 0;
+          let currentMonthOverallLeftNetPay = 0;
           const currentMonthDesignationDetails: Record<string, { activeCount: number; leftCount: number; activeNetPay: number; leftNetPay: number;}> = {};
 
 
@@ -280,6 +282,12 @@ export default function DashboardPage() {
                 processedEmployeeCountForMonth++;
                 currentMonthOverallStatusCounts[emp.status] = (currentMonthOverallStatusCounts[emp.status] || 0) + 1;
                 
+                if (emp.status === "Active") {
+                  currentMonthOverallActiveNetPay += netPayForMonthForEmp;
+                } else if (emp.status === "Left") {
+                  currentMonthOverallLeftNetPay += netPayForMonthForEmp;
+                }
+                
                 const desig = emp.designation || "N/A";
                 if (!currentMonthDesignationDetails[desig]) {
                   currentMonthDesignationDetails[desig] = { activeCount: 0, leftCount: 0, activeNetPay: 0, leftNetPay: 0 };
@@ -300,11 +308,13 @@ export default function DashboardPage() {
             totalNetPay: monthNetTotal,
             processedEmployeeCount: processedEmployeeCountForMonth,
             overallStatusCounts: currentMonthOverallStatusCounts,
+            overallActiveNetPay: currentMonthOverallActiveNetPay,
+            overallLeftNetPay: currentMonthOverallLeftNetPay,
             designationDetails: currentMonthDesignationDetails,
           });
           fiveMonthGrandTotal += monthNetTotal;
         }
-        setLastFiveMonthsSalaryData(monthlyTotals.reverse()); // Show most recent first
+        setLastFiveMonthsSalaryData(monthlyTotals.reverse()); 
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
         setIsLoadingSalaries(false);
 
@@ -701,7 +711,12 @@ export default function DashboardPage() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-3 text-sm text-muted-foreground space-y-1">
-                    <p><strong>Overall Status:</strong> Active: {item.overallStatusCounts.Active}, Left: {item.overallStatusCounts.Left}</p>
+                    <p>
+                        <strong>Overall Status:</strong>
+                        Active: {item.overallStatusCounts.Active} (Net: ₹{item.overallActiveNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                        <span className="mx-2">|</span>
+                        Left: {item.overallStatusCounts.Left} (Net: ₹{item.overallLeftNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                    </p>
                     <div>
                       <strong>Designation Details:</strong>
                       {Object.keys(item.designationDetails).length > 0 ? (
@@ -820,6 +835,8 @@ export default function DashboardPage() {
   );
 }
     
+    
+
     
 
     
