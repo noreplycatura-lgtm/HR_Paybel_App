@@ -16,11 +16,11 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import {
   calculateEmployeeLeaveDetailsForPeriod,
-  calculateMonthsOfService,
-  MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL,
-  CL_ACCRUAL_RATE,
-  SL_ACCRUAL_RATE,
-  PL_ACCRUAL_RATE
+  calculateMonthsOfService, // Added
+  MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, // Added
+  CL_ACCRUAL_RATE, // Added
+  SL_ACCRUAL_RATE, // Added
+  PL_ACCRUAL_RATE // Added
 } from "@/lib/hr-calculations";
 import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
 
@@ -90,6 +90,7 @@ interface SalarySlipDataType {
   absentDays: number;
   weekOffs: number;
   paidHolidays: number;
+  workingDays: number; // Added
   totalLeavesTakenThisMonth: number;
   period: string;
 }
@@ -225,7 +226,7 @@ export default function SalarySlipPage() {
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
     }
-  }, [selectedDivision, allEmployees, selectedEmployeeId]);
+  }, [selectedDivision, allEmployees]);
 
 
   React.useEffect(() => {
@@ -233,13 +234,13 @@ export default function SalarySlipPage() {
       const filtered = allEmployees.filter(emp => emp.division === selectedDivisionForMultiMonth);
       setFilteredEmployeesForMultiMonth(filtered);
       if (selectedEmployeeForMultiMonth && !filtered.some(emp => emp.id === selectedEmployeeForMultiMonth)) {
-        setSelectedEmployeeForMultiMonth(undefined);
+        setSelectedEmployeeForMultiMonth(undefined); 
       }
     } else { 
       setFilteredEmployeesForMultiMonth([]);
       setSelectedEmployeeForMultiMonth(undefined); 
     }
-  }, [selectedDivisionForMultiMonth, allEmployees, selectedEmployeeForMultiMonth]);
+  }, [selectedDivisionForMultiMonth, allEmployees]);
 
 
   const generateSlipDataForEmployee = (
@@ -271,12 +272,12 @@ export default function SalarySlipPage() {
     const selectedPeriodEndDate = endOfMonth(selectedPeriodStartDate);
 
     if (isAfter(parsedEmployeeDOJ, selectedPeriodEndDate)) {
-      return null;
+      return null; // Employee joined after this month
     }
     if (employee.dor) {
       const employeeDOR = parseISO(employee.dor);
       if (isValid(employeeDOR) && isBefore(employeeDOR, selectedPeriodStartDate)) {
-        return null;
+        return null; // Employee left before this month
       }
     }
 
@@ -296,7 +297,7 @@ export default function SalarySlipPage() {
         }
 
         if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
-            return null; // No slip if no attendance
+            return null; 
         }
 
         const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${month}_${year}`;
@@ -330,15 +331,17 @@ export default function SalarySlipPage() {
     let weekOffsCount = 0;
     let paidHolidaysCount = 0;
     let halfDaysTaken = 0;
+    let workingDaysCount = 0;
+
 
     dailyStatuses.forEach(status => {
-      if (status === 'P') actualPayDaysValue++;
+      if (status === 'P') {actualPayDaysValue++; workingDaysCount++; }
       else if (status === 'W') { actualPayDaysValue++; weekOffsCount++; }
       else if (status === 'PH') { actualPayDaysValue++; paidHolidaysCount++; }
       else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
       else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
       else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
-      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; }
+      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; workingDaysCount +=0.5; }
       else if (status === 'A') absentDaysCount += 1;
     });
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
@@ -421,7 +424,9 @@ export default function SalarySlipPage() {
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
-      absentDays: finalAbsentDays, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount, totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
+      absentDays: finalAbsentDays, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
+      workingDays: workingDaysCount, // Added
+      totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
       period: `${format(selectedPeriodStartDate, "MMMM")} ${year}`,
     };
   };
@@ -676,7 +681,7 @@ export default function SalarySlipPage() {
         document.title = originalTitle;
       };
     }
-  }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear]);
+  }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear, toast]);
 
 
   const currentCompanyDetails = selectedDivision
@@ -728,7 +733,7 @@ export default function SalarySlipPage() {
             const parsedYear = parseInt(yearStringFromPeriod, 10);
             const parsedMonthIndex = months.indexOf(monthStringFromPeriod);
 
-            if (!isNaN(parsedYear) && parsedMonthIndex !== -1) {
+            if (!isNaN(parsedYear) && parsedMonthIndex !== -1 && isValid(new Date(parsedYear, parsedMonthIndex, 1))) {
               const slipDateForNextMonthCalc = new Date(parsedYear, parsedMonthIndex, 1);
               if (isValid(slipDateForNextMonthCalc)) {
                   const slipNextMonthDate = addMonths(slipDateForNextMonthCalc, 1);
@@ -770,7 +775,7 @@ export default function SalarySlipPage() {
                         <p><strong>Designation:</strong> {sData.designation}</p>
                         <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
                         <p><strong>Division:</strong> {sData.division}</p>
-                         <Separator className="my-4" />
+                        <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Pay Details</h3>
                         <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
                         <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
@@ -778,10 +783,10 @@ export default function SalarySlipPage() {
                      <div className="space-y-1">
                         <h3 className="font-semibold mb-2">Attendance Summary</h3>
                         <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
-                        <p><strong>Week Offs:</strong> {sData.weekOffs}</p>
-                        <p><strong>Paid Holidays:</strong> {sData.paidHolidays}</p>
+                        <p><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
+                        <p><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
+                        <p><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
                         <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                         <p className="invisible">&nbsp;</p> 
                         <Separator className="my-4" />
                         <h3 className="font-semibold mb-2">Leave Used ({sData.period})</h3>
                         <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
@@ -1017,7 +1022,7 @@ export default function SalarySlipPage() {
               </div>
               <div className="text-right mt-4 sm:mt-0">
                 <CardTitle className="text-2xl">Salary Slip</CardTitle>
-                <CardDescription>For {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardDescription>
+                <CardDescription>For {slipData.period}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -1038,12 +1043,13 @@ export default function SalarySlipPage() {
                 <div className="space-y-1">
                     <h3 className="font-semibold mb-2">Attendance Summary</h3>
                     <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
-                    <p><strong>Week Offs:</strong> {slipData.weekOffs}</p>
-                    <p><strong>Paid Holidays:</strong> {slipData.paidHolidays}</p>
+                    <p><strong>Week Offs:</strong> {slipData.weekOffs.toFixed(1)}</p>
+                    <p><strong>Paid Holidays:</strong> {slipData.paidHolidays.toFixed(1)}</p>
+                    <p><strong>Working Days:</strong> {slipData.workingDays.toFixed(1)}</p>
                     <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
                      <p className="invisible">&nbsp;</p> 
                     <Separator className="my-4" />
-                    <h3 className="font-semibold mb-2">Leave Used ({selectedMonth} {selectedYear > 0 ? selectedYear : ''})</h3>
+                    <h3 className="font-semibold mb-2">Leave Used ({slipData.period})</h3>
                     <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
                     <Separator className="my-4" />
                     <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthNameForDisplay} {nextMonthYearNumForDisplay > 0 ? nextMonthYearNumForDisplay : ''})</h3>
@@ -1192,3 +1198,6 @@ function convertToWords(num: number): string {
 
   return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 && !words.endsWith("Paise") ? " Only" : "") : 'Zero Rupees Only';
 }
+
+
+    
