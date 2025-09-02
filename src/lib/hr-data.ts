@@ -1,4 +1,3 @@
-
 import type { LeaveType } from './hr-types';
 
 export interface EmployeeDetail {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -23,7 +22,6 @@ import { format, parseISO, isValid } from "date-fns";
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -49,7 +47,6 @@ type DeductionFormValues = z.infer<typeof deductionFormSchema>;
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
-  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -59,9 +56,7 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
 
-    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
-
-    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
+    activities.unshift({ timestamp: new Date().toISOString(), message });
     activities = activities.slice(0, 10);
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {

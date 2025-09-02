@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -9,19 +8,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2, KeySquare } from "lucide-react";
+import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2 } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
 import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth, parseISO, isValid, isAfter, isBefore, getDaysInMonth } from "date-fns";
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import type { Division } from "@/lib/constants";
 
 
 // LocalStorage Keys
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX = "novita_employee_master_data_v1_";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
@@ -31,8 +28,6 @@ const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -61,7 +56,6 @@ interface PerformanceDeductionEntry {
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
-  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -71,9 +65,7 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
 
-    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
-
-    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
+    activities.unshift({ timestamp: new Date().toISOString(), message });
     activities = activities.slice(0, 10);
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -84,17 +76,10 @@ const addActivityLog = (message: string) => {
 
 interface MonthlySalaryTotal {
   monthYear: string;
-  totalNetPay: number;
-  processedEmployeeCount: number;
-  overallStatusCounts: { Active: number; Left: number };
-  overallActiveNetPay: number;
-  overallLeftNetPay: number;
-  designationDetails: Record<string, {
-    activeCount: number;
-    leftCount: number;
-    activeNetPay: number;
-    leftNetPay: number;
-  }>;
+  total: number;
+  employeeCount: number;
+  statusCounts: { Active: number; Left: number };
+  designationCounts: Record<string, number>;
 }
 
 
@@ -119,9 +104,6 @@ export default function DashboardPage() {
   const [pastedImportJson, setPastedImportJson] = React.useState("");
   const [recentActivities, setRecentActivities] = React.useState<ActivityLogEntry[]>([]);
 
-  const [dataMgmtDivision, setDataMgmtDivision] = React.useState<Division | "">("");
-
-
   React.useEffect(() => {
     setIsLoading(true);
     setIsLoadingSalaries(true);
@@ -138,20 +120,15 @@ export default function DashboardPage() {
     
     if (typeof window !== 'undefined') {
       try {
-        const divisions: Division[] = ["FMCG", "Wellness"];
-        let allEmployees: EmployeeDetail[] = [];
-        divisions.forEach(division => {
-            const key = `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${division}`;
-            const storedEmployeesStr = localStorage.getItem(key);
-            if (storedEmployeesStr) {
-                const parsedEmployees = JSON.parse(storedEmployeesStr);
-                if (Array.isArray(parsedEmployees)) {
-                    allEmployees = [...allEmployees, ...parsedEmployees];
-                }
-            }
-        });
-        
-        employeeMasterList = allEmployees;
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployeesStr) {
+          const parsed = JSON.parse(storedEmployeesStr);
+          if (Array.isArray(parsed)) {
+            employeeMasterList = parsed;
+          } else {
+            console.error("Employee master data in localStorage is not an array.");
+          }
+        }
         totalEmployeesCount = employeeMasterList.length;
         activeEmployeesCount = employeeMasterList.filter(emp => emp.status === "Active").length;
         leftEmployeesCount = employeeMasterList.filter(emp => emp.status === "Left").length;
@@ -178,45 +155,35 @@ export default function DashboardPage() {
         }
 
         let totalAppSpecificBytes = 0;
-        const appKeys = [
+        const knownFixedKeys = [
+          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
           LOCAL_STORAGE_OPENING_BALANCES_KEY,
           LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
           LOCAL_STORAGE_SIMULATED_USERS_KEY,
           LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
-          LOGGED_IN_STATUS_KEY
         ];
-        const appPrefixes = [
-          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
-          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
-        ];
-
-        appKeys.forEach(key => {
+        
+        knownFixedKeys.forEach(key => {
           const item = localStorage.getItem(key);
           if (item) {
             totalAppSpecificBytes += new TextEncoder().encode(item).length;
           }
         });
 
+        const knownPrefixes = [
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+        ];
+
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key) {
-            let matchedPrefix = false;
-            for (const prefix of appPrefixes) {
-              if (key.startsWith(prefix)) {
-                matchedPrefix = true;
-                break;
-              }
-            }
-            if (matchedPrefix) {
-              const item = localStorage.getItem(key);
-              if (item) {
-                totalAppSpecificBytes += new TextEncoder().encode(item).length;
-              }
+          if (key && knownPrefixes.some(prefix => key.startsWith(prefix))) {
+            const item = localStorage.getItem(key);
+            if (item) {
+              totalAppSpecificBytes += new TextEncoder().encode(item).length;
             }
           }
         }
@@ -241,12 +208,10 @@ export default function DashboardPage() {
           const targetDate = subMonths(new Date(), i);
           const monthName = months[getMonth(targetDate)];
           const year = getYear(targetDate);
-          let monthNetTotal = 0;
-          let processedEmployeeCountForMonth = 0;
-          const currentMonthOverallStatusCounts: { Active: number; Left: number } = { Active: 0, Left: 0 };
-          let currentMonthOverallActiveNetPay = 0;
-          let currentMonthOverallLeftNetPay = 0;
-          const currentMonthDesignationDetails: Record<string, { activeCount: number; leftCount: number; activeNetPay: number; leftNetPay: number;}> = {};
+          let monthTotal = 0;
+          let monthEmployeeCount = 0;
+          const monthStatusCounts = { Active: 0, Left: 0 };
+          const monthDesignationCounts: Record<string, number> = {};
 
           const employeeMasterForPeriod = employeeMasterList.filter(emp => {
                 const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
@@ -259,19 +224,19 @@ export default function DashboardPage() {
           });
 
           if (employeeMasterForPeriod.length > 0) {
-            employeeMasterForPeriod.forEach(emp => {
-                const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${emp.division}_${monthName}_${year}`;
-                const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${emp.division}_${monthName}_${year}`;
-                
-                const storedAttendanceStr = localStorage.getItem(attendanceKey);
-                const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
-                
-                const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
-                const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
-                const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
+            const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
+            const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
+            
+            const storedAttendanceStr = localStorage.getItem(attendanceKey);
+            const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
+            
+            const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
+            const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
+            const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
 
+            if (attendanceForMonth.length > 0) {
+              employeeMasterForPeriod.forEach(emp => {
                 const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-
                 if (empAttendanceRecord) {
                     const totalDaysInMonth = getDaysInMonth(targetDate);
                     let daysPaid = 0;
@@ -303,42 +268,19 @@ export default function DashboardPage() {
 
                     const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
                     const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
-                    const netPayForMonthForEmp = (totalAllowance - totalDeductionValue);
-                    monthNetTotal += netPayForMonthForEmp;
+                    const netPayForMonth = (totalAllowance - totalDeductionValue);
+                    monthTotal += netPayForMonth;
 
-                    processedEmployeeCountForMonth++;
-                    currentMonthOverallStatusCounts[emp.status] = (currentMonthOverallStatusCounts[emp.status] || 0) + 1;
-                    
-                    if (emp.status === "Active") {
-                    currentMonthOverallActiveNetPay += netPayForMonthForEmp;
-                    } else if (emp.status === "Left") {
-                    currentMonthOverallLeftNetPay += netPayForMonthForEmp;
-                    }
-                    
+                    monthEmployeeCount++;
+                    monthStatusCounts[emp.status] = (monthStatusCounts[emp.status] || 0) + 1;
                     const desig = emp.designation || "N/A";
-                    if (!currentMonthDesignationDetails[desig]) {
-                    currentMonthDesignationDetails[desig] = { activeCount: 0, leftCount: 0, activeNetPay: 0, leftNetPay: 0 };
-                    }
-                    if (emp.status === "Active") {
-                    currentMonthDesignationDetails[desig].activeCount++;
-                    currentMonthDesignationDetails[desig].activeNetPay += netPayForMonthForEmp;
-                    } else if (emp.status === "Left") {
-                    currentMonthDesignationDetails[desig].leftCount++;
-                    currentMonthDesignationDetails[desig].leftNetPay += netPayForMonthForEmp;
-                    }
+                    monthDesignationCounts[desig] = (monthDesignationCounts[desig] || 0) + 1;
                 }
-            });
+              });
+            }
           }
-          monthlyTotals.push({ 
-            monthYear: `${monthName} ${year}`, 
-            totalNetPay: monthNetTotal,
-            processedEmployeeCount: processedEmployeeCountForMonth,
-            overallStatusCounts: currentMonthOverallStatusCounts,
-            overallActiveNetPay: currentMonthOverallActiveNetPay,
-            overallLeftNetPay: currentMonthOverallLeftNetPay,
-            designationDetails: currentMonthDesignationDetails,
-          });
-          fiveMonthGrandTotal += monthNetTotal;
+          monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthTotal, employeeCount: monthEmployeeCount, statusCounts: monthStatusCounts, designationCounts: monthDesignationCounts });
+          fiveMonthGrandTotal += monthTotal;
         }
         setLastFiveMonthsSalaryData(monthlyTotals.reverse()); 
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
@@ -347,19 +289,9 @@ export default function DashboardPage() {
         const lastMonthDate = subMonths(new Date(), 1);
         const prevMonthName = months[getMonth(lastMonthDate)];
         const prevMonthYear = getYear(lastMonthDate);
+        const attendanceKeyForLastMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
         
-        let attendanceFoundForLastMonth = false;
-        if(typeof window !== 'undefined'){
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) && key.includes(`${prevMonthName}_${prevMonthYear}`)) {
-                    attendanceFoundForLastMonth = true;
-                    break;
-                }
-            }
-        }
-        
-        if(attendanceFoundForLastMonth) {
+        if (localStorage.getItem(attendanceKeyForLastMonth)) {
             payrollStatusValue = "Processed";
             payrollStatusDescription = `Attendance found for ${prevMonthName} ${prevMonthYear}`;
         } else {
@@ -399,42 +331,50 @@ export default function DashboardPage() {
 
   const handleExportData = () => {
     if (typeof window === 'undefined') return;
-    if (!dataMgmtDivision) {
-        toast({ title: "Division Not Selected", description: "Please select a division to export.", variant: "destructive" });
-        return;
-    }
-    
-    const divisionData: Record<string, any> = {};
-    
-    const divisionPrefixes = [
-      `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${dataMgmtDivision}`,
-      `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${dataMgmtDivision}`,
-      `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${dataMgmtDivision}`,
-      `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${dataMgmtDivision}`
+    const allData: Record<string, any> = {};
+    const knownFixedKeys = [
+      LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+      LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+      LOCAL_STORAGE_OPENING_BALANCES_KEY,
+      LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+      LOCAL_STORAGE_SIMULATED_USERS_KEY,
+      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
+      LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
     ];
-    
-    // Add global, non-division specific keys if needed
-    // const globalKeysToConsider = [
-    //     LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-    //     LOCAL_STORAGE_OPENING_BALANCES_KEY,
-    //     LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-    // ];
+
+    knownFixedKeys.forEach(key => {
+      const item = localStorage.getItem(key);
+      if (item) {
+        try {
+          allData[key] = JSON.parse(item);
+        } catch (e) {
+          allData[key] = item;
+          console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
+        }
+      }
+    });
+
+    const knownPrefixes = [
+      LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+      LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+      LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+    ];
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && divisionPrefixes.some(prefix => key.startsWith(prefix))) {
+      if (key && knownPrefixes.some(prefix => key.startsWith(prefix))) {
         const item = localStorage.getItem(key);
         if (item) {
           try {
-            divisionData[key] = JSON.parse(item);
+            allData[key] = JSON.parse(item);
           } catch (e) {
-            divisionData[key] = item;
+            allData[key] = item;
             console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
           }
         }
       }
     }
-    setExportedDataJson(JSON.stringify(divisionData, null, 2));
+    setExportedDataJson(JSON.stringify(allData, null, 2));
     setIsExportDialogOpen(true);
   };
 
@@ -447,12 +387,12 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `hr_payroll_app_data_${dataMgmtDivision}_export.json`);
+    link.setAttribute("download", "hr_payroll_app_data_export.json");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "Download Started", description: `hr_payroll_app_data_${dataMgmtDivision}_export.json is being downloaded.` });
+    toast({ title: "Download Started", description: "hr_payroll_app_data_export.json is being downloaded." });
   };
 
   const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -473,10 +413,6 @@ export default function DashboardPage() {
   };
 
   const processImport = (jsonDataString: string) => {
-    if (!dataMgmtDivision) {
-        toast({ title: "Division Not Selected", description: "Please select a division to import data into.", variant: "destructive" });
-        return;
-    }
     try {
       const dataToImport = JSON.parse(jsonDataString);
 
@@ -485,17 +421,23 @@ export default function DashboardPage() {
         return;
       }
       
-      const divisionPrefixesForClear = [
-        `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${dataMgmtDivision}`,
-        `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${dataMgmtDivision}`,
-        `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${dataMgmtDivision}`,
-        `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${dataMgmtDivision}`
+      const knownKeysAndPrefixes = [
+        LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+        LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+        LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+        LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+        LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+        LOCAL_STORAGE_OPENING_BALANCES_KEY,
+        LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX,
+        LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+        LOCAL_STORAGE_SIMULATED_USERS_KEY,
+        LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
       ];
-
+      
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && divisionPrefixesForClear.some(prefix => key.startsWith(prefix))) {
+          if(key && knownKeysAndPrefixes.some(known => key.startsWith(known))) {
             keysToRemove.push(key);
           }
       }
@@ -508,8 +450,8 @@ export default function DashboardPage() {
           importedKeysCount++;
         }
       }
-      addActivityLog(`Data for ${dataMgmtDivision} division imported from JSON (${importedKeysCount} keys).`);
-      toast({ title: "Import Successful", description: `Data for ${dataMgmtDivision} division imported. Please refresh the application to see changes.` });
+      addActivityLog(`Data imported from JSON (${importedKeysCount} keys).`);
+      toast({ title: "Import Successful", description: "Data imported successfully. Please refresh the application to see changes." });
       setIsImportDialogOpen(false);
       setSelectedImportFile(null);
       setPastedImportJson("");
@@ -549,7 +491,7 @@ export default function DashboardPage() {
           <CardHeader>
               <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
               <CardDescription>
-                Export or import data for a specific division. Importing will overwrite existing data for that division only.
+                Export or import ALL application data. Useful for backups or moving between browsers/computers.
               </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -624,22 +566,12 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
           <CardDescription>
-             Export or import data for a specific division. Importing will overwrite existing data for that division only.
+            Export or import ALL application data. Useful for backups or moving between browsers/computers.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row flex-wrap items-center gap-4 pt-4">
-           <Select value={dataMgmtDivision} onValueChange={(value) => setDataMgmtDivision(value as Division)}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                    <SelectValue placeholder="Select Division" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="FMCG">FMCG Division</SelectItem>
-                    <SelectItem value="Wellness">Wellness Division</SelectItem>
-                </SelectContent>
-            </Select>
-
-          <Button onClick={handleExportData} variant="outline" disabled={!dataMgmtDivision}>
-            <DownloadCloud className="mr-2 h-4 w-4" /> Export Division Data
+        <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
+          <Button onClick={handleExportData} variant="outline">
+            <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
           </Button>
 
           <Dialog open={isImportDialogOpen} onOpenChange={(isOpen) => {
@@ -650,15 +582,15 @@ export default function DashboardPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button variant="outline" disabled={!dataMgmtDivision}>
-                <UploadCloud className="mr-2 h-4 w-4" /> Import Division Data
+              <Button variant="outline">
+                <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle>Import Data for {dataMgmtDivision} Division</DialogTitle>
+                <DialogTitle>Import All Data</DialogTitle>
                 <DialogDescription>
-                  Select a JSON file you previously exported OR paste the JSON content. This will overwrite all current local data for the selected division ({dataMgmtDivision}).
+                  Select a JSON file you previously exported OR paste the JSON content. This will overwrite all current local data.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -714,7 +646,7 @@ export default function DashboardPage() {
       <Card className="mt-6 shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
           <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>Last 5 Months' Salary Totals</CardTitle>
-          <CardDescription>Breakdown of net pay and processed employee counts for the last five months, based on available data.</CardDescription>
+          <CardDescription>Breakdown of net pay, processed employee counts, and designations for the last five months, based on available data.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingSalaries ? (
@@ -728,41 +660,16 @@ export default function DashboardPage() {
                 <AccordionItem value={`item-${index}`} key={index} className="border px-4 rounded-md shadow-sm">
                   <AccordionTrigger className="py-3 text-left hover:no-underline">
                     <div className="flex flex-col sm:flex-row justify-between w-full items-start sm:items-center">
-                        <span className="font-medium">{item.monthYear}: ₹{item.totalNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        <span className="text-xs text-muted-foreground sm:ml-4 mt-1 sm:mt-0">Processed for {item.processedEmployeeCount} employee(s)</span>
+                        <span className="font-medium">{item.monthYear}: ₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="text-xs text-muted-foreground sm:ml-4 mt-1 sm:mt-0">Processed for {item.employeeCount} employee(s)</span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-3 text-sm text-muted-foreground space-y-1">
-                    <p>
-                        <strong>Overall Status:</strong>
-                        Active: {item.overallStatusCounts.Active} (Net: ₹{item.overallActiveNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                        <span className="mx-2">|</span>
-                        Left: {item.overallStatusCounts.Left} (Net: ₹{item.overallLeftNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                    </p>
-                    <div>
-                      <strong>Designation Details:</strong>
-                      {Object.keys(item.designationDetails).length > 0 ? (
-                        <ul className="list-disc list-inside ml-4 text-xs space-y-0.5">
-                          {Object.entries(item.designationDetails).map(([designation, details]) => (
-                            <li key={designation}>
-                              <span className="font-medium">{designation}:</span>
-                              {details.activeCount > 0 && (
-                                <span className="ml-2">
-                                  Active: {details.activeCount} (Net: ₹{details.activeNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                                </span>
-                              )}
-                              {details.leftCount > 0 && (
-                                <span className={`${details.activeCount > 0 ? 'ml-2' : 'ml-2'}`}>
-                                  Left: {details.leftCount} (Net: ₹{details.leftNetPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="text-xs ml-1">N/A</span>
-                      )}
-                    </div>
+                    <p>Status: Active: {item.statusCounts.Active}, Left: {item.statusCounts.Left}</p>
+                    <p>Designations: {
+                      Object.keys(item.designationCounts).length > 0 ?
+                      Object.entries(item.designationCounts).map(([designation, count]) => `${designation} (${count})`).join(', ') : 'N/A'
+                    }</p>
                   </AccordionContent>
                 </AccordionItem>
               ))}
@@ -791,7 +698,7 @@ export default function DashboardPage() {
                 {recentActivities.map((activity, index) => (
                   <li key={index} className="text-sm">
                      {activity.message}
-                     <span className="text-xs text-muted-foreground ml-1">(by {activity.user || 'System'} - {format(new Date(activity.timestamp), "dd MMM, p")})</span>
+                     <span className="text-xs text-muted-foreground ml-1">({format(new Date(activity.timestamp), "dd MMM, p")})</span>
                   </li>
                 ))}
               </ul>
@@ -821,13 +728,13 @@ export default function DashboardPage() {
       <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Exported Data for {dataMgmtDivision} Division</DialogTitle>
+            <DialogTitle>Exported Data</DialogTitle>
             <DialogDescription>
               Copy the JSON text below or download it as a file. You can save it and use the "Import" feature on another computer/browser.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <Label htmlFor="export-json-area">Division-Specific Data (JSON):</Label>
+            <Label htmlFor="export-json-area">Application Data (JSON):</Label>
             <Textarea id="export-json-area" value={exportedDataJson} readOnly rows={15} />
           </div>
           <DialogFooter>
