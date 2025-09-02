@@ -44,10 +44,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { UserPlus, Trash2, Lock, Unlock, KeyRound, Loader2, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { Division } from "@/lib/constants";
+
 
 const newUserFormSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -63,11 +67,27 @@ interface SimulatedUser {
 }
 
 const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const MAIN_ADMIN_USERNAME = "asingh0402"; 
-const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh"; 
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const MAIN_ADMIN_USERNAME = "asingh0402";
+const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh";
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+
+
+// --- Old Keys for Migration ---
+const OLD_LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const OLD_LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const OLD_LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
+const OLD_LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const OLD_LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
+const OLD_LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const OLD_LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+
+// --- New Keys for Migration ---
+const NEW_LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX = "novita_employee_master_data_v1_";
+const NEW_LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const NEW_LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
+const NEW_LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 
 
 interface ActivityLogEntry {
@@ -81,17 +101,18 @@ const addActivityLog = (message: string) => {
   try {
     const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
-    if (!Array.isArray(activities)) activities = []; 
+    if (!Array.isArray(activities)) activities = [];
 
     const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
 
     activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
-    activities = activities.slice(0, 10); 
+    activities = activities.slice(0, 10);
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
     console.error("Error adding to activity log:", error);
   }
 };
+
 
 export default function UserManagementPage() {
   const { toast } = useToast();
@@ -100,6 +121,11 @@ export default function UserManagementPage() {
   const [simulatedUsers, setSimulatedUsers] = React.useState<SimulatedUser[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [userToDelete, setUserToDelete] = React.useState<SimulatedUser | null>(null);
+
+  // State for migration tool
+  const [migrationJson, setMigrationJson] = React.useState("");
+  const [targetDivision, setTargetDivision] = React.useState<Division>("Wellness");
+  const [isMigrating, setIsMigrating] = React.useState(false);
 
   React.useEffect(() => {
     setIsLoading(true);
@@ -128,7 +154,7 @@ export default function UserManagementPage() {
       setSimulatedUsers(usersToSet);
     }
     setIsLoading(false);
-  }, []); 
+  }, [toast]);
 
   const saveSimulatedUsersToLocalStorage = (users: SimulatedUser[]) => {
     if (typeof window !== 'undefined') {
@@ -236,6 +262,80 @@ export default function UserManagementPage() {
     toast({ title: "Logged Out", description: "You have been successfully logged out." });
   };
 
+  const handleMigrateData = () => {
+    if (!migrationJson.trim() || !targetDivision) {
+      toast({ title: "Error", description: "Please paste the JSON data and select a target division.", variant: "destructive" });
+      return;
+    }
+
+    setIsMigrating(true);
+    try {
+      const oldData = JSON.parse(migrationJson);
+      let migrationSummary = "";
+
+      // 1. Employee Master
+      if (oldData[OLD_LOCAL_STORAGE_EMPLOYEE_MASTER_KEY]) {
+        const newKey = `${NEW_LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${targetDivision}`;
+        localStorage.setItem(newKey, JSON.stringify(oldData[OLD_LOCAL_STORAGE_EMPLOYEE_MASTER_KEY]));
+        migrationSummary += "Employee Master migrated. ";
+      }
+
+      // Handle prefixed data
+      Object.keys(oldData).forEach(oldKey => {
+        // 2. Attendance Raw Data
+        if (oldKey.startsWith(OLD_LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX)) {
+          const suffix = oldKey.substring(OLD_LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX.length);
+          const newKey = `${NEW_LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${targetDivision}_${suffix}`;
+          localStorage.setItem(newKey, JSON.stringify(oldData[oldKey]));
+        }
+        // 3. Attendance Filename
+        if (oldKey.startsWith(OLD_LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX)) {
+          const suffix = oldKey.substring(OLD_LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX.length);
+          const newKey = `${NEW_LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${targetDivision}_${suffix}`;
+          localStorage.setItem(newKey, JSON.stringify(oldData[oldKey]));
+        }
+        // 4. Salary Edits
+        if (oldKey.startsWith(OLD_LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX)) {
+          const suffix = oldKey.substring(OLD_LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX.length);
+          const newKey = `${NEW_LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${targetDivision}_${suffix}`;
+          localStorage.setItem(newKey, JSON.stringify(oldData[oldKey]));
+        }
+      });
+      migrationSummary += "Attendance, Filenames, and Salary Edits migrated. ";
+
+      // Non-prefixed but also need to be handled carefully.
+      // For this migration, we assume these are global and we might overwrite them.
+      // A more complex migration might merge them. For now, we will just set them.
+      // This part is commented out as the user request is specific to Wellness division data
+      // and overwriting global leave/deduction data might be destructive.
+
+      // if (oldData[OLD_LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY]) {
+      //   localStorage.setItem(OLD_LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY, JSON.stringify(oldData[OLD_LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY]));
+      // }
+      // if (oldData[OLD_LOCAL_STORAGE_OPENING_BALANCES_KEY]) {
+      //   localStorage.setItem(OLD_LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(oldData[OLD_LOCAL_STORAGE_OPENING_BALANCES_KEY]));
+      // }
+      // if (oldData[OLD_LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY]) {
+      //   localStorage.setItem(OLD_LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY, JSON.stringify(oldData[OLD_LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY]));
+      // }
+
+      addActivityLog(`Data migration completed for ${targetDivision} division.`);
+      toast({
+        title: "Migration Successful",
+        description: `Data from the provided JSON has been migrated for the ${targetDivision} division. ${migrationSummary}. Please refresh the page.`,
+        duration: 7000
+      });
+      setMigrationJson("");
+
+    } catch (e) {
+      console.error("Data migration error:", e);
+      toast({ title: "Migration Failed", description: "The provided text is not valid JSON. Please check and try again.", variant: "destructive" });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -255,139 +355,175 @@ export default function UserManagementPage() {
           Logout
         </Button>
       </PageHeader>
-      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <CardTitle>Account Controls</CardTitle>
-          <CardDescription>
-            Create new co-admin users.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-4 pt-6">
-          <Dialog open={isCreateUserDialogOpen} onOpenChange={(isOpen) => {
-            setIsCreateUserDialogOpen(isOpen);
-            if (!isOpen) form.reset();
-          }}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Create New Co-Admin User
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Create New Co-Admin</DialogTitle>
-                <DialogDescription>
-                  Fill in the details for the new co-admin user.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleCreateUserSubmit)} className="space-y-4 py-4">
-                  <FormField
-                    control={form.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Username</FormLabel>
-                        <FormControl>
-                          <Input placeholder="New co-admin username" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password (for simulation)</FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="New password" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button type="button" variant="outline">
-                        Cancel
-                      </Button>
-                    </DialogClose>
-                    <Button type="submit">Create User</Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle>Account Controls</CardTitle>
+              <CardDescription>
+                Create new co-admin users.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-4 pt-6">
+              <Dialog open={isCreateUserDialogOpen} onOpenChange={(isOpen) => {
+                setIsCreateUserDialogOpen(isOpen);
+                if (!isOpen) form.reset();
+              }}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Create New Co-Admin User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Co-Admin</DialogTitle>
+                    <DialogDescription>
+                      Fill in the details for the new co-admin user.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(handleCreateUserSubmit)} className="space-y-4 py-4">
+                      <FormField
+                        control={form.control}
+                        name="username"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Username</FormLabel>
+                            <FormControl>
+                              <Input placeholder="New co-admin username" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Password (for simulation)</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="New password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <DialogClose asChild>
+                          <Button type="button" variant="outline">
+                            Cancel
+                          </Button>
+                        </DialogClose>
+                        <Button type="submit">Create User</Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </CardContent>
+          </Card>
 
-      <Card className="shadow-md hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <CardTitle>Simulated Co-Admin Accounts</CardTitle>
-          <CardDescription>
-            List of co-admin users. The Main Admin ({MAIN_ADMIN_DISPLAY_NAME}) is not listed here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[150px]">Username</TableHead>
-                <TableHead className="min-w-[100px]">Status</TableHead>
-                <TableHead className="text-center min-w-[250px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {simulatedUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.isLocked ? "destructive" : "default"}>
-                      {user.isLocked ? "Locked" : "Active"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center space-x-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleResetPassword(user.username)}
-                        title={`Simulate Reset Password for ${user.username}`}
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggleLock(user.id)}
-                        title={user.isLocked ? `Unlock ${user.username}` : `Lock ${user.username}`}
-                    >
-                      {user.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteUserClick(user)}
-                        title={`Delete ${user.username}`}
-                        className="text-destructive hover:text-destructive/80"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {simulatedUsers.length === 0 && !isLoading && (
+           <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle>Data Migration Tool</CardTitle>
+              <CardDescription>
+                Import data from an old-format JSON export for a specific division. This will not delete other divisions' data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-6">
+               <Textarea
+                  value={migrationJson}
+                  onChange={(e) => setMigrationJson(e.target.value)}
+                  placeholder="Paste your entire old-format JSON content here..."
+                  rows={8}
+                />
+                 <Select value={targetDivision} onValueChange={(value) => setTargetDivision(value as Division)}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Select Target Division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="FMCG">FMCG Division</SelectItem>
+                      <SelectItem value="Wellness">Wellness Division</SelectItem>
+                  </SelectContent>
+              </Select>
+              <Button onClick={handleMigrateData} disabled={isMigrating}>
+                {isMigrating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Migrate Division Data
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="shadow-md hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CardTitle>Simulated Co-Admin Accounts</CardTitle>
+            <CardDescription>
+              List of co-admin users. The Main Admin ({MAIN_ADMIN_DISPLAY_NAME}) is not listed here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No co-admin users created yet.
-                  </TableCell>
+                  <TableHead className="min-w-[150px]">Username</TableHead>
+                  <TableHead className="min-w-[100px]">Status</TableHead>
+                  <TableHead className="text-center min-w-[250px]">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {simulatedUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.isLocked ? "destructive" : "default"}>
+                        {user.isLocked ? "Locked" : "Active"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center space-x-1">
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleResetPassword(user.username)}
+                          title={`Simulate Reset Password for ${user.username}`}
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleToggleLock(user.id)}
+                          title={user.isLocked ? `Unlock ${user.username}` : `Lock ${user.username}`}
+                      >
+                        {user.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteUserClick(user)}
+                          title={`Delete ${user.username}`}
+                          className="text-destructive hover:text-destructive/80"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {simulatedUsers.length === 0 && !isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      No co-admin users created yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+
 
       <AlertDialog open={!!userToDelete} onOpenChange={(isOpen) => { if(!isOpen) setUserToDelete(null); }}>
         <AlertDialogContent>
