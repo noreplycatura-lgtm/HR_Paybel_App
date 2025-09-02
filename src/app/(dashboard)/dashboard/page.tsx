@@ -16,10 +16,11 @@ import { getMonth, getYear, subMonths, format, startOfMonth, endOfMonth, parseIS
 import type { LeaveApplication } from "@/lib/hr-types";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import type { Division } from "@/lib/constants";
 
 
 // LocalStorage Keys
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX = "novita_employee_master_data_v1_";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
 const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
 const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
@@ -134,21 +135,24 @@ export default function DashboardPage() {
     
     if (typeof window !== 'undefined') {
       try {
-        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployeesStr) {
-          const parsedEmployees = JSON.parse(storedEmployeesStr);
-          if (Array.isArray(parsedEmployees)) {
-            employeeMasterList = parsedEmployees;
-            totalEmployeesCount = parsedEmployees.length;
-            activeEmployeesCount = parsedEmployees.filter(emp => emp.status === "Active").length;
-            leftEmployeesCount = parsedEmployees.filter(emp => emp.status === "Left").length;
-          } else {
-             console.warn("Employee master data in localStorage is corrupted. Defaulting to empty.");
-             employeeMasterList = []; 
-          }
-        } else {
-          employeeMasterList = []; 
-        }
+        const divisions: Division[] = ["FMCG", "Wellness"];
+        let allEmployees: EmployeeDetail[] = [];
+        divisions.forEach(division => {
+            const key = `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${division}`;
+            const storedEmployeesStr = localStorage.getItem(key);
+            if (storedEmployeesStr) {
+                const parsedEmployees = JSON.parse(storedEmployeesStr);
+                if (Array.isArray(parsedEmployees)) {
+                    allEmployees = [...allEmployees, ...parsedEmployees];
+                }
+            }
+        });
+        
+        employeeMasterList = allEmployees;
+        totalEmployeesCount = employeeMasterList.length;
+        activeEmployeesCount = employeeMasterList.filter(emp => emp.status === "Active").length;
+        leftEmployeesCount = employeeMasterList.filter(emp => emp.status === "Left").length;
+
 
         const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
         if (storedLeaveAppsStr) {
@@ -172,7 +176,6 @@ export default function DashboardPage() {
 
         let totalAppSpecificBytes = 0;
         const appKeys = [
-          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
           LOCAL_STORAGE_OPENING_BALANCES_KEY,
           LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
@@ -183,6 +186,7 @@ export default function DashboardPage() {
           LOGGED_IN_STATUS_KEY
         ];
         const appPrefixes = [
+          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
           LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
           LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
           LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
@@ -402,7 +406,6 @@ export default function DashboardPage() {
     const allData: Record<string, any> = {};
     
     const knownFixedKeys = [
-      LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
       LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
       LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
       LOCAL_STORAGE_OPENING_BALANCES_KEY,
@@ -426,6 +429,7 @@ export default function DashboardPage() {
     });
 
     const knownDynamicPrefixes = [
+      LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
       LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
       LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
       LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
@@ -493,7 +497,6 @@ export default function DashboardPage() {
       }
 
       const knownKeysForClear = [
-          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
           LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
           LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
           LOCAL_STORAGE_OPENING_BALANCES_KEY,
@@ -504,6 +507,7 @@ export default function DashboardPage() {
           LOGGED_IN_STATUS_KEY
       ];
       const knownDynamicPrefixesForClear = [
+        LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
         LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
         LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
         LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
