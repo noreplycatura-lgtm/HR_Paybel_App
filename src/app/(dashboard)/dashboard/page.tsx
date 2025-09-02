@@ -689,7 +689,7 @@ export default function DashboardPage() {
                 <DialogClose asChild>
                   <Button type="button" variant="outline">Cancel</Button>
                 </DialogClose>
-                <Button type="button" onClick={processImport} disabled={!selectedImportFile && !pastedImportJson.trim()}>Import Data & Reload</Button>
+                <Button type="button" onClick={handleImportData} disabled={!selectedImportFile && !pastedImportJson.trim()}>Import Data & Reload</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
