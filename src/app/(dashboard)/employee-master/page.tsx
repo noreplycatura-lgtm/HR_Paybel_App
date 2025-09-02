@@ -21,10 +21,13 @@ import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
+import type { Division } from "@/lib/constants";
 
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX = "novita_employee_master_data_v1_";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
+
+const getEmployeeMasterStorageKey = (division: Division) => `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${division}`;
 
 const employeeFormSchema = z.object({
   code: z.string().min(1, "Employee code is required"),
@@ -137,7 +140,9 @@ const addActivityLog = (message: string) => {
 
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
-  const [employees, setEmployees] = React.useState<EmployeeDetail[]>([]);
+  const [allDivisionEmployees, setAllDivisionEmployees] = React.useState<Record<Division, EmployeeDetail[]>>({ FMCG: [], Wellness: [] });
+  const [selectedDivision, setSelectedDivision] = React.useState<Division | "">("");
+
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = React.useState(false);
   const [isLoadingData, setIsLoadingData] = React.useState(true);
   const [editingEmployeeId, setEditingEmployeeId] = React.useState<string | null>(null);
@@ -169,54 +174,50 @@ export default function EmployeeMasterPage() {
     setIsLoadingData(true);
     if (typeof window !== 'undefined') {
       try {
-        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployees) {
-          const parsedEmployees = JSON.parse(storedEmployees);
-          if (Array.isArray(parsedEmployees)) {
-            setEmployees(parsedEmployees);
-          } else {
-            console.error("Employee master data in localStorage is corrupted. Initializing empty. Data is saved locally in your browser.");
-            toast({
-              title: "Data Error",
-              description: "Stored employee data is corrupted. Using empty list. Data is saved locally in your browser.",
-              variant: "destructive",
-              duration: 7000,
-            });
-            setEmployees([]); 
-            localStorage.removeItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY); // Remove corrupted item
-          }
-        } else {
-          // No data in localStorage, initialize with empty or sample if needed.
-          // For now, we'll let it be empty if nothing is there.
-          setEmployees([]); 
-        }
+        const fmcgEmployeesStr = localStorage.getItem(getEmployeeMasterStorageKey("FMCG"));
+        const wellnessEmployeesStr = localStorage.getItem(getEmployeeMasterStorageKey("Wellness"));
+
+        const fmcgEmployees = fmcgEmployeesStr ? JSON.parse(fmcgEmployeesStr) : [];
+        const wellnessEmployees = wellnessEmployeesStr ? JSON.parse(wellnessEmployeesStr) : [];
+
+        setAllDivisionEmployees({
+            FMCG: Array.isArray(fmcgEmployees) ? fmcgEmployees : [],
+            Wellness: Array.isArray(wellnessEmployees) ? wellnessEmployees : []
+        });
+
       } catch (error) {
         console.error("Error loading/processing employees from localStorage:", error);
         toast({
           title: "Storage Error",
-          description: "Could not load employee data. Stored data might be corrupted. Using empty list. Data is saved locally in your browser.",
+          description: "Could not load employee data. Using empty lists.",
           variant: "destructive",
           duration: 7000,
         });
-        setEmployees([]); 
+        setAllDivisionEmployees({ FMCG: [], Wellness: [] });
       }
     }
     setIsLoadingData(false);
   }, []);
 
-  const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
+  const saveEmployeesToLocalStorage = (division: Division, updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY, JSON.stringify(updatedEmployees));
+        localStorage.setItem(getEmployeeMasterStorageKey(division), JSON.stringify(updatedEmployees));
       } catch (error) {
-        console.error("Error saving employees to localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not save employee data locally.", variant: "destructive" });
+        console.error(`Error saving ${division} employees to localStorage:`, error);
+        toast({ title: "Storage Error", description: `Could not save ${division} employee data locally.`, variant: "destructive" });
       }
     }
   };
 
   const onSubmit = (values: EmployeeFormValues) => {
-    let submissionValues = { ...values };
+    if (!selectedDivision) {
+      toast({ title: "Error", description: "No division selected.", variant: "destructive" });
+      return;
+    }
+    
+    let submissionValues = { ...values, division: selectedDivision };
+
     if (submissionValues.status === "Active") {
       submissionValues.dor = "";
     }
@@ -224,38 +225,40 @@ export default function EmployeeMasterPage() {
       submissionValues.revisedGrossMonthlySalary = undefined;
       submissionValues.salaryEffectiveDate = "";
     }
+    
+    const currentEmployees = allDivisionEmployees[selectedDivision];
 
     if (editingEmployeeId) {
-      const updatedEmployees = employees.map(emp =>
+      const updatedEmployees = currentEmployees.map(emp =>
         emp.id === editingEmployeeId ? { ...emp, ...submissionValues, id: editingEmployeeId } : emp
       );
-      setEmployees(updatedEmployees);
-      saveEmployeesToLocalStorage(updatedEmployees);
-      addActivityLog(`Employee ${submissionValues.name} (Code: ${submissionValues.code}) details updated.`);
+      setAllDivisionEmployees(prev => ({ ...prev, [selectedDivision]: updatedEmployees }));
+      saveEmployeesToLocalStorage(selectedDivision, updatedEmployees);
+      addActivityLog(`Employee ${submissionValues.name} (${selectedDivision}) details updated.`);
       toast({ title: "Employee Updated", description: `${submissionValues.name}'s details have been updated.` });
     } else {
-      const existingEmployee = employees.find(emp => emp.code === submissionValues.code);
+      const existingEmployee = currentEmployees.find(emp => emp.code === submissionValues.code);
       if (existingEmployee) {
         toast({
           title: "Duplicate Employee Code",
-          description: `An employee with code '${submissionValues.code}' already exists. Please use a unique code.`,
+          description: `An employee with code '${submissionValues.code}' already exists in the ${selectedDivision} division.`,
           variant: "destructive",
         });
-        form.setError("code", { type: "manual", message: "This employee code already exists." });
+        form.setError("code", { type: "manual", message: "This employee code already exists in this division." });
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: submissionValues.code, 
+        id: `${selectedDivision}-${submissionValues.code}`,
         ...submissionValues,
         dor: submissionValues.dor || undefined,
         revisedGrossMonthlySalary: submissionValues.revisedGrossMonthlySalary || undefined,
         salaryEffectiveDate: submissionValues.salaryEffectiveDate || "",
       };
-      const updatedEmployees = [...employees, newEmployee];
-      setEmployees(updatedEmployees);
-      saveEmployeesToLocalStorage(updatedEmployees);
-      addActivityLog(`New employee ${submissionValues.name} (Code: ${submissionValues.code}) added.`);
-      toast({ title: "Employee Added", description: `${submissionValues.name} has been added to the master list.` });
+      const updatedEmployees = [...currentEmployees, newEmployee];
+      setAllDivisionEmployees(prev => ({ ...prev, [selectedDivision]: updatedEmployees }));
+      saveEmployeesToLocalStorage(selectedDivision, updatedEmployees);
+      addActivityLog(`New employee ${submissionValues.name} (${selectedDivision}) added.`);
+      toast({ title: "Employee Added", description: `${submissionValues.name} has been added to the master list for ${selectedDivision}.` });
     }
     setIsEmployeeFormOpen(false);
     setEditingEmployeeId(null);
@@ -263,17 +266,22 @@ export default function EmployeeMasterPage() {
   };
 
   const handleAddNewEmployee = () => {
+    if (!selectedDivision) {
+        toast({ title: "No Division Selected", description: "Please select a division before adding an employee.", variant: "destructive" });
+        return;
+    }
     setEditingEmployeeId(null);
     form.reset({
       code: "", name: "", designation: "", doj: "", status: "Active",
-      division: "", hq: "", dor: "", grossMonthlySalary: 0,
+      division: selectedDivision, hq: "", dor: "", grossMonthlySalary: 0,
       revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
     });
     setIsEmployeeFormOpen(true);
   };
 
   const handleEditEmployee = (employeeId: string) => {
-    const employeeToEdit = employees.find(emp => emp.id === employeeId);
+    if (!selectedDivision) return;
+    const employeeToEdit = allDivisionEmployees[selectedDivision].find(emp => emp.id === employeeId);
     if (employeeToEdit) {
       setEditingEmployeeId(employeeId);
       const formValues = {
@@ -293,19 +301,20 @@ export default function EmployeeMasterPage() {
   };
 
   const confirmDeleteSingleEmployee = () => {
-    if (!employeeToDelete) return;
-    const updatedEmployees = employees.filter(emp => emp.id !== employeeToDelete.id);
-    setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
+    if (!employeeToDelete || !selectedDivision) return;
+    const currentEmployees = allDivisionEmployees[selectedDivision];
+    const updatedEmployees = currentEmployees.filter(emp => emp.id !== employeeToDelete.id);
+    setAllDivisionEmployees(prev => ({ ...prev, [selectedDivision]: updatedEmployees }));
+    saveEmployeesToLocalStorage(selectedDivision, updatedEmployees);
     setSelectedEmployeeIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(employeeToDelete.id);
         return newSet;
     });
-    addActivityLog(`Employee ${employeeToDelete.name} (Code: ${employeeToDelete.code}) deleted.`);
+    addActivityLog(`Employee ${employeeToDelete.name} (Code: ${employeeToDelete.code}) from ${selectedDivision} deleted.`);
     toast({
         title: "Employee Removed",
-        description: `${employeeToDelete.name} has been removed from the list.`,
+        description: `${employeeToDelete.name} has been removed from the ${selectedDivision} list.`,
         variant: "destructive"
     });
     setEmployeeToDelete(null);
@@ -313,6 +322,10 @@ export default function EmployeeMasterPage() {
 
 
   const handleUploadEmployees = (file: File) => {
+     if (!selectedDivision) {
+        toast({ title: "No Division Selected", description: "Please select a division before uploading.", variant: "destructive" });
+        return;
+    }
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
@@ -332,7 +345,7 @@ export default function EmployeeMasterPage() {
 
         const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
         if (missingHeaders.length > 0) {
-             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}. Expected: ${expectedHeaders.join(', ')}. Check spelling and ensure all are present.`, variant: "destructive", duration: 9000 });
+             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 9000 });
              return;
         }
 
@@ -351,24 +364,31 @@ export default function EmployeeMasterPage() {
 
         const dataRows = lines.slice(1);
         let newUploadedEmployees: EmployeeDetail[] = [];
-        const currentEmployeesMap = new Map(employees.map(emp => [emp.code, emp]));
+        const currentEmployees = allDivisionEmployees[selectedDivision];
+        const currentEmployeesMap = new Map(currentEmployees.map(emp => [emp.code, emp]));
         const codesInCsv = new Set<string>();
         let skippedForDuplicateInCsv = 0;
         let malformedRows = 0;
         let addedCount = 0;
         let skippedForExistingInMaster = 0;
+        let skippedForWrongDivision = 0;
 
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
 
           if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary, idxRevisedGrossSalary, idxSalaryEffectiveDate )) {
-             console.warn(`Skipping row ${rowIndex + 2} in Employee Master CSV: insufficient columns.`);
+             console.warn(`Skipping row ${rowIndex + 2}: insufficient columns.`);
              malformedRows++;
              return;
           }
+          
+          const divisionFromFile = values[idxDivision];
+          if (divisionFromFile?.toLowerCase() !== selectedDivision.toLowerCase()) {
+              skippedForWrongDivision++;
+              return;
+          }
 
           let status = values[idxStatus] as "Active" | "Left";
-          const division = values[idxDivision];
           const code = values[idxCode];
           const name = values[idxName];
           const designation = values[idxDesignation];
@@ -382,8 +402,8 @@ export default function EmployeeMasterPage() {
           const grossMonthlySalary = parseFloat(grossMonthlySalaryStr);
           const revisedGrossMonthlySalary = revisedGrossMonthlySalaryStr ? parseFloat(revisedGrossMonthlySalaryStr) : undefined;
 
-          if (!code || !name || !status || !division || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}): missing or invalid critical data. Ensure all fields are present and Gross Salary is a positive number.`);
+          if (!code || !name || !status || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}): missing/invalid critical data.`);
             malformedRows++;
             return;
           }
@@ -401,7 +421,7 @@ export default function EmployeeMasterPage() {
           codesInCsv.add(code);
           
           if (currentEmployeesMap.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list.`);
+            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in ${selectedDivision} master list.`);
             skippedForExistingInMaster++;
             return;
           }
@@ -420,7 +440,7 @@ export default function EmployeeMasterPage() {
           }
 
           const employeeData: EmployeeDetail = {
-            id: code, status, division, code, name, designation, hq,
+            id: `${selectedDivision}-${code}`, status, division: selectedDivision, code, name, designation, hq,
             doj: formattedDoj, dor: formattedDor || undefined, grossMonthlySalary,
             revisedGrossMonthlySalary: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0) ? revisedGrossMonthlySalary : undefined,
             salaryEffectiveDate: (revisedGrossMonthlySalary && revisedGrossMonthlySalary > 0 && formattedSalaryEffectiveDate) ? formattedSalaryEffectiveDate : "",
@@ -431,23 +451,19 @@ export default function EmployeeMasterPage() {
 
         let message = "";
         if (newUploadedEmployees.length > 0) {
-            const combinedEmployees = [...employees];
-            newUploadedEmployees.forEach(newEmp => {
-                if (!combinedEmployees.some(e => e.code === newEmp.code)) {
-                    combinedEmployees.push(newEmp);
-                }
-            });
-            setEmployees(combinedEmployees);
-            saveEmployeesToLocalStorage(combinedEmployees);
-            message += `${addedCount} new employee(s) processed and added from ${file.name}. `;
-            addActivityLog(`Employee Master CSV uploaded: ${file.name} (${addedCount} added).`);
+            const combinedEmployees = [...currentEmployees, ...newUploadedEmployees];
+            setAllDivisionEmployees(prev => ({ ...prev, [selectedDivision]: combinedEmployees }));
+            saveEmployeesToLocalStorage(selectedDivision, combinedEmployees);
+            message += `${addedCount} new employee(s) processed for ${selectedDivision}. `;
+            addActivityLog(`Employee Master CSV uploaded for ${selectedDivision}: ${file.name} (${addedCount} added).`);
         } else {
-            message += `No new employees were added from ${file.name}. `;
+            message += `No new employees were added from ${file.name} for ${selectedDivision}. `;
         }
-
+        
+        if (skippedForWrongDivision > 0) message += `${skippedForWrongDivision} row(s) skipped due to mismatched division. `;
         if (skippedForExistingInMaster > 0) message += `${skippedForExistingInMaster} row(s) skipped as employee code already exists in master. `;
         if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
-        if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to missing or invalid data. `;
+        if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to invalid/missing data. `;
 
         toast({
           title: "Employee Upload Processed",
@@ -458,7 +474,7 @@ export default function EmployeeMasterPage() {
 
       } catch (error) {
         console.error("Error parsing CSV for employees:", error);
-        toast({ title: "Parsing Error", description: "Could not parse the CSV file. Check format and column order. Ensure all expected columns are present.", variant: "destructive", duration: 7000 });
+        toast({ title: "Parsing Error", description: "Could not parse CSV. Check format/columns.", variant: "destructive", duration: 7000 });
       }
     };
     reader.onerror = () => {
@@ -470,8 +486,9 @@ export default function EmployeeMasterPage() {
   const handleDownloadSampleTemplate = () => {
     const headers = ["Status", "Division", "Code", "Name", "Designation", "HQ", "DOJ", "DOR", "GrossMonthlySalary", "RevisedGrossMonthlySalary", "SalaryEffectiveDate"];
     const sampleData = [
-      ["Active", "Marketing", "E006", "Sarah Lee", "Marketing Specialist", "Chicago", "2024-01-10", "", "62000", "65000", "2024-07-01"],
-      ["Left", "IT", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "2024-06-30", "55000", "", ""],
+      ["Active", "FMCG", "E006", "Sarah Lee", "Marketing Specialist", "Chicago", "2024-01-10", "", "62000", "65000", "2024-07-01"],
+      ["Left", "FMCG", "E007", "Tom Brown", "IT Support", "Austin", "2023-11-05", "2024-06-30", "55000", "", ""],
+      ["Active", "Wellness", "E008", "David Green", "Sales Rep", "Miami", "2023-02-20", "", "58000", "", ""],
     ];
     const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -486,13 +503,14 @@ export default function EmployeeMasterPage() {
     toast({ title: "Template Downloaded", description: "employee_master_template.csv downloaded." });
   };
 
+  const currentEmployees = selectedDivision ? allDivisionEmployees[selectedDivision] : [];
+
   const filteredEmployees = React.useMemo(() => {
-    if (isLoadingData) return [];
-    return employees.filter(employee => {
+    if (isLoadingData || !selectedDivision) return [];
+    return currentEmployees.filter(employee => {
         const matchesSearchTerm = (
           employee.code.toLowerCase().includes(filterTerm.toLowerCase()) ||
           employee.name.toLowerCase().includes(filterTerm.toLowerCase()) ||
-          (employee.division && employee.division.toLowerCase().includes(filterTerm.toLowerCase())) ||
           (employee.designation && employee.designation.toLowerCase().includes(filterTerm.toLowerCase())) ||
           (employee.hq && employee.hq.toLowerCase().includes(filterTerm.toLowerCase()))
         );
@@ -503,14 +521,14 @@ export default function EmployeeMasterPage() {
         );
         return matchesSearchTerm && matchesStatusFilter;
       });
-  }, [employees, filterTerm, statusFilter, isLoadingData]);
+  }, [currentEmployees, filterTerm, statusFilter, isLoadingData, selectedDivision]);
 
   const employeeCounts = React.useMemo(() => {
-    if (isLoadingData) return { activeCount: 0, leftCount: 0, totalCount:0 };
-    const activeCount = employees.filter(emp => emp.status === "Active").length;
-    const leftCount = employees.filter(emp => emp.status === "Left").length;
-    return { activeCount, leftCount, totalCount: employees.length };
-  }, [employees, isLoadingData]);
+    if (isLoadingData || !selectedDivision) return { activeCount: 0, leftCount: 0, totalCount:0 };
+    const activeCount = currentEmployees.filter(emp => emp.status === "Active").length;
+    const leftCount = currentEmployees.filter(emp => emp.status === "Left").length;
+    return { activeCount, leftCount, totalCount: currentEmployees.length };
+  }, [currentEmployees, isLoadingData, selectedDivision]);
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -534,18 +552,19 @@ export default function EmployeeMasterPage() {
   };
 
   const handleDeleteSelectedEmployees = () => {
-    if (selectedEmployeeIds.size > 0) {
-      setIsDeleteSelectedDialogOpen(true);
-    } else {
-      toast({ title: "No Employees Selected", description: "Please select employees to delete.", variant: "destructive"});
+    if (!selectedDivision || selectedEmployeeIds.size === 0) {
+      toast({ title: "No Selection", description: "Please select a division and employees to delete.", variant: "destructive"});
+      return;
     }
+    setIsDeleteSelectedDialogOpen(true);
   };
 
   const confirmDeleteSelectedEmployees = () => {
-    const updatedEmployees = employees.filter(emp => !selectedEmployeeIds.has(emp.id));
-    setEmployees(updatedEmployees);
-    saveEmployeesToLocalStorage(updatedEmployees);
-    addActivityLog(`${selectedEmployeeIds.size} employee(s) deleted from Employee Master.`);
+    if (!selectedDivision) return;
+    const updatedEmployees = currentEmployees.filter(emp => !selectedEmployeeIds.has(emp.id));
+    setAllDivisionEmployees(prev => ({ ...prev, [selectedDivision]: updatedEmployees }));
+    saveEmployeesToLocalStorage(selectedDivision, updatedEmployees);
+    addActivityLog(`${selectedEmployeeIds.size} employee(s) deleted from ${selectedDivision} Master.`);
     toast({ title: "Employees Deleted", description: `${selectedEmployeeIds.size} employee(s) have been deleted.`, variant: "destructive" });
     setSelectedEmployeeIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
@@ -554,22 +573,13 @@ export default function EmployeeMasterPage() {
   const isAllSelected = filteredEmployees.length > 0 && selectedEmployeeIds.size === filteredEmployees.length;
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < filteredEmployees.length;
 
-
-  if (isLoadingData) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <>
       <PageHeader
         title="Employee Master"
-        description={`View, add, or bulk upload employee master data. Columns: Status, Division, Code, Name, Designation, HQ, DOJ, DOR, Gross Salary, Revised Salary, Effective Date. (Data is saved in browser's local storage).`}
+        description={`Manage employee data for a selected division. Data is saved in your browser.`}
       >
-        <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0} title="Delete selected employees">
+        <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0 || !selectedDivision} title="Delete selected employees">
             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedEmployeeIds.size})
         </Button>
         <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
@@ -580,15 +590,15 @@ export default function EmployeeMasterPage() {
             }
         }}>
           <DialogTrigger asChild>
-            <Button variant="outline" onClick={handleAddNewEmployee} title="Add a new employee to the master list">
+            <Button variant="outline" onClick={handleAddNewEmployee} disabled={!selectedDivision} title="Add a new employee to the master list">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-              <DialogTitle>{editingEmployeeId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
+              <DialogTitle>{editingEmployeeId ? `Edit Employee in ${selectedDivision}` : `Add New Employee to ${selectedDivision}`}</DialogTitle>
               <DialogDescription>
-                {editingEmployeeId ? "Update the details for this employee." : "Fill in the details for the new employee. Click save when you're done."}
+                {editingEmployeeId ? "Update the details for this employee." : "Fill in the details for the new employee."}
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -620,7 +630,7 @@ export default function EmployeeMasterPage() {
                           </FormItem>
                       )} />
                       <FormField control={form.control} name="division" render={({ field }) => (
-                      <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Division</FormLabel><FormControl><Input {...field} disabled /></FormControl><FormMessage /></FormItem>
                       )} />
                        <FormField control={form.control} name="hq" render={({ field }) => (
                       <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -662,8 +672,9 @@ export default function EmployeeMasterPage() {
             buttonText="Upload Employees (CSV)"
             acceptedFileTypes=".csv"
             title="Upload employee data from a CSV file"
+            disabled={!selectedDivision}
         />
-        <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template for employee master data">
+        <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto" title="Download sample CSV template">
           <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
         </Button>
       </PageHeader>
@@ -674,18 +685,25 @@ export default function EmployeeMasterPage() {
             <div>
               <CardTitle>Employee List</CardTitle>
               <CardDescription>
-                Displaying {filteredEmployees.length} of {employeeCounts.totalCount} total employees
-                ({employeeCounts.activeCount} Active, {employeeCounts.leftCount} Left).
-                Selected: {selectedEmployeeIds.size}
+                {selectedDivision ? `Displaying ${filteredEmployees.length} of ${employeeCounts.totalCount} employees in ${selectedDivision}.` : "Select a division to view employees."}
               </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "Active" | "Left")}>
+              <Select value={selectedDivision} onValueChange={(value) => setSelectedDivision(value as Division)}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Select Division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="FMCG">FMCG Division</SelectItem>
+                      <SelectItem value="Wellness">Wellness Division</SelectItem>
+                  </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "Active" | "Left")} disabled={!selectedDivision}>
                   <SelectTrigger className="w-full sm:w-[150px]">
                       <SelectValue placeholder="Filter by Status" />
                   </SelectTrigger>
                   <SelectContent>
-                      <SelectItem value="all">All Employees</SelectItem>
+                      <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="Active">Active Only</SelectItem>
                       <SelectItem value="Left">Left Only</SelectItem>
                   </SelectContent>
@@ -694,10 +712,11 @@ export default function EmployeeMasterPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Filter by Code, Name, Div, HQ..."
+                  placeholder="Filter by Code, Name, HQ..."
                   className="pl-8"
                   value={filterTerm}
                   onChange={(e) => setFilterTerm(e.target.value)}
+                   disabled={!selectedDivision}
                 />
               </div>
             </div>
@@ -730,7 +749,12 @@ export default function EmployeeMasterPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEmployees.map((employee) => (
+              {isLoadingData ? (
+                 <TableRow><TableCell colSpan={13} className="text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+              ) : !selectedDivision ? (
+                 <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">Please select a division to view employee data.</TableCell></TableRow>
+              ) : filteredEmployees.length > 0 ? (
+                filteredEmployees.map((employee) => (
                 <TableRow key={employee.id} data-state={selectedEmployeeIds.has(employee.id) ? "selected" : ""}>
                   <TableCell>
                     <Checkbox
@@ -754,32 +778,8 @@ export default function EmployeeMasterPage() {
                       if (employee.doj && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.doj);
-                          if (!isValid(parsedDate)) {
-                            const parts = employee.doj.split(/[-/.]/);
-                            let reparsedDate = null;
-                             if (parts.length === 3) {
-                                const part1 = parseInt(parts[0]);
-                                const part2 = parseInt(parts[1]);
-                                const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) { 
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1); 
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2); 
-                                } else if (part1 > 1000) { 
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2); 
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3); 
-                                } else { 
-                                   const yearShort = part3 + 2000;
-                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1); 
-                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2); 
-                                }
-                            }
-                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.doj; 
-                          }
                           return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) {
-                          return employee.doj; 
-                        }
+                        } catch (e) { return employee.doj; }
                       }
                       return 'N/A';
                     })()}
@@ -789,32 +789,8 @@ export default function EmployeeMasterPage() {
                       if (employee.dor && typeof employee.dor === 'string' && employee.dor.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.dor);
-                           if (!isValid(parsedDate)) {
-                             const parts = employee.dor.split(/[-/.]/);
-                             let reparsedDate = null;
-                             if (parts.length === 3) {
-                                const part1 = parseInt(parts[0]);
-                                const part2 = parseInt(parts[1]);
-                                const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) {
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
-                                } else if (part1 > 1000) {
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
-                                } else {
-                                   const yearShort = part3 + 2000;
-                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
-                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
-                                }
-                            }
-                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.dor;
-                          }
                           return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) {
-                          return employee.dor;
-                        }
+                        } catch (e) { return employee.dor; }
                       }
                       return 'N/A';
                     })()}
@@ -826,32 +802,8 @@ export default function EmployeeMasterPage() {
                       if (employee.salaryEffectiveDate && typeof employee.salaryEffectiveDate === 'string' && employee.salaryEffectiveDate.trim() !== '') {
                         try {
                           const parsedDate = parseISO(employee.salaryEffectiveDate);
-                           if (!isValid(parsedDate)) {
-                             const parts = employee.salaryEffectiveDate.split(/[-/.]/);
-                             let reparsedDate = null;
-                             if (parts.length === 3) {
-                                const part1 = parseInt(parts[0]);
-                                const part2 = parseInt(parts[1]);
-                                const part3 = parseInt(parts[2]);
-                                if (part3 > 1000) {
-                                    if (part2 <=12 && isValid(new Date(part3, part2 - 1, part1))) reparsedDate = new Date(part3, part2 - 1, part1);
-                                    else if (part1 <=12 && isValid(new Date(part3, part1 - 1, part2))) reparsedDate = new Date(part3, part1 - 1, part2);
-                                } else if (part1 > 1000) {
-                                    if (part3 <=12 && isValid(new Date(part1, part3 - 1, part2))) reparsedDate = new Date(part1, part3 - 1, part2);
-                                    else if (part2 <=12 && isValid(new Date(part1, part2 - 1, part3))) reparsedDate = new Date(part1, part2 - 1, part3);
-                                } else {
-                                   const yearShort = part3 + 2000;
-                                   if (part2 <=12 && isValid(new Date(yearShort, part2 -1, part1))) reparsedDate = new Date(yearShort, part2-1, part1);
-                                   else if (part1 <=12 && isValid(new Date(yearShort, part1 -1, part2))) reparsedDate = new Date(yearShort, part1-1, part2);
-                                }
-                            }
-                            if(reparsedDate && isValid(reparsedDate)) return format(reparsedDate, "dd-MMM-yy");
-                            return employee.salaryEffectiveDate;
-                          }
                           return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) {
-                          return employee.salaryEffectiveDate;
-                        }
+                        } catch (e) { return employee.salaryEffectiveDate; }
                       }
                       return 'N/A';
                     })()}
@@ -865,11 +817,11 @@ export default function EmployeeMasterPage() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
-              {filteredEmployees.length === 0 && !isLoadingData && (
+              ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={13} className="text-center text-muted-foreground">
-                    {employees.length === 0 ? "No employee data. (Data saved in browser's local storage)." : "No employees match your filters."}
+                    {currentEmployees.length === 0 ? "No employees in this division." : "No employees match your filters."}
                   </TableCell>
                 </TableRow>
               )}
@@ -883,7 +835,7 @@ export default function EmployeeMasterPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedEmployeeIds.size} selected employee(s)? This action cannot be undone.
+              Are you sure you want to delete {selectedEmployeeIds.size} selected employee(s) from the {selectedDivision} division? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -900,7 +852,7 @@ export default function EmployeeMasterPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete employee {employeeToDelete?.name} (Code: {employeeToDelete?.code})? This action cannot be undone.
+              Are you sure you want to delete employee {employeeToDelete?.name} (Code: {employeeToDelete?.code}) from {selectedDivision}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

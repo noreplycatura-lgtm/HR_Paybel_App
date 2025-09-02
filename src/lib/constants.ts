@@ -5,6 +5,8 @@ import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarC
 export const APP_NAME = 'HR Payroll App';
 export const COMPANY_NAME = 'Novita Healthcare Pvt. Ltd.';
 
+export type Division = "FMCG" | "Wellness";
+
 export interface NavItem {
   title: string;
   href: string;
@@ -71,4 +73,3 @@ export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
   PL: 'bg-amber-100 text-amber-700',  // Paid Leave
   '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
 };
-
