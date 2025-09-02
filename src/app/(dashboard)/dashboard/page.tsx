@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserCheck, DollarSign, History, FileText, HardDrive, UploadCloud, DownloadCloud, Activity, Loader2, KeySquare } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { useToast } from "@/hooks/use-toast";
@@ -117,6 +118,8 @@ export default function DashboardPage() {
   const [selectedImportFile, setSelectedImportFile] = React.useState<File | null>(null);
   const [pastedImportJson, setPastedImportJson] = React.useState("");
   const [recentActivities, setRecentActivities] = React.useState<ActivityLogEntry[]>([]);
+
+  const [dataMgmtDivision, setDataMgmtDivision] = React.useState<Division | "">("");
 
 
   React.useEffect(() => {
@@ -245,90 +248,85 @@ export default function DashboardPage() {
           let currentMonthOverallLeftNetPay = 0;
           const currentMonthDesignationDetails: Record<string, { activeCount: number; leftCount: number; activeNetPay: number; leftNetPay: number;}> = {};
 
+          const employeeMasterForPeriod = employeeMasterList.filter(emp => {
+                const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
+                const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
+                const currentMonthStart = startOfMonth(targetDate);
+                const currentMonthEnd = endOfMonth(targetDate);
+                if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) return false; 
+                if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) return false;
+                return true;
+          });
 
-          const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
-          const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
-          
-          const storedAttendanceStr = localStorage.getItem(attendanceKey);
-          const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
-          
-          const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
-          const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
-          const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
-
-          if (attendanceForMonth.length > 0 && employeeMasterList.length > 0) {
-            employeeMasterList.forEach(emp => {
-              const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-              
-              const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
-              const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
-              const currentMonthStart = startOfMonth(targetDate);
-              const currentMonthEnd = endOfMonth(targetDate);
-
-              if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) {
-                  return; 
-              }
-              if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) {
-                  return; 
-              }
-
-
-              if (empAttendanceRecord) {
-                const totalDaysInMonth = getDaysInMonth(targetDate);
-                let daysPaid = 0;
-                empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
-                  if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
-                  else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
-                });
-                daysPaid = Math.min(daysPaid, totalDaysInMonth);
-
-                const monthlyComps = calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
-                const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+          if (employeeMasterForPeriod.length > 0) {
+            employeeMasterForPeriod.forEach(emp => {
+                const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${emp.division}_${monthName}_${year}`;
+                const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${emp.division}_${monthName}_${year}`;
                 
-                const actualBasic = monthlyComps.basic * payFactor;
-                const actualHRA = monthlyComps.hra * payFactor;
-                const actualCA = monthlyComps.ca * payFactor;
-                const actualMedical = monthlyComps.medical * payFactor;
-                const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
-
-                const empEdits = salaryEditsForMonth[emp.id] || {};
-                const arrears = empEdits.arrears ?? 0;
-                const tds = empEdits.tds ?? 0;
-                const loan = empEdits.loan ?? 0;
-                const salaryAdvance = empEdits.salaryAdvance ?? 0;
-                const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
+                const storedAttendanceStr = localStorage.getItem(attendanceKey);
+                const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
                 
-                const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
-                const performanceDeduction = perfDeductionEntry?.amount || 0;
-                const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
+                const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
+                const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
+                const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
 
-                const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-                const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
-                const netPayForMonthForEmp = (totalAllowance - totalDeductionValue);
-                monthNetTotal += netPayForMonthForEmp;
+                const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
 
-                processedEmployeeCountForMonth++;
-                currentMonthOverallStatusCounts[emp.status] = (currentMonthOverallStatusCounts[emp.status] || 0) + 1;
-                
-                if (emp.status === "Active") {
-                  currentMonthOverallActiveNetPay += netPayForMonthForEmp;
-                } else if (emp.status === "Left") {
-                  currentMonthOverallLeftNetPay += netPayForMonthForEmp;
+                if (empAttendanceRecord) {
+                    const totalDaysInMonth = getDaysInMonth(targetDate);
+                    let daysPaid = 0;
+                    empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
+                    if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
+                    else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
+                    });
+                    daysPaid = Math.min(daysPaid, totalDaysInMonth);
+
+                    const monthlyComps = calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
+                    const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+                    
+                    const actualBasic = monthlyComps.basic * payFactor;
+                    const actualHRA = monthlyComps.hra * payFactor;
+                    const actualCA = monthlyComps.ca * payFactor;
+                    const actualMedical = monthlyComps.medical * payFactor;
+                    const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
+
+                    const empEdits = salaryEditsForMonth[emp.id] || {};
+                    const arrears = empEdits.arrears ?? 0;
+                    const tds = empEdits.tds ?? 0;
+                    const loan = empEdits.loan ?? 0;
+                    const salaryAdvance = empEdits.salaryAdvance ?? 0;
+                    const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
+                    
+                    const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
+                    const performanceDeduction = perfDeductionEntry?.amount || 0;
+                    const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
+
+                    const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+                    const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; 
+                    const netPayForMonthForEmp = (totalAllowance - totalDeductionValue);
+                    monthNetTotal += netPayForMonthForEmp;
+
+                    processedEmployeeCountForMonth++;
+                    currentMonthOverallStatusCounts[emp.status] = (currentMonthOverallStatusCounts[emp.status] || 0) + 1;
+                    
+                    if (emp.status === "Active") {
+                    currentMonthOverallActiveNetPay += netPayForMonthForEmp;
+                    } else if (emp.status === "Left") {
+                    currentMonthOverallLeftNetPay += netPayForMonthForEmp;
+                    }
+                    
+                    const desig = emp.designation || "N/A";
+                    if (!currentMonthDesignationDetails[desig]) {
+                    currentMonthDesignationDetails[desig] = { activeCount: 0, leftCount: 0, activeNetPay: 0, leftNetPay: 0 };
+                    }
+                    if (emp.status === "Active") {
+                    currentMonthDesignationDetails[desig].activeCount++;
+                    currentMonthDesignationDetails[desig].activeNetPay += netPayForMonthForEmp;
+                    } else if (emp.status === "Left") {
+                    currentMonthDesignationDetails[desig].leftCount++;
+                    currentMonthDesignationDetails[desig].leftNetPay += netPayForMonthForEmp;
+                    }
                 }
-                
-                const desig = emp.designation || "N/A";
-                if (!currentMonthDesignationDetails[desig]) {
-                  currentMonthDesignationDetails[desig] = { activeCount: 0, leftCount: 0, activeNetPay: 0, leftNetPay: 0 };
-                }
-                if (emp.status === "Active") {
-                  currentMonthDesignationDetails[desig].activeCount++;
-                  currentMonthDesignationDetails[desig].activeNetPay += netPayForMonthForEmp;
-                } else if (emp.status === "Left") {
-                  currentMonthDesignationDetails[desig].leftCount++;
-                  currentMonthDesignationDetails[desig].leftNetPay += netPayForMonthForEmp;
-                }
-
-              }
             });
           }
           monthlyTotals.push({ 
@@ -349,28 +347,26 @@ export default function DashboardPage() {
         const lastMonthDate = subMonths(new Date(), 1);
         const prevMonthName = months[getMonth(lastMonthDate)];
         const prevMonthYear = getYear(lastMonthDate);
-        const attendanceKeyPrevMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
-        const storedAttendancePrevMonthStr = localStorage.getItem(attendanceKeyPrevMonth);
-
-        if (storedAttendancePrevMonthStr) {
-            try {
-              const parsedLastMonthAtt = JSON.parse(storedAttendancePrevMonthStr);
-              if (Array.isArray(parsedLastMonthAtt) && parsedLastMonthAtt.length > 0) {
-                  payrollStatusValue = "Processed";
-                  payrollStatusDescription = `Attendance found for ${prevMonthName} ${prevMonthYear}`;
-              } else {
-                   payrollStatusValue = "Pending";
-                   payrollStatusDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
-              }
-            } catch (e) {
-              console.error("Error parsing last month's attendance for payroll status:", e);
-              payrollStatusValue = "Error";
-              payrollStatusDescription = `Error reading ${prevMonthName} ${prevMonthYear} attendance`;
+        
+        let attendanceFoundForLastMonth = false;
+        if(typeof window !== 'undefined'){
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX) && key.includes(`${prevMonthName}_${prevMonthYear}`)) {
+                    attendanceFoundForLastMonth = true;
+                    break;
+                }
             }
-        } else {
-           payrollStatusValue = "Pending";
-           payrollStatusDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
         }
+        
+        if(attendanceFoundForLastMonth) {
+            payrollStatusValue = "Processed";
+            payrollStatusDescription = `Attendance found for ${prevMonthName} ${prevMonthYear}`;
+        } else {
+            payrollStatusValue = "Pending";
+            payrollStatusDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
+        }
+        
 
         const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
         if (storedActivitiesStr) {
@@ -403,53 +399,42 @@ export default function DashboardPage() {
 
   const handleExportData = () => {
     if (typeof window === 'undefined') return;
-    const allData: Record<string, any> = {};
+    if (!dataMgmtDivision) {
+        toast({ title: "Division Not Selected", description: "Please select a division to export.", variant: "destructive" });
+        return;
+    }
     
-    const knownFixedKeys = [
-      LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-      LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-      LOCAL_STORAGE_OPENING_BALANCES_KEY,
-      LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-      LOCAL_STORAGE_SIMULATED_USERS_KEY,
-      LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
-      LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
-      LOGGED_IN_STATUS_KEY
+    const divisionData: Record<string, any> = {};
+    
+    const divisionPrefixes = [
+      `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${dataMgmtDivision}`,
+      `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${dataMgmtDivision}`,
+      `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${dataMgmtDivision}`,
+      `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${dataMgmtDivision}`
     ];
-
-    knownFixedKeys.forEach(key => {
-      const item = localStorage.getItem(key);
-      if (item) {
-        try {
-          allData[key] = JSON.parse(item);
-        } catch (e) {
-          allData[key] = item; 
-          console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
-        }
-      }
-    });
-
-    const knownDynamicPrefixes = [
-      LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
-      LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-      LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-      LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
-    ];
+    
+    // Add global, non-division specific keys if needed
+    // const globalKeysToConsider = [
+    //     LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+    //     LOCAL_STORAGE_OPENING_BALANCES_KEY,
+    //     LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+    // ];
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && knownDynamicPrefixes.some(prefix => key.startsWith(prefix))) {
+      if (key && divisionPrefixes.some(prefix => key.startsWith(prefix))) {
         const item = localStorage.getItem(key);
         if (item) {
           try {
-            allData[key] = JSON.parse(item);
+            divisionData[key] = JSON.parse(item);
           } catch (e) {
-            allData[key] = item;
-            console.warn(`Could not parse prefixed key ${key} during export, storing as raw string.`);
+            divisionData[key] = item;
+            console.warn(`Could not parse JSON for key ${key} during export, storing as raw string.`);
           }
         }
       }
     }
-    setExportedDataJson(JSON.stringify(allData, null, 2));
+    setExportedDataJson(JSON.stringify(divisionData, null, 2));
     setIsExportDialogOpen(true);
   };
 
@@ -462,12 +447,12 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "hr_payroll_app_data_export.json");
+    link.setAttribute("download", `hr_payroll_app_data_${dataMgmtDivision}_export.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "Download Started", description: "hr_payroll_app_data_export.json is being downloaded." });
+    toast({ title: "Download Started", description: `hr_payroll_app_data_${dataMgmtDivision}_export.json is being downloaded.` });
   };
 
   const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -488,6 +473,10 @@ export default function DashboardPage() {
   };
 
   const processImport = (jsonDataString: string) => {
+    if (!dataMgmtDivision) {
+        toast({ title: "Division Not Selected", description: "Please select a division to import data into.", variant: "destructive" });
+        return;
+    }
     try {
       const dataToImport = JSON.parse(jsonDataString);
 
@@ -495,41 +484,32 @@ export default function DashboardPage() {
         toast({ title: "Invalid JSON", description: "The provided data does not contain a valid JSON object.", variant: "destructive" });
         return;
       }
-
-      const knownKeysForClear = [
-          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-          LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-          LOCAL_STORAGE_OPENING_BALANCES_KEY,
-          LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-          LOCAL_STORAGE_SIMULATED_USERS_KEY,
-          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
-          LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY,
-          LOGGED_IN_STATUS_KEY
-      ];
-      const knownDynamicPrefixesForClear = [
-        LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX,
-        LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-        LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-        LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+      
+      const divisionPrefixesForClear = [
+        `${LOCAL_STORAGE_EMPLOYEE_MASTER_KEY_PREFIX}${dataMgmtDivision}`,
+        `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${dataMgmtDivision}`,
+        `${LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX}${dataMgmtDivision}`,
+        `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${dataMgmtDivision}`
       ];
 
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if(key && (knownDynamicPrefixesForClear.some(prefix => key.startsWith(prefix)) ||
-             knownKeysForClear.includes(key))) {
+          if(key && divisionPrefixesForClear.some(prefix => key.startsWith(prefix))) {
             keysToRemove.push(key);
           }
       }
       keysToRemove.forEach(key => localStorage.removeItem(key));
 
+      let importedKeysCount = 0;
       for (const key in dataToImport) {
         if (Object.prototype.hasOwnProperty.call(dataToImport, key)) {
           localStorage.setItem(key, JSON.stringify(dataToImport[key]));
+          importedKeysCount++;
         }
       }
-      addActivityLog("All application data imported from JSON.");
-      toast({ title: "Import Successful", description: "Data imported. Please refresh the application to see changes." });
+      addActivityLog(`Data for ${dataMgmtDivision} division imported from JSON (${importedKeysCount} keys).`);
+      toast({ title: "Import Successful", description: `Data for ${dataMgmtDivision} division imported. Please refresh the application to see changes.` });
       setIsImportDialogOpen(false);
       setSelectedImportFile(null);
       setPastedImportJson("");
@@ -569,8 +549,7 @@ export default function DashboardPage() {
           <CardHeader>
               <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
               <CardDescription>
-                Manually export all application data from local storage (employees, attendance, leaves, etc.) or import previously exported data.
-                Importing data will overwrite existing local data for this application.
+                Export or import data for a specific division. Importing will overwrite existing data for that division only.
               </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -645,14 +624,24 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Prototype Data Management (Local Storage)</CardTitle>
           <CardDescription>
-             Manually export all application data from local storage (employees, attendance, leaves, etc.) or import previously exported data.
-             Importing data will overwrite existing local data for this application.
+             Export or import data for a specific division. Importing will overwrite existing data for that division only.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-4 pt-4">
-          <Button onClick={handleExportData} variant="outline">
-            <DownloadCloud className="mr-2 h-4 w-4" /> Export All Local Data
+        <CardContent className="flex flex-col sm:flex-row flex-wrap items-center gap-4 pt-4">
+           <Select value={dataMgmtDivision} onValueChange={(value) => setDataMgmtDivision(value as Division)}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="Select Division" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="FMCG">FMCG Division</SelectItem>
+                    <SelectItem value="Wellness">Wellness Division</SelectItem>
+                </SelectContent>
+            </Select>
+
+          <Button onClick={handleExportData} variant="outline" disabled={!dataMgmtDivision}>
+            <DownloadCloud className="mr-2 h-4 w-4" /> Export Division Data
           </Button>
+
           <Dialog open={isImportDialogOpen} onOpenChange={(isOpen) => {
             setIsImportDialogOpen(isOpen);
             if (!isOpen) {
@@ -661,15 +650,15 @@ export default function DashboardPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button variant="outline">
-                <UploadCloud className="mr-2 h-4 w-4" /> Import All Local Data
+              <Button variant="outline" disabled={!dataMgmtDivision}>
+                <UploadCloud className="mr-2 h-4 w-4" /> Import Division Data
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
-                <DialogTitle>Import Local Storage Data</DialogTitle>
+                <DialogTitle>Import Data for {dataMgmtDivision} Division</DialogTitle>
                 <DialogDescription>
-                  Select a JSON file you previously exported OR paste the JSON content directly. This will overwrite all current local data for this application.
+                  Select a JSON file you previously exported OR paste the JSON content. This will overwrite all current local data for the selected division ({dataMgmtDivision}).
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -700,7 +689,7 @@ export default function DashboardPage() {
                 <DialogClose asChild>
                   <Button type="button" variant="outline">Cancel</Button>
                 </DialogClose>
-                <Button type="button" onClick={handleImportData} disabled={!selectedImportFile && !pastedImportJson.trim()}>Import Data & Reload</Button>
+                <Button type="button" onClick={processImport} disabled={!selectedImportFile && !pastedImportJson.trim()}>Import Data & Reload</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -832,13 +821,13 @@ export default function DashboardPage() {
       <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Exported Local Storage Data</DialogTitle>
+            <DialogTitle>Exported Data for {dataMgmtDivision} Division</DialogTitle>
             <DialogDescription>
               Copy the JSON text below or download it as a file. You can save it and use the "Import" feature on another computer/browser.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <Label htmlFor="export-json-area">All Local Storage Data (JSON):</Label>
+            <Label htmlFor="export-json-area">Division-Specific Data (JSON):</Label>
             <Textarea id="export-json-area" value={exportedDataJson} readOnly rows={15} />
           </div>
           <DialogFooter>
@@ -867,5 +856,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
