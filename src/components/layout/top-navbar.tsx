@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { UserCircle, PanelLeft, LogOut } from "lucide-react"; 
+import { UserCircle, PanelLeft, LogOut, CloudUpload, CloudDownload, Loader2 } from "lucide-react"; 
 import Image from "next/image";
 import { useRouter } from "next/navigation"; 
+import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useToast } from "@/hooks/use-toast"; 
+import { uploadToCloud, downloadFromCloud } from "@/lib/sync-helper";
 
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
@@ -47,6 +49,8 @@ export function TopNavbar() {
   const { toggleSidebar, isMobile } = useSidebar();
   const router = useRouter();
   const { toast } = useToast();
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [isDownloading, setIsDownloading] = React.useState(false);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -55,6 +59,41 @@ export function TopNavbar() {
     addActivityLog('User logged out.');
     router.replace('/login');
     toast({ title: "Logged Out", description: "You have been successfully logged out." });
+  };
+
+  const handleUpload = async () => {
+    setIsUploading(true);
+    try {
+      const success = await uploadToCloud();
+      if (success) {
+        toast({ title: "Upload Success", description: "Data cloud me save ho gaya!" });
+        addActivityLog('Data uploaded to cloud.');
+      } else {
+        toast({ title: "Upload Failed", description: "Data upload nahi ho paya.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Kuch gadbad ho gayi.", variant: "destructive" });
+    }
+    setIsUploading(false);
+  };
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const success = await downloadFromCloud();
+      if (success) {
+        toast({ title: "Download Success", description: "Data cloud se load ho gaya! Page refresh ho raha hai..." });
+        addActivityLog('Data downloaded from cloud.');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        toast({ title: "Download Failed", description: "Cloud me koi data nahi hai ya download fail ho gaya.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Kuch gadbad ho gayi.", variant: "destructive" });
+    }
+    setIsDownloading(false);
   };
 
   return (
@@ -81,6 +120,36 @@ export function TopNavbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleUpload}
+          disabled={isUploading}
+          className="hidden sm:flex"
+        >
+          {isUploading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <CloudUpload className="mr-2 h-4 w-4" />
+          )}
+          Upload
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownload}
+          disabled={isDownloading}
+          className="hidden sm:flex"
+        >
+          {isDownloading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <CloudDownload className="mr-2 h-4 w-4" />
+          )}
+          Download
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -94,6 +163,15 @@ export function TopNavbar() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleUpload} disabled={isUploading} className="cursor-pointer sm:hidden">
+              <CloudUpload className="mr-2 h-4 w-4" />
+              Upload to Cloud
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleDownload} disabled={isDownloading} className="cursor-pointer sm:hidden">
+              <CloudDownload className="mr-2 h-4 w-4" />
+              Download from Cloud
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="sm:hidden" />
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
               <LogOut className="mr-2 h-4 w-4" />
               Logout
