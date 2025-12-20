@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -12,7 +11,6 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
-  SidebarFooter,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -21,6 +19,7 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { TopNavbar } from "@/components/layout/top-navbar";
 import { NAV_ITEMS, COMPANY_NAME } from "@/lib/constants";
 import { Loader2 } from "lucide-react";
+import { AutoSync } from "@/components/shared/auto-sync"; 
 
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 
@@ -61,6 +60,10 @@ export default function DashboardLayout({
         <main className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-0 md:gap-8 print:p-0 print:m-0">
           {children}
         </main>
+        
+        {/* Auto Sync Engine */}
+        <AutoSync />
+        
       </div>
     </SidebarProvider>
   );
