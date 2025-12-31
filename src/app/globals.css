@@ -1,10 +1,12 @@
 
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 14px; /* Reduced base font size */
 }
 
 @layer base {
@@ -89,6 +91,36 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Smaller font sizes for a more compact UI */
+  .text-xs {
+    font-size: 0.7rem;
+    line-height: 1rem;
+  }
+  .text-sm {
+    font-size: 0.8rem;
+    line-height: 1.25rem;
+  }
+  .text-base {
+    font-size: 0.9rem;
+    line-height: 1.5rem;
+  }
+  .text-lg {
+    font-size: 1rem;
+    line-height: 1.75rem;
+  }
+  .text-xl {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+  }
+  .text-2xl {
+    font-size: 1.3rem;
+    line-height: 2rem;
+  }
+  .text-3xl {
+    font-size: 1.6rem;
+    line-height: 2.25rem;
+  }
 }
 
 @media print {
@@ -102,6 +134,7 @@ body {
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    font-size: 9pt !important;
   }
 
   body * {
@@ -199,6 +232,3 @@ body {
     margin-bottom: 0.1rem !important;
   }
 }
-
-
-    

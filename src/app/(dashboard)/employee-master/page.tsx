@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -595,6 +596,7 @@ export default function EmployeeMasterPage() {
                           <SelectContent>
                             <SelectItem value="FMCG">FMCG</SelectItem>
                             <SelectItem value="Wellness">Wellness</SelectItem>
+                            <SelectItem value="Office-Staff">Office-Staff</SelectItem>
                           </SelectContent>
                         </Select>
                       <FormMessage /></FormItem>

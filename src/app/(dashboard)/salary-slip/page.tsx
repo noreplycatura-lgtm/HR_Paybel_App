@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -42,8 +43,8 @@ const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
     address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
     logoText: "Novita",
     dataAiHint: "company logo healthcare",
-    logoWidth: 150,
-    logoHeight: 50,
+    logoWidth: 160,
+    logoHeight: 60,
   },
   Wellness: {
     name: "Catura Shine Pharma LLP.",
@@ -52,6 +53,14 @@ const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
     dataAiHint: "company logo pharma wellness",
     logoWidth: 180,
     logoHeight: 55,
+  },
+  "Office-Staff": {
+    name: "Novita Healthcare (Office)",
+    address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
+    logoText: "Novita",
+    dataAiHint: "company logo healthcare",
+    logoWidth: 160,
+    logoHeight: 60,
   },
   Default: {
     name: "HR Payroll App",
@@ -70,7 +79,6 @@ const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_
 const LOCAL_STORAGE_SALARY_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
 const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-const LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY = "novita_current_logged_in_user_display_name_v1";
 
 interface SalarySlipDataType {
   employeeId: string;
@@ -119,7 +127,6 @@ interface PerformanceDeductionEntry {
 interface ActivityLogEntry {
   timestamp: string;
   message: string;
-  user: string;
 }
 
 const addActivityLog = (message: string) => {
@@ -129,9 +136,7 @@ const addActivityLog = (message: string) => {
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
 
-    const loggedInUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_DISPLAY_NAME_KEY) || "System";
-
-    activities.unshift({ timestamp: new Date().toISOString(), message, user: loggedInUser });
+    activities.unshift({ timestamp: new Date().toISOString(), message });
     activities = activities.slice(0, 10); 
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
@@ -160,9 +165,10 @@ function SalarySlipCard({ sData, companyConfig, companyDetails, nextMonthName, n
               <Image
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
-                width={160}
-                height={60}
-                className="h-16 w-auto mb-2 object-contain"
+                width={companyDetails.logoWidth || 160}
+                height={companyDetails.logoHeight || 60}
+                className="h-auto mb-2 object-contain"
+                style={{width: `${companyDetails.logoWidth || 160}px`}}
                 unoptimized
               />
             ) : (
@@ -961,6 +967,7 @@ export default function SalarySlipPage() {
             <SelectContent>
               <SelectItem value="FMCG">FMCG Division</SelectItem>
               <SelectItem value="Wellness">Wellness Division</SelectItem>
+              <SelectItem value="Office-Staff">Office-Staff</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={!selectedDivision || filteredEmployeesForSlip.length === 0} >
@@ -1008,6 +1015,7 @@ export default function SalarySlipPage() {
                     <SelectContent>
                         <SelectItem value="FMCG">FMCG Division</SelectItem>
                         <SelectItem value="Wellness">Wellness Division</SelectItem>
+                        <SelectItem value="Office-Staff">Office-Staff</SelectItem>
                     </SelectContent>
                 </Select>
             
