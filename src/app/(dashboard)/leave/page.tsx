@@ -15,7 +15,7 @@ import { Loader2, Download, Edit, PlusCircle, Trash2, Upload } from "lucide-reac
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, getYear, getMonth, isValid, startOfMonth, addDays as dateFnsAddDays, differenceInCalendarDays, endOfMonth, isBefore, isEqual, addMonths, isAfter, getDaysInMonth } from "date-fns";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { calculateEmployeeLeaveDetailsForPeriod, CL_ACCRUAL_RATE, SL_ACCRUAL_RATE, PL_ACCRUAL_RATE, MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL, calculateMonthsOfService } from "@/lib/hr-calculations";
+import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import type { LeaveApplication, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 
@@ -73,6 +73,35 @@ const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
   };
 };
 
+const SEED_BALANCES_2025: Omit<OpeningLeaveBalance, 'monthIndex'>[] = [
+    { employeeCode: "17358", openingCL: 1.5, openingSL: 1.5, openingPL: 16, financialYearStart: 2025 },
+    { employeeCode: "17357", openingCL: 1.5, openingSL: 1.5, openingPL: 51, financialYearStart: 2025 },
+    { employeeCode: "17084", openingCL: 0, openingSL: 0, openingPL: 0.75, financialYearStart: 2025 },
+    { employeeCode: "17098", openingCL: 4.5, openingSL: 4.5, openingPL: 33, financialYearStart: 2025 },
+    { employeeCode: "17835", openingCL: 2.5, openingSL: 0.5, openingPL: 5, financialYearStart: 2025 },
+    { employeeCode: "13268", openingCL: 3.5, openingSL: 2, openingPL: 3, financialYearStart: 2025 },
+    { employeeCode: "17208", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
+    { employeeCode: "14717", openingCL: 4, openingSL: 3, openingPL: 63, financialYearStart: 2025 },
+    { employeeCode: "17784", openingCL: 2, openingSL: 0, openingPL: 7, financialYearStart: 2025 },
+    { employeeCode: "10036", openingCL: 4.5, openingSL: 4.5, openingPL: 97, financialYearStart: 2025 },
+    { employeeCode: "10051", openingCL: 1.5, openingSL: 1, openingPL: 3, financialYearStart: 2025 },
+    { employeeCode: "14103", openingCL: 4.5, openingSL: 3, openingPL: 37, financialYearStart: 2025 },
+    { employeeCode: "17362", openingCL: 2, openingSL: 2, openingPL: 2, financialYearStart: 2025 },
+    { employeeCode: "13042", openingCL: 2.5, openingSL: 1.5, openingPL: 56, financialYearStart: 2025 },
+    { employeeCode: "19210", openingCL: 1.5, openingSL: 1.5, openingPL: 8.75, financialYearStart: 2025 },
+    { employeeCode: "17012", openingCL: 2, openingSL: 2, openingPL: 0, financialYearStart: 2025 },
+    { employeeCode: "18679", openingCL: 4.5, openingSL: 3, openingPL: 7, financialYearStart: 2025 },
+    { employeeCode: "18894", openingCL: 3.5, openingSL: 1.5, openingPL: 10, financialYearStart: 2025 },
+    { employeeCode: "19131", openingCL: 1, openingSL: 1, openingPL: -0.5, financialYearStart: 2025 },
+    { employeeCode: "14766", openingCL: 3.5, openingSL: 3.5, openingPL: 87.5, financialYearStart: 2025 },
+    { employeeCode: "17834", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
+    { employeeCode: "17054", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
+    { employeeCode: "17863", openingCL: 3, openingSL: 3, openingPL: 4, financialYearStart: 2025 },
+    { employeeCode: "17402", openingCL: 1.5, openingSL: 1.5, openingPL: 0, financialYearStart: 2025 },
+    { employeeCode: "13413", openingCL: 2, openingSL: 2, openingPL: 13, financialYearStart: 2025 },
+    { employeeCode: "17785", openingCL: 3, openingSL: 3, openingPL: 66, financialYearStart: 2025 },
+];
+
 
 export default function LeavePage() {
   const { toast } = useToast();
@@ -91,6 +120,7 @@ export default function LeavePage() {
   const [isEditOpeningBalanceDialogOpen, setIsEditOpeningBalanceDialogOpen] = React.useState(false);
   const [editingEmployeeForOB, setEditingEmployeeForOB] = React.useState<EmployeeDetail | null>(null);
   const [editingOBYear, setEditingOBYear] = React.useState<number>(0);
+  const [editingOBMonthIndex, setEditingOBMonthIndex] = React.useState<number | undefined>(undefined);
   const [editableOB_CL, setEditableOB_CL] = React.useState<number>(0);
   const [editableOB_SL, setEditableOB_SL] = React.useState<number>(0);
   const [editableOB_PL, setEditableOB_PL] = React.useState<number>(0);
@@ -123,17 +153,35 @@ export default function LeavePage() {
         }
 
         const storedOBStr = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+        let currentOBs: OpeningLeaveBalance[] = [];
         if (storedOBStr) {
             try {
                 const parsedOB = JSON.parse(storedOBStr);
-                setOpeningBalances(Array.isArray(parsedOB) ? parsedOB : []);
+                currentOBs = Array.isArray(parsedOB) ? parsedOB : [];
             } catch (e) {
                 console.error("Error parsing opening balances from localStorage:", e);
-                setOpeningBalances([]);
                 toast({ title: "Data Error", description: "Could not parse opening balances. Calculations may be inaccurate.", variant: "destructive", duration: 7000 });
             }
+        }
+        
+        // Seed Dec 2025 balances if not already present
+        const seededBalancesMap = new Map(currentOBs.map(b => [`${b.employeeCode}-${b.financialYearStart}-${b.monthIndex}`, b]));
+        let didSeed = false;
+        SEED_BALANCES_2025.forEach(seed => {
+            const key = `${seed.employeeCode}-${seed.financialYearStart}-11`; // 11 for December
+            if (!seededBalancesMap.has(key)) {
+                seededBalancesMap.set(key, { ...seed, monthIndex: 11 });
+                didSeed = true;
+            }
+        });
+        
+        if (didSeed) {
+            const updatedBalances = Array.from(seededBalancesMap.values());
+            setOpeningBalances(updatedBalances);
+            localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
+            toast({ title: "Data Seeded", description: "Initial leave balances for Dec 2025 have been set." });
         } else {
-             setOpeningBalances([]);
+            setOpeningBalances(currentOBs);
         }
 
         const storedAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
@@ -222,50 +270,19 @@ export default function LeavePage() {
         const closingBalancePLSelectedMonth = accruedDetailsEOMSelectedMonth.balancePLAtMonthEnd - usedPLInMonthFromAttendance;
 
         const nextMonthDateObject = addMonths(selectedMonthStartDate, 1);
-        const nextMonthIndexVal = getMonth(nextMonthDateObject);
-        const nextMonthYearVal = getYear(nextMonthDateObject);
 
-        const serviceMonthsAtNextMonthStart = calculateMonthsOfService(emp.doj, startOfMonth(nextMonthDateObject));
-        const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
-
-        let openingCLForNextMonthCalc = 0;
-        let openingSLForNextMonthCalc = 0;
-        let openingPLForNextMonthCalc = 0;
-        
-        const nextMonthFYStartYear = nextMonthIndexVal >= 3 ? nextMonthYearVal : nextMonthYearVal -1;
-        const obForNextMonthFY = openingBalances.find(
-          (ob) => ob.employeeCode === emp.code && ob.financialYearStart === nextMonthFYStartYear
+        const nextMonthDetails = calculateEmployeeLeaveDetailsForPeriod(
+            emp, getYear(nextMonthDateObject), getMonth(nextMonthDateObject), leaveApplications, openingBalances
         );
-
-
-        if (nextMonthIndexVal === 3) { 
-            openingCLForNextMonthCalc = (obForNextMonthFY?.openingCL || 0);
-            openingSLForNextMonthCalc = (obForNextMonthFY?.openingSL || 0);
-            if (obForNextMonthFY && obForNextMonthFY.openingPL !== undefined) {
-              openingPLForNextMonthCalc = obForNextMonthFY.openingPL;
-            } else {
-              openingPLForNextMonthCalc = closingBalancePLSelectedMonth;
-            }
-        } else {
-            openingCLForNextMonthCalc = closingBalanceCLSelectedMonth;
-            openingSLForNextMonthCalc = closingBalanceSLSelectedMonth;
-            openingPLForNextMonthCalc = closingBalancePLSelectedMonth;
-        }
-
-        if (isEligibleForAccrualNextMonth) {
-            openingCLForNextMonthCalc += CL_ACCRUAL_RATE;
-            openingSLForNextMonthCalc += SL_ACCRUAL_RATE;
-            openingPLForNextMonthCalc += PL_ACCRUAL_RATE;
-        }
 
         return {
           ...emp,
           usedCLInMonth: usedCLInMonthFromAttendance,
           usedSLInMonth: usedSLInMonthFromAttendance,
           usedPLInMonth: usedPLInMonthFromAttendance,
-          openingCLNextMonth: openingCLForNextMonthCalc,
-          openingSLNextMonth: openingSLForNextMonthCalc,
-          openingPLNextMonth: openingPLForNextMonthCalc,
+          openingCLNextMonth: nextMonthDetails.balanceCLAtMonthEnd,
+          openingSLNextMonth: nextMonthDetails.balanceSLAtMonthEnd,
+          openingPLNextMonth: nextMonthDetails.balancePLAtMonthEnd,
         };
     });
 
@@ -298,34 +315,39 @@ export default function LeavePage() {
 
   const handleOpenEditOpeningBalanceDialog = (employee: EmployeeDetail) => {
     setEditingEmployeeForOB(employee);
-    const currentFinancialYearStart = selectedMonth && months.indexOf(selectedMonth) >=3 ? selectedYear : (selectedYear > 0 ? selectedYear -1 : 0);
-    setEditingOBYear(currentFinancialYearStart);
+    const monthIndex = months.indexOf(selectedMonth);
+
+    setEditingOBYear(selectedYear);
+    setEditingOBMonthIndex(monthIndex);
 
     const existingOB = openingBalances.find(
-      (ob) => ob.employeeCode === employee.code && ob.financialYearStart === currentFinancialYearStart
+      (ob) => ob.employeeCode === employee.code && ob.financialYearStart === selectedYear && ob.monthIndex === monthIndex
     );
-
+    
     if (existingOB) {
       setEditableOB_CL(existingOB.openingCL);
       setEditableOB_SL(existingOB.openingSL);
       setEditableOB_PL(existingOB.openingPL);
     } else {
-      setEditableOB_CL(0);
-      setEditableOB_SL(0);
-      setEditableOB_PL(0);
+      // If no manual override exists, calculate and show the balance at the START of the selected month.
+      const prevMonthDate = addMonths(new Date(selectedYear, monthIndex, 1), -1);
+      const balancesAtPrevMonthEnd = calculateEmployeeLeaveDetailsForPeriod(employee, getYear(prevMonthDate), getMonth(prevMonthDate), leaveApplications, openingBalances);
+      setEditableOB_CL(balancesAtPrevMonthEnd.balanceCLAtMonthEnd);
+      setEditableOB_SL(balancesAtPrevMonthEnd.balanceSLAtMonthEnd);
+      setEditableOB_PL(balancesAtPrevMonthEnd.balancePLAtMonthEnd);
     }
     setIsEditOpeningBalanceDialogOpen(true);
   };
 
   const handleSaveOpeningBalances = () => {
-    if (!editingEmployeeForOB || editingOBYear <= 0) {
-      toast({ title: "Error", description: "No employee or invalid financial year selected for editing opening balances.", variant: "destructive"});
+    if (!editingEmployeeForOB || editingOBYear <= 0 || editingOBMonthIndex === undefined) {
+      toast({ title: "Error", description: "No employee or invalid period selected.", variant: "destructive"});
       return;
     }
 
     const updatedOpeningBalances = [...openingBalances];
     const existingOBIndex = updatedOpeningBalances.findIndex(
-      (ob) => ob.employeeCode === editingEmployeeForOB.code && ob.financialYearStart === editingOBYear
+      (ob) => ob.employeeCode === editingEmployeeForOB.code && ob.financialYearStart === editingOBYear && ob.monthIndex === editingOBMonthIndex
     );
 
     const newBalanceRecord: OpeningLeaveBalance = {
@@ -334,6 +356,7 @@ export default function LeavePage() {
       openingSL: editableOB_SL,
       openingPL: editableOB_PL,
       financialYearStart: editingOBYear,
+      monthIndex: editingOBMonthIndex,
     };
 
     if (existingOBIndex > -1) {
@@ -346,8 +369,8 @@ export default function LeavePage() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedOpeningBalances));
-        addActivityLog(`Opening balances for ${editingEmployeeForOB.name} (FY ${editingOBYear}) updated.`);
-        toast({ title: "Opening Balances Saved", description: `Opening balances for ${editingEmployeeForOB.name} for FY starting April ${editingOBYear} have been saved to local storage.`});
+        addActivityLog(`Manual leave balance for ${editingEmployeeForOB.name} (${months[editingOBMonthIndex]} ${editingOBYear}) updated.`);
+        toast({ title: "Opening Balances Saved", description: `Manual opening balance for ${editingEmployeeForOB.name} for ${months[editingOBMonthIndex]} ${editingOBYear} has been saved.`});
       } catch (error) {
          console.error("Error saving opening balances to localStorage:", error);
          toast({ title: "Storage Error", description: "Could not save opening balances locally.", variant: "destructive" });
@@ -503,9 +526,9 @@ export default function LeavePage() {
             if (newUploadedOpeningBalances.length > 0) {
                 message += `${newUploadedOpeningBalances.length} records processed from ${file.name}. `;
 
-                const existingRecordsMap = new Map(openingBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}`, b]));
+                const existingRecordsMap = new Map(openingBalances.map(b => [`${b.employeeCode}-${b.financialYearStart}-${b.monthIndex ?? 'fy'}`, b]));
                 newUploadedOpeningBalances.forEach(nb => {
-                    existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}`, nb);
+                    existingRecordsMap.set(`${nb.employeeCode}-${nb.financialYearStart}-fy`, nb);
                 });
                 const updatedBalances = Array.from(existingRecordsMap.values());
                 setOpeningBalances(updatedBalances);
@@ -629,21 +652,21 @@ export default function LeavePage() {
     <>
       <PageHeader
         title="Leave Management Dashboard"
-        description={`View employee leave summaries. Used leaves for ${currentSelectedMonthDisplay} sourced from attendance. CL/SL reset Apr-Mar; PL carries forward. Balances can go negative. (Data in local storage).`}
+        description={`View employee leave summaries. Used leaves for ${currentSelectedMonthDisplay} sourced from attendance. Balances can be manually set for any month. (Data in local storage).`}
       >
         <Button variant="destructive" onClick={handleDeleteSelectedOpeningBalances} disabled={selectedEmployeeIds.size === 0}>
             <Trash2 className="mr-2 h-4 w-4" /> Clear Selected OB ({selectedEmployeeIds.size})
         </Button>
         <FileUploadButton
             onFileUpload={handleOpeningBalanceUpload}
-            buttonText="Upload Opening Balances (CSV)"
+            buttonText="Upload FY Balances (CSV)"
             acceptedFileTypes=".csv"
             icon={<Upload className="mr-2 h-4 w-4" />}
-            title="Upload CSV with opening leave balances for employees"
+            title="Upload CSV with opening leave balances for employees for a Financial Year"
         />
         <Button onClick={handleDownloadOpeningBalanceTemplate} variant="link" className="p-0 h-auto">
             <Download className="mr-2 h-4 w-4" />
-            Download Opening Balance Template (CSV)
+            Download FY Balance Template (CSV)
         </Button>
          <Button onClick={handleDownloadReport} variant="outline" disabled={selectedEmployeeIds.size === 0}>
             <Download className="mr-2 h-4 w-4" />
@@ -673,24 +696,16 @@ export default function LeavePage() {
           setIsEditOpeningBalanceDialogOpen(isOpen);
           if (!isOpen) {
             setEditingEmployeeForOB(null);
-            setEditableOB_CL(0);
-            setEditableOB_SL(0);
-            setEditableOB_PL(0);
-            setEditingOBYear(0);
           }
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Opening Balances for {editingEmployeeForOB?.name}</DialogTitle>
+            <DialogTitle>Edit Opening Balance for {editingEmployeeForOB?.name}</DialogTitle>
             <DialogDescription>
-              Set opening leave balances for the financial year starting April {editingOBYear > 0 ? editingOBYear : '(Select Year)'}.
+              Manually set the opening leave balances for <strong>{months[editingOBMonthIndex || 0]} {editingOBYear > 0 ? editingOBYear : ''}</strong>. Future months will calculate from these values.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="space-y-1">
-                <Label htmlFor="ob-fy-year">Financial Year Start (e.g., 2024 for Apr 2024 - Mar 2025)</Label>
-                <Input id="ob-fy-year" type="number" value={editingOBYear > 0 ? editingOBYear : ""} onChange={(e) => setEditingOBYear(parseInt(e.target.value) || 0)} placeholder="Enter year" />
-            </div>
             <div className="space-y-1">
                 <Label htmlFor="ob-cl">Opening CL</Label>
                 <Input id="ob-cl" type="number" value={editableOB_CL} onChange={(e) => setEditableOB_CL(parseFloat(e.target.value) || 0)} step="0.1" />
@@ -742,7 +757,7 @@ export default function LeavePage() {
         <CardHeader>
           <CardTitle>Employee Leave Summary</CardTitle>
           <CardDescription>
-            Only 'Active' employees are shown. Leave accrual starts after {MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL} months. Balances can go negative.
+            Only 'Active' employees are shown. Balances can be negative. Click Edit to manually set opening balance for the selected month.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -790,7 +805,7 @@ export default function LeavePage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditOpeningBalanceDialog(emp)} title={`Edit opening balances for ${emp.name}`}>
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditOpeningBalanceDialog(emp)} title={`Edit opening balances for ${emp.name} for ${selectedMonth} ${selectedYear}`}>
                         <Edit className="h-4 w-4" />
                     </Button>
                   </TableCell>

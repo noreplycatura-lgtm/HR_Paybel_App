@@ -24,4 +24,5 @@ export interface OpeningLeaveBalance {
   openingSL: number;
   openingPL: number;
   financialYearStart: number; // e.g., 2024 for FY Apr 2024 - Mar 2025
+  monthIndex?: number; // Optional: 0-11 for manual monthly override
 }
