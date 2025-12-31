@@ -546,24 +546,25 @@ export default function AttendancePage() {
       let notJoinedDays = 0;
 
       finalAttendanceToUse.forEach(s => {
-          switch(s) {
+          const status = s.toUpperCase();
+          switch(status) {
               case 'P': workingDaysP++; break;
               case 'A': absent1A++; break;
-              case 'HD': halfDays++; break;
+              case 'HD': halfDays += 0.5; absent1A += 0.5; break; // HD is half absent
               case 'W': weekOffsW++; break;
               case 'PH': paidHolidaysPH++; break;
               case 'CL': totalCLUsed++; break;
               case 'PL': totalPLUsed++; break;
               case 'SL': totalSLUsed++; break;
-              case 'HCL': halfDays++; totalCLUsed += 0.5; break;
-              case 'HPL': halfDays++; totalPLUsed += 0.5; break;
-              case 'HSL': halfDays++; totalSLUsed += 0.5; break;
+              case 'HCL': workingDaysP += 0.5; totalCLUsed += 0.5; break;
+              case 'HPL': workingDaysP += 0.5; totalPLUsed += 0.5; break;
+              case 'HSL': workingDaysP += 0.5; totalSLUsed += 0.5; break;
               case '-': notJoinedDays++; break;
           }
       });
       
-      const absent2AHd = absent1A + (halfDays * 0.5);
-      const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+      const absent2AHd = absent1A; // This now correctly includes the 0.5 from HD
+      const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
       const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
 
 
@@ -575,8 +576,8 @@ export default function AttendancePage() {
         emp.designation,
         emp.doj, 
         ...finalAttendanceToUse,
-        (workingDaysP + (halfDays*0.5)).toFixed(1), // Working days include half-days
-        absent1A.toString(),
+        workingDaysP.toFixed(1),
+        absent1A.toFixed(1),
         absent2AHd.toFixed(1),
         weekOffsW.toString(),
         totalCLUsed.toFixed(1),
@@ -1094,36 +1095,35 @@ export default function AttendancePage() {
 
                           let workingDaysP = 0;
                           let absent1A = 0;
-                          let halfDays = 0;
                           let weekOffsW = 0;
                           let totalCLUsed = 0;
                           let totalPLUsed = 0;
                           let totalSLUsed = 0;
                           let paidHolidaysPH = 0;
                           let notJoinedDays = 0;
-
+                          
                           finalAttendanceToUse.forEach(s => {
-                              switch(s.toUpperCase()) {
-                                  case 'P': workingDaysP++; break;
-                                  case 'A': absent1A++; break;
-                                  case 'HD': halfDays++; break;
-                                  case 'W': weekOffsW++; break;
-                                  case 'PH': paidHolidaysPH++; break;
-                                  case 'CL': totalCLUsed++; break;
-                                  case 'PL': totalPLUsed++; break;
-                                  case 'SL': totalSLUsed++; break;
-                                  case 'HCL': halfDays++; totalCLUsed += 0.5; break;
-                                  case 'HPL': halfDays++; totalPLUsed += 0.5; break;
-                                  case 'HSL': halfDays++; totalSLUsed += 0.5; break;
-                                  case '-': notJoinedDays++; break;
-                              }
+                            const status = s.toUpperCase();
+                            switch(status) {
+                                case 'P': workingDaysP++; break;
+                                case 'A': absent1A++; break;
+                                case 'HD': workingDaysP += 0.5; absent1A += 0.5; break;
+                                case 'W': weekOffsW++; break;
+                                case 'PH': paidHolidaysPH++; break;
+                                case 'CL': totalCLUsed++; break;
+                                case 'PL': totalPLUsed++; break;
+                                case 'SL': totalSLUsed++; break;
+                                case 'HCL': workingDaysP += 0.5; totalCLUsed += 0.5; break;
+                                case 'HPL': workingDaysP += 0.5; totalPLUsed += 0.5; break;
+                                case 'HSL': workingDaysP += 0.5; totalSLUsed += 0.5; break;
+                                case '-': notJoinedDays++; break;
+                            }
                           });
 
-                          const absent2AHd = absent1A + (halfDays * 0.5);
-                          const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+                          const absent2AHd = absent1A;
+                          const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
                           const totalDaysInMonthForCalc = daysInSelectedViewMonth - notJoinedDays;
-                          const calculatedWorkingDays = workingDaysP + (halfDays * 0.5);
-
+                          
                           return (
                           <TableRow key={emp.id} className={emp.isMissingInMaster ? "bg-red-100 dark:bg-red-900/20" : ""}>
                             <TableCell>
@@ -1144,8 +1144,8 @@ export default function AttendancePage() {
                                 </span>
                               </TableCell>
                             ))}
-                            <TableCell className="text-center font-semibold">{calculatedWorkingDays.toFixed(1)}</TableCell>
-                            <TableCell className="text-center font-semibold">{absent1A}</TableCell>
+                            <TableCell className="text-center font-semibold">{workingDaysP.toFixed(1)}</TableCell>
+                            <TableCell className="text-center font-semibold">{absent1A.toFixed(1)}</TableCell>
                             <TableCell className="text-center font-semibold">{absent2AHd.toFixed(1)}</TableCell>
                             <TableCell className="text-center font-semibold">{weekOffsW}</TableCell>
                             <TableCell className="text-center font-semibold">{totalCLUsed.toFixed(1)}</TableCell>

@@ -227,24 +227,30 @@ export default function SalarySheetPage() {
 
         let daysPaid = 0;
         let weekOffs = 0;
-        let fullAbsentDays = 0;
-        let halfDaysTaken = 0;
-
+        let absentDays = 0;
+        
         dailyStatuses.forEach(status => {
           const s = status.toUpperCase();
-          if (s === 'P' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'PH' || s === 'W' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
-            daysPaid += 1;
-            if (s === 'W') weekOffs++;
+          if (s !== 'A' && s !== '-') {
+            if (s === 'HD') {
+              daysPaid += 0.5;
+            } else {
+              daysPaid += 1;
+            }
+          }
+        
+          if (s === 'W') {
+            weekOffs++;
+          }
+        
+          if (s === 'A') {
+            absentDays += 1;
           } else if (s === 'HD') {
-            daysPaid += 0.5;
-            halfDaysTaken++;
-          } else if (s === 'A') {
-            fullAbsentDays++;
+            absentDays += 0.5;
           }
         });
         
         daysPaid = Math.min(daysPaid, totalDaysInMonth);
-        const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
 
         const monthlyComponents = calculateMonthlySalaryComponents(emp, selectedYear, monthIndex);
         const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
@@ -282,7 +288,7 @@ export default function SalarySheetPage() {
           totalDaysInMonth,
           daysPaid,
           weekOffs,
-          daysAbsent: daysAbsentCalculated,
+          daysAbsent: absentDays,
           monthlyBasic: monthlyComponents.basic,
           monthlyHRA: monthlyComponents.hra,
           monthlyCA: monthlyComponents.ca,
@@ -430,34 +436,43 @@ export default function SalarySheetPage() {
         const empAttendanceRecord = attendanceDataForCsv.find(att => att.code === emp.code);
 
         const totalDaysInMonth = getDaysInMonth(new Date(selectedYear, monthIndex, 1));
-        let daysPaid = 0, weekOffs = 0, fullAbsentDays = 0, halfDaysTaken = 0;
+        
+        let daysPaid = 0;
+        let weekOffs = 0;
+        let absentDays = 0;
 
         if (empAttendanceRecord && empAttendanceRecord.attendance) {
             const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
             dailyStatuses.forEach(status => {
-              const s = status.toUpperCase();
-              if (s === 'P' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'PH' || s === 'W' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
-                  daysPaid += 1;
-                  if (s === 'W') weekOffs++;
-              } else if (s === 'HD') {
-                  daysPaid += 0.5;
-                  halfDaysTaken++;
-              } else if (s === 'A') {
-                  fullAbsentDays++;
-              }
+                const s = status.toUpperCase();
+                if (s !== 'A' && s !== '-') {
+                  if (s === 'HD') {
+                    daysPaid += 0.5;
+                  } else {
+                    daysPaid += 1;
+                  }
+                }
+              
+                if (s === 'W') {
+                  weekOffs++;
+                }
+              
+                if (s === 'A') {
+                  absentDays += 1;
+                } else if (s === 'HD') {
+                  absentDays += 0.5;
+                }
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
         } else {
             if (emp.status === "Active") {
-                 fullAbsentDays = totalDaysInMonth;
+                 absentDays = totalDaysInMonth;
             } else {
                 daysPaid = 0;
-                fullAbsentDays = 0;
+                absentDays = 0;
             }
         }
-
-        const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
-
+        
         const monthlyComponents = calculateMonthlySalaryComponents(emp, selectedYear, monthIndex);
         const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
         const actualBasic = monthlyComponents.basic * payFactor;
@@ -488,7 +503,7 @@ export default function SalarySheetPage() {
 
         if (empAttendanceRecord || emp.status === "Left") {
             return {
-            ...emp, totalDaysInMonth, daysPaid, weekOffs, daysAbsent: daysAbsentCalculated,
+            ...emp, totalDaysInMonth, daysPaid, weekOffs, daysAbsent: absentDays,
             monthlyBasic: monthlyComponents.basic, monthlyHRA: monthlyComponents.hra, monthlyCA: monthlyComponents.ca,
             monthlyOtherAllowance: monthlyComponents.otherAllowance, monthlyMedical: monthlyComponents.medical,
             calculatedGross: monthlyComponents.totalGross,

@@ -201,10 +201,11 @@ export default function LeavePage() {
         if (empAttSelectedMonth && empAttSelectedMonth.attendance) {
             const daysInSelected = getDaysInMonth(selectedMonthStartDate);
             empAttSelectedMonth.attendance.slice(0, daysInSelected).forEach(status => {
-                switch(status.toUpperCase()) {
-                  case 'CL': usedCLInMonthFromAttendance++; break;
-                  case 'SL': usedSLInMonthFromAttendance++; break;
-                  case 'PL': usedPLInMonthFromAttendance++; break;
+                const s = status.toUpperCase();
+                switch(s) {
+                  case 'CL': usedCLInMonthFromAttendance += 1; break;
+                  case 'SL': usedSLInMonthFromAttendance += 1; break;
+                  case 'PL': usedPLInMonthFromAttendance += 1; break;
                   case 'HCL': usedCLInMonthFromAttendance += 0.5; break;
                   case 'HSL': usedSLInMonthFromAttendance += 0.5; break;
                   case 'HPL': usedPLInMonthFromAttendance += 0.5; break;
