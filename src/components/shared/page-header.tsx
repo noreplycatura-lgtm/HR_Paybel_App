@@ -9,10 +9,10 @@ interface PageHeaderProps extends HTMLAttributes<HTMLDivElement> {
 
 export function PageHeader({ title, description, children, className, ...props }: PageHeaderProps) {
   return (
-    <div className={cn("mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 print:hidden", className)} {...props}>
+    <div className={cn("mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 print:hidden", className)} {...props}>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
-        {description && <p className="text-muted-foreground mt-1">{description}</p>}
+        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+        {description && <p className="text-muted-foreground mt-2 max-w-2xl">{description}</p>}
       </div>
       {children && <div className="flex flex-shrink-0 gap-2">{children}</div>}
     </div>
