@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -242,15 +241,20 @@ export default function ReportsPage() {
                             let fullAbsentDays = 0;
                             let halfDaysTaken = 0;
                             dailyStatuses.forEach(status => {
-                                if (status === 'P' || status === 'W' || status === 'PH') actualPayDaysValue++;
-                                else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
-                                else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
-                                else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
-                                else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++;}
+                                const s = status.toUpperCase();
+                                if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') actualPayDaysValue++;
+                                else if (s === 'HD') actualPayDaysValue += 0.5;
 
-                                if (status === 'A') fullAbsentDays++;
-                                else if (status === 'HD') { /* already counted in halfDaysTaken */ }
-                                else if (status === 'W') weekOffsCount += 1;
+                                if (s === 'CL') usedCLInMonth++;
+                                else if (s === 'SL') usedSLInMonth++;
+                                else if (s === 'PL') usedPLInMonth++;
+                                else if (s === 'HCL') usedCLInMonth += 0.5;
+                                else if (s === 'HSL') usedSLInMonth += 0.5;
+                                else if (s === 'HPL') usedPLInMonth += 0.5;
+
+                                if (s === 'A') fullAbsentDays++;
+                                else if (s === 'HD') { halfDaysTaken++; }
+                                else if (s === 'W') weekOffsCount += 1;
                             });
                             absentDaysCount = fullAbsentDays + (halfDaysTaken * 0.5);
                             actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysCurrentMonth);
@@ -415,9 +419,13 @@ export default function ReportsPage() {
                         if (empAttendanceRecord && empAttendanceRecord.attendance) {
                            const dailyStatuses = empAttendanceRecord.attendance.slice(0, getDaysInMonth(currentDateIterator));
                             dailyStatuses.forEach(status => {
-                                if (status === 'CL') usedCLInMonth += 1;
-                                else if (status === 'SL') usedSLInMonth += 1;
-                                else if (status === 'PL') usedPLInMonth += 1;
+                                const s = status.toUpperCase();
+                                if (s === 'CL') usedCLInMonth += 1;
+                                else if (s === 'SL') usedSLInMonth += 1;
+                                else if (s === 'PL') usedPLInMonth += 1;
+                                else if (s === 'HCL') usedCLInMonth += 0.5;
+                                else if (s === 'HSL') usedSLInMonth += 0.5;
+                                else if (s === 'HPL') usedPLInMonth += 0.5;
                             });
                         }
                     } catch (e) {
@@ -587,10 +595,16 @@ export default function ReportsPage() {
             
             let daysPaidCount = 0, weekOffsCountLedger = 0, fullAbsentDaysCount = 0, halfDaysTakenCount = 0;
             dailyStatuses.forEach(status => {
-              if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaidCount++;
-              else if (status === 'HD') { daysPaidCount += 0.5; halfDaysTakenCount++; }
-              else if (status === 'W') { weekOffsCountLedger++; daysPaidCount++; }
-              else if (status === 'A') fullAbsentDaysCount++;
+              const s = status.toUpperCase();
+              if (s === 'P' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'PH' || s === 'W' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+                  daysPaidCount++;
+                  if (s === 'W') weekOffsCountLedger++;
+              } else if (s === 'HD') {
+                  daysPaidCount += 0.5;
+                  halfDaysTakenCount++;
+              } else if (s === 'A') {
+                  fullAbsentDaysCount++;
+              }
             });
             daysPaidCount = Math.min(daysPaidCount, totalDaysInMonthValue);
             const daysAbsentCalculated = fullAbsentDaysCount + (halfDaysTakenCount * 0.5);

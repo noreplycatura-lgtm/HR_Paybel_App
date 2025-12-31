@@ -535,19 +535,37 @@ export default function AttendancePage() {
       if (!emp.processedAttendance) return; 
       const finalAttendanceToUse = emp.processedAttendance;
 
-      const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
-      const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
-      const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
-      const absent2AHd = absent1A + (halfDays * 0.5);
-      const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
-      const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
-      const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
-      const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
-      const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
-      const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length; 
+      let workingDaysP = 0;
+      let absent1A = 0;
+      let halfDays = 0;
+      let weekOffsW = 0;
+      let totalCLUsed = 0;
+      let totalPLUsed = 0;
+      let totalSLUsed = 0;
+      let paidHolidaysPH = 0;
+      let notJoinedDays = 0;
 
-      const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
+      finalAttendanceToUse.forEach(s => {
+          switch(s) {
+              case 'P': workingDaysP++; break;
+              case 'A': absent1A++; break;
+              case 'HD': halfDays++; break;
+              case 'W': weekOffsW++; break;
+              case 'PH': paidHolidaysPH++; break;
+              case 'CL': totalCLUsed++; break;
+              case 'PL': totalPLUsed++; break;
+              case 'SL': totalSLUsed++; break;
+              case 'HCL': halfDays++; totalCLUsed += 0.5; break;
+              case 'HPL': halfDays++; totalPLUsed += 0.5; break;
+              case 'HSL': halfDays++; totalSLUsed += 0.5; break;
+              case '-': notJoinedDays++; break;
+          }
+      });
+      
+      const absent2AHd = absent1A + (halfDays * 0.5);
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+      const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
+
 
       const row = [
         emp.status || "N/A", 
@@ -557,13 +575,13 @@ export default function AttendancePage() {
         emp.designation,
         emp.doj, 
         ...finalAttendanceToUse,
-        workingDaysP.toString(),
+        (workingDaysP + (halfDays*0.5)).toFixed(1), // Working days include half-days
         absent1A.toString(),
         absent2AHd.toFixed(1),
         weekOffsW.toString(),
-        totalCLUsed.toString(),
-        totalPLUsed.toString(),
-        totalSLUsed.toString(),
+        totalCLUsed.toFixed(1),
+        totalPLUsed.toFixed(1),
+        totalSLUsed.toFixed(1),
         paidHolidaysPH.toString(),
         (totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc).toString(), 
         paidDaysCalculated.toFixed(1)
@@ -1074,19 +1092,37 @@ export default function AttendancePage() {
                           }
                           const finalAttendanceToUse = emp.processedAttendance;
 
-                          const workingDaysP = finalAttendanceToUse.filter(s => s === 'P').length;
-                          const absent1A = finalAttendanceToUse.filter(s => s === 'A').length;
-                          const halfDays = finalAttendanceToUse.filter(s => s === 'HD').length;
-                          const absent2AHd = absent1A + (halfDays * 0.5);
-                          const weekOffsW = finalAttendanceToUse.filter(s => s === 'W').length;
-                          const totalCLUsed = finalAttendanceToUse.filter(s => s === 'CL').length;
-                          const totalPLUsed = finalAttendanceToUse.filter(s => s === 'PL').length;
-                          const totalSLUsed = finalAttendanceToUse.filter(s => s === 'SL').length;
-                          const paidHolidaysPH = finalAttendanceToUse.filter(s => s === 'PH').length;
-                          const notJoinedDays = finalAttendanceToUse.filter(s => s === '-').length;
+                          let workingDaysP = 0;
+                          let absent1A = 0;
+                          let halfDays = 0;
+                          let weekOffsW = 0;
+                          let totalCLUsed = 0;
+                          let totalPLUsed = 0;
+                          let totalSLUsed = 0;
+                          let paidHolidaysPH = 0;
+                          let notJoinedDays = 0;
 
-                          const totalDaysInMonthForCalc = daysInSelectedViewMonth - notJoinedDays;
+                          finalAttendanceToUse.forEach(s => {
+                              switch(s.toUpperCase()) {
+                                  case 'P': workingDaysP++; break;
+                                  case 'A': absent1A++; break;
+                                  case 'HD': halfDays++; break;
+                                  case 'W': weekOffsW++; break;
+                                  case 'PH': paidHolidaysPH++; break;
+                                  case 'CL': totalCLUsed++; break;
+                                  case 'PL': totalPLUsed++; break;
+                                  case 'SL': totalSLUsed++; break;
+                                  case 'HCL': halfDays++; totalCLUsed += 0.5; break;
+                                  case 'HPL': halfDays++; totalPLUsed += 0.5; break;
+                                  case 'HSL': halfDays++; totalSLUsed += 0.5; break;
+                                  case '-': notJoinedDays++; break;
+                              }
+                          });
+
+                          const absent2AHd = absent1A + (halfDays * 0.5);
                           const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH + (halfDays * 0.5);
+                          const totalDaysInMonthForCalc = daysInSelectedViewMonth - notJoinedDays;
+                          const calculatedWorkingDays = workingDaysP + (halfDays * 0.5);
 
                           return (
                           <TableRow key={emp.id} className={emp.isMissingInMaster ? "bg-red-100 dark:bg-red-900/20" : ""}>
@@ -1108,13 +1144,13 @@ export default function AttendancePage() {
                                 </span>
                               </TableCell>
                             ))}
-                            <TableCell className="text-center font-semibold">{workingDaysP}</TableCell>
+                            <TableCell className="text-center font-semibold">{calculatedWorkingDays.toFixed(1)}</TableCell>
                             <TableCell className="text-center font-semibold">{absent1A}</TableCell>
                             <TableCell className="text-center font-semibold">{absent2AHd.toFixed(1)}</TableCell>
                             <TableCell className="text-center font-semibold">{weekOffsW}</TableCell>
-                            <TableCell className="text-center font-semibold">{totalCLUsed}</TableCell>
-                            <TableCell className="text-center font-semibold">{totalPLUsed}</TableCell>
-                            <TableCell className="text-center font-semibold">{totalSLUsed}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalCLUsed.toFixed(1)}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalPLUsed.toFixed(1)}</TableCell>
+                            <TableCell className="text-center font-semibold">{totalSLUsed.toFixed(1)}</TableCell>
                             <TableCell className="text-center font-semibold">{paidHolidaysPH}</TableCell>
                             <TableCell className="text-center font-semibold">{totalDaysInMonthForCalc < 0 ? 0 : totalDaysInMonthForCalc}</TableCell>
                             <TableCell className="text-center font-semibold">{paidDaysCalculated.toFixed(1)}</TableCell>

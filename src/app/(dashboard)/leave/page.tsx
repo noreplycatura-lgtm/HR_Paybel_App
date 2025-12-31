@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -202,9 +201,14 @@ export default function LeavePage() {
         if (empAttSelectedMonth && empAttSelectedMonth.attendance) {
             const daysInSelected = getDaysInMonth(selectedMonthStartDate);
             empAttSelectedMonth.attendance.slice(0, daysInSelected).forEach(status => {
-                if (status === 'CL') usedCLInMonthFromAttendance++;
-                if (status === 'SL') usedSLInMonthFromAttendance++;
-                if (status === 'PL') usedPLInMonthFromAttendance++;
+                switch(status.toUpperCase()) {
+                  case 'CL': usedCLInMonthFromAttendance++; break;
+                  case 'SL': usedSLInMonthFromAttendance++; break;
+                  case 'PL': usedPLInMonthFromAttendance++; break;
+                  case 'HCL': usedCLInMonthFromAttendance += 0.5; break;
+                  case 'HSL': usedSLInMonthFromAttendance += 0.5; break;
+                  case 'HPL': usedPLInMonthFromAttendance += 0.5; break;
+                }
             });
         }
 
@@ -236,7 +240,11 @@ export default function LeavePage() {
         if (nextMonthIndexVal === 3) { 
             openingCLForNextMonthCalc = (obForNextMonthFY?.openingCL || 0);
             openingSLForNextMonthCalc = (obForNextMonthFY?.openingSL || 0);
-            openingPLForNextMonthCalc = (obForNextMonthFY?.openingPL !== undefined) ? obForNextMonthFY.openingPL : closingBalancePLSelectedMonth;
+            if (obForNextMonthFY && obForNextMonthFY.openingPL !== undefined) {
+              openingPLForNextMonthCalc = obForNextMonthFY.openingPL;
+            } else {
+              openingPLForNextMonthCalc = closingBalancePLSelectedMonth;
+            }
         } else {
             openingCLForNextMonthCalc = closingBalanceCLSelectedMonth;
             openingSLForNextMonthCalc = closingBalanceSLSelectedMonth;

@@ -68,5 +68,8 @@ export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
   CL: 'bg-purple-100 text-purple-700', // Casual Leave
   SL: 'bg-orange-100 text-orange-700', // Sick Leave
   PL: 'bg-amber-100 text-amber-700',  // Paid Leave
+  HCL: 'bg-purple-100 text-purple-700', // Half Casual Leave
+  HSL: 'bg-orange-100 text-orange-700', // Half Sick Leave
+  HPL: 'bg-amber-100 text-amber-700',  // Half Paid Leave
   '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
 };

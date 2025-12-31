@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -232,19 +231,18 @@ export default function SalarySheetPage() {
         let halfDaysTaken = 0;
 
         dailyStatuses.forEach(status => {
-          if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') {
-            daysPaid++;
-          } else if (status === 'HD') {
+          const s = status.toUpperCase();
+          if (s === 'P' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'PH' || s === 'W' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+            daysPaid += 1;
+            if (s === 'W') weekOffs++;
+          } else if (s === 'HD') {
             daysPaid += 0.5;
             halfDaysTaken++;
-          } else if (status === 'W') {
-            weekOffs++;
-            daysPaid++;
-          } else if (status === 'A') {
+          } else if (s === 'A') {
             fullAbsentDays++;
           }
         });
-
+        
         daysPaid = Math.min(daysPaid, totalDaysInMonth);
         const daysAbsentCalculated = fullAbsentDays + (halfDaysTaken * 0.5);
 
@@ -275,7 +273,8 @@ export default function SalarySheetPage() {
         
         const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
         
-        const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
+        const totalDeduction = esic + professionalTax + providentFund +
+                                   tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
         return {
@@ -436,10 +435,16 @@ export default function SalarySheetPage() {
         if (empAttendanceRecord && empAttendanceRecord.attendance) {
             const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
             dailyStatuses.forEach(status => {
-              if (status === 'P' || status === 'CL' || status === 'SL' || status === 'PL' || status === 'PH') daysPaid++;
-              else if (status === 'HD') { daysPaid += 0.5; halfDaysTaken++; }
-              else if (status === 'W') { weekOffs++; daysPaid++; }
-              else if (status === 'A') fullAbsentDays++;
+              const s = status.toUpperCase();
+              if (s === 'P' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'PH' || s === 'W' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+                  daysPaid += 1;
+                  if (s === 'W') weekOffs++;
+              } else if (s === 'HD') {
+                  daysPaid += 0.5;
+                  halfDaysTaken++;
+              } else if (s === 'A') {
+                  fullAbsentDays++;
+              }
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
         } else {
