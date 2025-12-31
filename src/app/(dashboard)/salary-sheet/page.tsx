@@ -84,6 +84,8 @@ interface EditableSalaryFields {
   loan?: number;
   salaryAdvance?: number;
   manualOtherDeduction?: number;
+  professionalTax?: number;
+  providentFund?: number;
 }
 
 interface PerformanceDeductionEntry {
@@ -261,6 +263,8 @@ export default function SalarySheetPage() {
         const loan = empEdits.loan ?? 0;
         const salaryAdvance = empEdits.salaryAdvance ?? 0;
         const manualOtherDeductionVal = empEdits.manualOtherDeduction ?? 0;
+        const professionalTax = empEdits.professionalTax ?? 0;
+        const providentFund = empEdits.providentFund ?? 0;
 
         const performanceDeductionEntry = performanceDeductionsForSelectedMonth.find(
           pd => pd.employeeCode === emp.code
@@ -268,9 +272,9 @@ export default function SalarySheetPage() {
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0;
-        const professionalTax = 0;
-        const providentFund = 0;
+        
+        const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+        
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
@@ -326,9 +330,15 @@ export default function SalarySheetPage() {
           else if (fieldName === 'tds') updatedEmp.tds = numericValue;
           else if (fieldName === 'loan') updatedEmp.loan = numericValue;
           else if (fieldName === 'salaryAdvance') updatedEmp.salaryAdvance = numericValue;
+          else if (fieldName === 'professionalTax') updatedEmp.professionalTax = numericValue;
+          else if (fieldName === 'providentFund') updatedEmp.providentFund = numericValue;
 
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
-          const newTotalDeduction = updatedEmp.esic + updatedEmp.professionalTax + updatedEmp.providentFund +
+          
+          const newEsic = newTotalAllowance <= 21010 ? newTotalAllowance * 0.0075 : 0;
+          updatedEmp.esic = newEsic;
+          
+          const newTotalDeduction = newEsic + updatedEmp.professionalTax + updatedEmp.providentFund +
                                    updatedEmp.tds + updatedEmp.loan + updatedEmp.salaryAdvance +
                                    updatedEmp.manualOtherDeduction + updatedEmp.performanceDeduction;
           const newNetPaid = newTotalAllowance - newTotalDeduction;
@@ -345,11 +355,8 @@ export default function SalarySheetPage() {
         if (!updatedEditsForStorage[employeeId]) {
           updatedEditsForStorage[employeeId] = {};
         }
-        if (fieldName === 'manualOtherDeduction') {
-            updatedEditsForStorage[employeeId]!.manualOtherDeduction = numericValue;
-        } else {
-            updatedEditsForStorage[employeeId]![fieldName] = numericValue;
-        }
+        updatedEditsForStorage[employeeId]![fieldName] = numericValue;
+        
         setSalaryEditsForPeriod(updatedEditsForStorage);
 
         if (typeof window !== 'undefined') {
@@ -460,6 +467,8 @@ export default function SalarySheetPage() {
         const loan = empEdits.loan ?? 0;
         const salaryAdvance = empEdits.salaryAdvance ?? 0;
         const manualOtherDeductionVal = empEdits.manualOtherDeduction ?? 0;
+        const professionalTax = empEdits.professionalTax ?? 0;
+        const providentFund = empEdits.providentFund ?? 0;
 
         const performanceDeductionEntry = performanceDeductionsForCsv.find(
           pd => pd.employeeCode === emp.code
@@ -467,7 +476,8 @@ export default function SalarySheetPage() {
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = 0, professionalTax = 0, providentFund = 0;
+        const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
 
@@ -634,7 +644,7 @@ export default function SalarySheetPage() {
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Displaying active employees for whom attendance data was found for the selected period.
-            ESIC, PT, PF are placeholders (0). Editable fields reflect manual adjustments. Data saved in browser's local storage.
+            ESIC is 0.75% of Total Allowance if Total Allowance &lt;= 21010. Editable fields reflect manual adjustments. Data saved in browser's local storage.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -711,8 +721,12 @@ export default function SalarySheetPage() {
                     </TableCell>
                     <TableCell className="text-right">{emp.totalAllowance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right">{emp.esic.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right">{emp.professionalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right">{emp.providentFund.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell>
+                      <Input type="number" defaultValue={emp.professionalTax} onBlur={(e) => handleEditableInputChange(emp.id, 'professionalTax', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" defaultValue={emp.providentFund} onBlur={(e) => handleEditableInputChange(emp.id, 'providentFund', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
+                    </TableCell>
                     <TableCell>
                       <Input type="number" defaultValue={emp.tds} onBlur={(e) => handleEditableInputChange(emp.id, 'tds', e.target.value)} className="h-8 w-24 text-right tabular-nums"/>
                     </TableCell>

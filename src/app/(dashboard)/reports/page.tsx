@@ -37,6 +37,8 @@ interface EditableSalaryFields {
   loan?: number;
   salaryAdvance?: number;
   manualOtherDeduction?: number;
+  professionalTax?: number;
+  providentFund?: number;
 }
 
 interface PerformanceDeductionEntry {
@@ -196,7 +198,7 @@ export default function ReportsPage() {
         "CL Used", "SL Used", "PL Used", "CL Balance EOM", "SL Balance EOM", "PL Balance EOM",
         "Actual Basic", "Actual HRA", "Actual CA", "Actual Medical", "Actual Other Allowance", "Arrears",
         "Manual Other Deduction", "Performance Deduction", "Total Other Deduction",
-        "TDS", "Loan", "Salary Advance",
+        "ESIC", "Prof. Tax", "PF", "TDS", "Loan", "Salary Advance",
         "Total Allowance", "Total Deduction", "Net Paid (INR)"
     ];
     csvRows.push(monthlyHeaders);
@@ -292,6 +294,9 @@ export default function ReportsPage() {
             const loan = salaryEdits.loan ?? 0;
             const salaryAdvance = salaryEdits.salaryAdvance ?? 0;
             const manualOtherDeduction = salaryEdits.manualOtherDeduction ?? 0;
+            const professionalTax = salaryEdits.professionalTax ?? 0;
+            const providentFund = salaryEdits.providentFund ?? 0;
+
 
             const perfDeductionEntry = allPerformanceDeductions.find(
               pd => pd.employeeCode === employee.code && pd.month === currentReportMonthName && pd.year === currentReportYearValue
@@ -300,7 +305,10 @@ export default function ReportsPage() {
             const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
 
             const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-            const totalDeductionValue = 0 + 0 + 0 + tds + loan + salaryAdvance + totalOtherDeduction; // ESIC, PT, PF are 0
+            
+            const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+
+            const totalDeductionValue = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeduction;
             const netPaid = totalAllowance - totalDeductionValue;
 
             const dataRow = [
@@ -324,6 +332,9 @@ export default function ReportsPage() {
                 manualOtherDeduction.toFixed(2),
                 performanceDeduction.toFixed(2),
                 totalOtherDeduction.toFixed(2),
+                esic.toFixed(2),
+                professionalTax.toFixed(2),
+                providentFund.toFixed(2),
                 tds.toFixed(2),
                 loan.toFixed(2),
                 salaryAdvance.toFixed(2),
@@ -598,6 +609,8 @@ export default function ReportsPage() {
             const loanValue = empEdits.loan ?? 0;
             const salaryAdvanceValue = empEdits.salaryAdvance ?? 0;
             const manualOtherDeductionValLedger = empEdits.manualOtherDeduction ?? 0;
+            const professionalTaxValue = empEdits.professionalTax ?? 0;
+            const providentFundValue = empEdits.providentFund ?? 0;
 
             const perfDeductionEntryLedger = performanceDeductionsForCurrentMonth.find(
               pd => pd.employeeCode === emp.code
@@ -606,7 +619,7 @@ export default function ReportsPage() {
             const totalOtherDeductionValLedger = manualOtherDeductionValLedger + performanceDeductionValLedger;
             
             const totalAllowanceValue = actualBasicLedger + actualHRALedger + actualCALedger + actualMedicalLedger + actualOtherAllowanceLedger + arrearsValue;
-            const esicValue = 0, professionalTaxValue = 0, providentFundValue = 0; // Placeholders
+            const esicValue = totalAllowanceValue <= 21010 ? totalAllowanceValue * 0.0075 : 0;
             const totalDeductionVal = esicValue + professionalTaxValue + providentFundValue + tdsValue + loanValue + salaryAdvanceValue + totalOtherDeductionValLedger;
             const netPaidValue = totalAllowanceValue - totalDeductionVal;
 
@@ -836,4 +849,3 @@ export default function ReportsPage() {
     </>
   );
 }
-
