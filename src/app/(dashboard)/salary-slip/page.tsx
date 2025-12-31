@@ -1125,59 +1125,88 @@ export default function SalarySlipPage() {
 }
 
 function convertToWords(num: number): string {
-  const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
-  const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-  const inWords = (numToConvert: number): string => {
-    if (numToConvert < 0) return "";
-    if (numToConvert === 0) return "";
-    let numStr = Math.floor(numToConvert).toString();
-    if (numStr.length > 9) return 'overflow'; 
+  if (num === 0) return "Zero Rupees Only";
+  if (num < 0) return "Minus " + convertToWords(Math.abs(num));
 
-    const nMatch = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-    if (!nMatch) return '';
-    let str = '';
-    str += (parseInt(nMatch[1]) !== 0) ? (a[Number(nMatch[1])] || b[nMatch[1][0]] + ' ' + a[nMatch[1][1]]).trim() + ' Crore ' : '';
-    str += (parseInt(nMatch[2]) !== 0) ? (a[Number(nMatch[2])] || b[nMatch[2][0]] + ' ' + a[nMatch[2][1]]).trim() + ' Lakh ' : '';
-    str += (parseInt(nMatch[3]) !== 0) ? (a[Number(nMatch[3])] || b[nMatch[3][0]] + ' ' + a[nMatch[3][1]]).trim() + ' Thousand ' : '';
-    str += (parseInt(nMatch[4]) !== 0) ? (a[Number(nMatch[4])] || b[nMatch[4][0]] + ' ' + a[nMatch[4][1]]).trim() + ' Hundred ' : '';
-    str += (parseInt(nMatch[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(nMatch[5])] || b[nMatch[5][0]] + ' ' + a[nMatch[5][1]]).trim() : '';
-    return str.replace(/\s+/g, ' ').trim();
+  const convertTwoDigits = (n: number): string => {
+    if (n < 20) return ones[n];
+    return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
   };
 
-  if (num === 0) return "Zero";
-  if (num < 0) return "Minus " + convertToWords(Math.abs(num));
+  const convertThreeDigits = (n: number): string => {
+    if (n === 0) return '';
+    if (n < 100) return convertTwoDigits(n);
+    return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + convertTwoDigits(n % 100) : '');
+  };
 
   const roundedNum = parseFloat(num.toFixed(2));
   const wholePart = Math.floor(roundedNum);
   const decimalPart = Math.round((roundedNum - wholePart) * 100);
 
-  let words = inWords(wholePart);
+  let words = '';
 
-  if (words === "" && wholePart === 0 && decimalPart === 0) {
-     words = "Zero";
-  } else if (words === "" && wholePart === 0 && decimalPart > 0) {
-    // Handled below
-  } else if (words === "" && wholePart > 0) {
-     words = "Error In Conversion"; 
-  }
-
-  if (decimalPart > 0) {
-    if (words && words !== "Zero") {
-        words += ' Rupees and ' + inWords(decimalPart) + ' Paise';
-    } else if (wholePart === 0 && (words === "Zero" || words === "")) {
-        words = inWords(decimalPart) + ' Paise';
-    } else { 
-        words = inWords(decimalPart) + ' Paise';
+  if (wholePart === 0) {
+    words = '';
+  } else if (wholePart < 1000) {
+    words = convertThreeDigits(wholePart);
+  } else if (wholePart < 100000) {
+    // Thousands (Indian system)
+    const thousands = Math.floor(wholePart / 1000);
+    const remainder = wholePart % 1000;
+    words = convertTwoDigits(thousands) + ' Thousand';
+    if (remainder > 0) {
+      words += ' ' + convertThreeDigits(remainder);
     }
-  } else if (words && words !== "Zero" && wholePart !== 0 && decimalPart === 0) {
-    words += ' Rupees';
+  } else if (wholePart < 10000000) {
+    // Lakhs (Indian system)
+    const lakhs = Math.floor(wholePart / 100000);
+    const remainder = wholePart % 100000;
+    words = convertTwoDigits(lakhs) + ' Lakh';
+    if (remainder > 0) {
+      const thousands = Math.floor(remainder / 1000);
+      const rest = remainder % 1000;
+      if (thousands > 0) {
+        words += ' ' + convertTwoDigits(thousands) + ' Thousand';
+      }
+      if (rest > 0) {
+        words += ' ' + convertThreeDigits(rest);
+      }
+    }
+  } else {
+    // Crores (Indian system)
+    const crores = Math.floor(wholePart / 10000000);
+    const remainder = wholePart % 10000000;
+    words = convertTwoDigits(crores) + ' Crore';
+    if (remainder > 0) {
+      const lakhs = Math.floor(remainder / 100000);
+      const restAfterLakh = remainder % 100000;
+      if (lakhs > 0) {
+        words += ' ' + convertTwoDigits(lakhs) + ' Lakh';
+      }
+      const thousands = Math.floor(restAfterLakh / 1000);
+      const rest = restAfterLakh % 1000;
+      if (thousands > 0) {
+        words += ' ' + convertTwoDigits(thousands) + ' Thousand';
+      }
+      if (rest > 0) {
+        words += ' ' + convertThreeDigits(rest);
+      }
+    }
   }
 
+  // Add Rupees and Paise
+  if (wholePart > 0 && decimalPart > 0) {
+    words += ' Rupees and ' + convertTwoDigits(decimalPart) + ' Paise Only';
+  } else if (wholePart > 0) {
+    words += ' Rupees Only';
+  } else if (decimalPart > 0) {
+    words = convertTwoDigits(decimalPart) + ' Paise Only';
+  } else {
+    words = 'Zero Rupees Only';
+  }
 
-  if (words.trim() === "Zero Rupees") return "Zero Rupees Only";
-  if (words.trim() === "Zero") return "Zero Rupees Only";
-  if (words.trim() === "Error In Conversion") return "Error In Conversion";
-
-  return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 && !words.endsWith("Paise") ? " Only" : "") : 'Zero Rupees Only';
+  return words.trim();
 }
