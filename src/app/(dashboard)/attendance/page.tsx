@@ -537,7 +537,6 @@ export default function AttendancePage() {
 
       let workingDaysP = 0;
       let absent1A = 0;
-      let halfDays = 0;
       let weekOffsW = 0;
       let totalCLUsed = 0;
       let totalPLUsed = 0;
@@ -550,7 +549,7 @@ export default function AttendancePage() {
           switch(status) {
               case 'P': workingDaysP++; break;
               case 'A': absent1A++; break;
-              case 'HD': halfDays += 0.5; absent1A += 0.5; break; // HD is half absent
+              case 'HD': workingDaysP += 0.5; absent1A += 0.5; break;
               case 'W': weekOffsW++; break;
               case 'PH': paidHolidaysPH++; break;
               case 'CL': totalCLUsed++; break;
@@ -563,7 +562,7 @@ export default function AttendancePage() {
           }
       });
       
-      const absent2AHd = absent1A; // This now correctly includes the 0.5 from HD
+      const absent2AHd = absent1A;
       const paidDaysCalculated = workingDaysP + weekOffsW + totalCLUsed + totalSLUsed + totalPLUsed + paidHolidaysPH;
       const totalDaysInMonthForCalc = daysInCurrentMonth - notJoinedDays;
 

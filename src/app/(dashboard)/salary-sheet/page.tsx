@@ -232,11 +232,18 @@ export default function SalarySheetPage() {
         dailyStatuses.forEach(status => {
           const s = status.toUpperCase();
           if (s !== 'A' && s !== '-') {
-            if (s === 'HD') {
+            if (s === 'HD' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
               daysPaid += 0.5;
             } else {
               daysPaid += 1;
             }
+          }
+          // The working portion of half-day leaves should be paid. So `P` and the `0.5P` part of `HCL/HSL/HPL` and `HD`
+          // Paid days logic: P, W, PH, CL, SL, PL are full paid days. HCL, HSL, HPL are full paid days. HD is half paid.
+          if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+              daysPaid++;
+          } else if (s === 'HD') {
+              daysPaid += 0.5;
           }
         
           if (s === 'W') {
@@ -445,12 +452,10 @@ export default function SalarySheetPage() {
             const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
             dailyStatuses.forEach(status => {
                 const s = status.toUpperCase();
-                if (s !== 'A' && s !== '-') {
-                  if (s === 'HD') {
+                if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+                    daysPaid++;
+                } else if (s === 'HD') {
                     daysPaid += 0.5;
-                  } else {
-                    daysPaid += 1;
-                  }
                 }
               
                 if (s === 'W') {

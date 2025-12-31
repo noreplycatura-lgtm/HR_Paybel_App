@@ -75,6 +75,8 @@ interface EditableSalaryFields {
   loan?: number;
   salaryAdvance?: number;
   manualOtherDeduction?: number;
+  professionalTax?: number;
+  providentFund?: number;
 }
 
 interface PerformanceDeductionEntry {
@@ -553,46 +555,64 @@ export default function SalarySlipPage() {
     let absentDaysCount = 0;
     let weekOffsCount = 0;
     let paidHolidaysCount = 0;
-    let halfDaysTaken = 0;
     let workingDaysCount = 0;
 
     dailyStatuses.forEach(status => {
-      if (status === 'P') { actualPayDaysValue++; workingDaysCount++; }
-      else if (status === 'W') { actualPayDaysValue++; weekOffsCount++; }
-      else if (status === 'PH') { actualPayDaysValue++; paidHolidaysCount++; }
-      else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
-      else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
-      else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
-      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; workingDaysCount += 0.5; }
-      else if (status === 'A') absentDaysCount += 1;
+      const s = status.toUpperCase();
+      if (s === 'P') { actualPayDaysValue++; workingDaysCount++; }
+      else if (s === 'W') { actualPayDaysValue++; weekOffsCount++; }
+      else if (s === 'PH') { actualPayDaysValue++; paidHolidaysCount++; }
+      else if (s === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
+      else if (s === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
+      else if (s === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
+      else if (s === 'HCL') { actualPayDaysValue++; usedCLInMonth += 0.5; workingDaysCount += 0.5; }
+      else if (s === 'HSL') { actualPayDaysValue++; usedSLInMonth += 0.5; workingDaysCount += 0.5; }
+      else if (s === 'HPL') { actualPayDaysValue++; usedPLInMonth += 0.5; workingDaysCount += 0.5; }
+      else if (s === 'HD') { actualPayDaysValue += 0.5; absentDaysCount += 0.5; workingDaysCount += 0.5; }
+      else if (s === 'A') absentDaysCount += 1;
     });
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
-    const finalAbsentDays = absentDaysCount + (halfDaysTaken * 0.5);
     const totalLeavesTakenThisMonth = usedCLInMonth + usedSLInMonth + usedPLInMonth;
 
     const monthlyComp = calculateMonthlySalaryComponents(employee, year, monthIndex);
     const payFactor = totalDaysInMonthValue > 0 ? actualPayDaysValue / totalDaysInMonthValue : 0;
+    
+    const actualBasic = (monthlyComp.basic || 0) * payFactor;
+    const actualHRA = (monthlyComp.hra || 0) * payFactor;
+    const actualCA = (monthlyComp.ca || 0) * payFactor;
+    const actualMedical = (monthlyComp.medical || 0) * payFactor;
+    const actualOtherAllowance = (monthlyComp.otherAllowance || 0) * payFactor;
+    
+    const arrears = salaryEdits.arrears ?? 0;
+    const totalEarningsValue = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
 
     const earningsList = [
-      { component: "Basic Salary", amount: (monthlyComp.basic || 0) * payFactor },
-      { component: "House Rent Allowance (HRA)", amount: (monthlyComp.hra || 0) * payFactor },
-      { component: "Conveyance Allowance (CA)", amount: (monthlyComp.ca || 0) * payFactor },
-      { component: "Medical Allowance", amount: (monthlyComp.medical || 0) * payFactor },
-      { component: "Other Allowance", amount: (monthlyComp.otherAllowance || 0) * payFactor },
-      { component: "Arrears", amount: salaryEdits.arrears ?? 0 },
+      { component: "Basic Salary", amount: actualBasic },
+      { component: "House Rent Allowance (HRA)", amount: actualHRA },
+      { component: "Conveyance Allowance (CA)", amount: actualCA },
+      { component: "Medical Allowance", amount: actualMedical },
+      { component: "Other Allowance", amount: actualOtherAllowance },
+      { component: "Arrears", amount: arrears },
     ];
     const calculatedTotalEarnings = earningsList.reduce((sum, item) => sum + item.amount, 0);
 
     const manualOtherDeductionVal = salaryEdits.manualOtherDeduction ?? 0;
     const totalOtherDeductionOnSlip = manualOtherDeductionVal + performanceDeductionAmount;
+    
+    const esicDeduction = totalEarningsValue <= 21010 ? totalEarningsValue * 0.0075 : 0;
+    const pfDeduction = salaryEdits.providentFund ?? 0;
+    const ptDeduction = salaryEdits.professionalTax ?? 0;
+    const tdsDeduction = salaryEdits.tds ?? 0;
+    const loanDeduction = salaryEdits.loan ?? 0;
+    const salaryAdvanceDeduction = salaryEdits.salaryAdvance ?? 0;
 
     const deductionsList = [
-      { component: "Provident Fund (PF)", amount: 0 },
-      { component: "Professional Tax (PT)", amount: 0 },
-      { component: "ESIC", amount: 0 },
-      { component: "Income Tax (TDS)", amount: salaryEdits.tds ?? 0 },
-      { component: "Loan", amount: salaryEdits.loan ?? 0 },
-      { component: "Salary Advance", amount: salaryEdits.salaryAdvance ?? 0 },
+      { component: "Provident Fund (PF)", amount: pfDeduction },
+      { component: "Professional Tax (PT)", amount: ptDeduction },
+      { component: "ESIC", amount: esicDeduction },
+      { component: "Income Tax (TDS)", amount: tdsDeduction },
+      { component: "Loan", amount: loanDeduction },
+      { component: "Salary Advance", amount: salaryAdvanceDeduction },
       { component: "Other Deduction", amount: totalOtherDeductionOnSlip },
     ];
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
@@ -651,7 +671,7 @@ export default function SalarySlipPage() {
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
-      absentDays: finalAbsentDays, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
+      absentDays: absentDaysCount, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
       workingDays: workingDaysCount,
       totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
       period: `${format(selectedPeriodStartDate, "MMMM")} ${year}`,
