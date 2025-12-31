@@ -21,10 +21,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
+import { Checkbox } from "@/components/ui/checkbox";
+import Link from "next/link";
 
 const loginFormSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
   password: z.string().min(1, { message: "Password is required" }),
+  rememberMe: z.boolean().default(false).optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
@@ -39,6 +42,7 @@ const MAIN_ADMIN_USERNAME = "asingh0402";
 const MAIN_ADMIN_PASSWORD = "123456";
 const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh";
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const REMEMBERED_USERNAME_KEY = "novita_remembered_username_v1";
 
 export function LoginForm() {
   const router = useRouter();
@@ -70,8 +74,20 @@ export function LoginForm() {
     defaultValues: {
       username: "",
       password: "",
+      rememberMe: false,
     },
   });
+
+  // Load remembered username on component mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const rememberedUsername = localStorage.getItem(REMEMBERED_USERNAME_KEY);
+      if (rememberedUsername) {
+        form.setValue('username', rememberedUsername);
+        form.setValue('rememberMe', true);
+      }
+    }
+  }, [form]);
 
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
@@ -106,6 +122,11 @@ export function LoginForm() {
     if (loginSuccess) {
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOGGED_IN_STATUS_KEY, 'true');
+        if (values.rememberMe) {
+          localStorage.setItem(REMEMBERED_USERNAME_KEY, values.username);
+        } else {
+          localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+        }
       }
       router.replace("/dashboard");
       toast({
@@ -154,7 +175,7 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="username"
@@ -178,6 +199,25 @@ export function LoginForm() {
                     <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="rememberMe"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>
+                      Remember Me
+                    </FormLabel>
+                  </div>
                 </FormItem>
               )}
             />
