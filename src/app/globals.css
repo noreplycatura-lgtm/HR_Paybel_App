@@ -6,7 +6,7 @@
 
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  font-size: 14px; /* Reduced base font size */
+  font-size: 13px; /* Further reduced base font size */
 }
 
 @layer base {
@@ -94,32 +94,32 @@ body {
 
   /* Smaller font sizes for a more compact UI */
   .text-xs {
-    font-size: 0.75rem;
-    line-height: 1rem;
+    font-size: 0.65rem; /* 10.4px */
+    line-height: 0.9rem;
   }
   .text-sm {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: 0.75rem; /* 12px */
+    line-height: 1.1rem;
   }
   .text-base {
+    font-size: 0.8125rem; /* 13px */
+    line-height: 1.25rem;
+  }
+  .text-lg {
     font-size: 1rem;
     line-height: 1.5rem;
   }
-  .text-lg {
+  .text-xl {
     font-size: 1.125rem;
     line-height: 1.75rem;
   }
-  .text-xl {
+  .text-2xl {
     font-size: 1.25rem;
     line-height: 1.75rem;
   }
-  .text-2xl {
+  .text-3xl {
     font-size: 1.5rem;
     line-height: 2rem;
-  }
-  .text-3xl {
-    font-size: 1.875rem;
-    line-height: 2.25rem;
   }
 }
 
