@@ -9,6 +9,11 @@ export interface AppData {
   users?: any[];
 }
 
+export interface CompanyConfig {
+  company_logo: string;
+  company_name: string;
+}
+
 // Google Sheet se data load karo
 export async function loadFromGoogleSheet(): Promise<AppData> {
   try {
@@ -33,5 +38,23 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
   } catch (error) {
     console.error('Google Sheet me save nahi ho paya:', error);
     return false;
+  }
+}
+
+// NEW: Company Config fetch karo (Logo + Name)
+export async function getCompanyConfig(): Promise<CompanyConfig> {
+  try {
+    const response = await fetch(`${WEBAPP_URL}?action=getConfig`);
+    const data = await response.json();
+    return {
+      company_logo: data.company_logo || '',
+      company_name: data.company_name || 'Novita Payroll'
+    };
+  } catch (error) {
+    console.error('Config load nahi ho paya:', error);
+    return {
+      company_logo: '',
+      company_name: 'Novita Payroll'
+    };
   }
 }

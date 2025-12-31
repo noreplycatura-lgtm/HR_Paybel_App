@@ -15,14 +15,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
+import { APP_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useToast } from "@/hooks/use-toast"; 
 import { uploadToCloud, downloadFromCloud } from "@/lib/sync-helper";
+import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
-
 
 interface ActivityLogEntry {
   timestamp: string;
@@ -44,13 +44,29 @@ const addActivityLog = (message: string) => {
   }
 };
 
-
 export function TopNavbar() {
   const { toggleSidebar, isMobile } = useSidebar();
   const router = useRouter();
   const { toast } = useToast();
   const [isUploading, setIsUploading] = React.useState(false);
   const [isDownloading, setIsDownloading] = React.useState(false);
+  const [companyConfig, setCompanyConfig] = React.useState<CompanyConfig>({
+    company_logo: '',
+    company_name: APP_NAME
+  });
+
+  // Fetch company config on mount
+  React.useEffect(() => {
+    async function fetchConfig() {
+      try {
+        const config = await getCompanyConfig();
+        setCompanyConfig(config);
+      } catch (error) {
+        console.error('Error fetching company config:', error);
+      }
+    }
+    fetchConfig();
+  }, []);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -107,15 +123,26 @@ export function TopNavbar() {
 
       <div className="flex items-center">
         <Link href="/dashboard" className="flex items-center gap-2">
-           <Image
-            src="https://placehold.co/40x40.png?text=N"
-            alt={`${COMPANY_NAME} Mini Logo`}
-            width={32}
-            height={32}
-            className="h-8 w-8"
-            data-ai-hint="logo healthcare"
-          />
-          <span className="text-lg font-semibold hidden md:block">{APP_NAME}</span>
+          {/* Dynamic Company Logo */}
+          {companyConfig.company_logo ? (
+            <Image
+              src={companyConfig.company_logo}
+              alt={`${companyConfig.company_name} Logo`}
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-full object-contain"
+              unoptimized
+            />
+          ) : (
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-sm font-bold text-primary">
+                {companyConfig.company_name.charAt(0)}
+              </span>
+            </div>
+          )}
+          <span className="text-lg font-semibold hidden md:block">
+            {companyConfig.company_name || APP_NAME}
+          </span>
         </Link>
       </div>
 

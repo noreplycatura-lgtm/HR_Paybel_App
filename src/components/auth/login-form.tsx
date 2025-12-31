@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 
 const loginFormSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -42,6 +44,26 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [companyConfig, setCompanyConfig] = React.useState<CompanyConfig>({
+    company_logo: '',
+    company_name: 'Novita Payroll App'
+  });
+  const [isConfigLoading, setIsConfigLoading] = React.useState(true);
+
+  // Fetch company config on mount
+  React.useEffect(() => {
+    async function fetchConfig() {
+      try {
+        const config = await getCompanyConfig();
+        setCompanyConfig(config);
+      } catch (error) {
+        console.error('Error fetching company config:', error);
+      } finally {
+        setIsConfigLoading(false);
+      }
+    }
+    fetchConfig();
+  }, []);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -69,7 +91,6 @@ export function LoginForm() {
             const simulatedUsers: SimulatedUser[] = JSON.parse(storedUsersStr);
             const coAdminUser = simulatedUsers.find(user => user.username === values.username);
             if (coAdminUser && !coAdminUser.isLocked) {
-              // For co-admins, we'll assume the password check is simplified/skipped for prototype
               loginSuccess = true;
               welcomeMessage = `Welcome, ${coAdminUser.username}!`;
             }
@@ -104,7 +125,30 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="items-center text-center">
-         <h1 className="text-3xl font-bold mb-2 text-primary uppercase">HR PAYROLL APP</h1>
+        {/* Company Logo */}
+        {isConfigLoading ? (
+          <div className="h-20 w-20 mb-4 rounded-full bg-muted animate-pulse" />
+        ) : companyConfig.company_logo ? (
+          <Image
+            src={companyConfig.company_logo}
+            alt={`${companyConfig.company_name} Logo`}
+            width={200}
+            height={200}
+            className="h-45 w-45 mb-4 rounded-full object-contain"
+            unoptimized
+          />
+        ) : (
+          <div className="h-20 w-20 mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-3xl font-bold text-primary">
+              {companyConfig.company_name.charAt(0)}
+            </span>
+          </div>
+        )}
+        
+        {/* Company Name */}
+        <h1 className="text-3xl font-bold mb-2 text-primary uppercase">
+          {companyConfig.company_name || 'Novita Payroll App'}
+        </h1>
         <CardTitle className="text-2xl font-bold">Login</CardTitle>
         <CardDescription>Enter your credentials to access the portal.</CardDescription>
       </CardHeader>

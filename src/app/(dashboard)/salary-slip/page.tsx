@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -23,6 +22,7 @@ import {
   PL_ACCRUAL_RATE
 } from "@/lib/hr-calculations";
 import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
+import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -139,6 +139,123 @@ const addActivityLog = (message: string) => {
   }
 };
 
+// Reusable Salary Slip Card Component
+interface SalarySlipCardProps {
+  sData: SalarySlipDataType;
+  companyConfig: CompanyConfig;
+  companyDetails: CompanyDetail;
+  nextMonthName: string;
+  nextMonthYear: number;
+  showPageBreak?: boolean;
+}
+
+function SalarySlipCard({ sData, companyConfig, companyDetails, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
+  return (
+    <Card className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} mb-4`}>
+      <CardHeader className="bg-muted/30 p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <div>
+            {/* Dynamic Logo from Google Sheet Config */}
+            {companyConfig.company_logo ? (
+              <Image
+                src={companyConfig.company_logo}
+                alt={`${companyConfig.company_name} Logo`}
+                width={160}
+                height={60}
+                className="h-16 w-auto mb-2 object-contain"
+                unoptimized
+              />
+            ) : (
+              <div className="h-16 w-40 mb-2 bg-primary/10 flex items-center justify-center rounded">
+                <span className="text-xl font-bold text-primary">
+                  {companyConfig.company_name || companyDetails.logoText}
+                </span>
+              </div>
+            )}
+            <p className="text-sm font-semibold">{companyConfig.company_name || companyDetails.name}</p>
+            <p className="text-xs text-muted-foreground whitespace-pre-line">{companyDetails.address}</p>
+          </div>
+          <div className="text-right mt-4 sm:mt-0">
+            <CardTitle className="text-2xl">Salary Slip</CardTitle>
+            <CardDescription>For {sData.period}</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+          <div className="space-y-1">
+            <h3 className="font-semibold mb-2">Employee Details</h3>
+            <p><strong>Name:</strong> {sData.name}</p>
+            <p><strong>Employee ID:</strong> {sData.employeeId}</p>
+            <p><strong>Designation:</strong> {sData.designation}</p>
+            <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
+            <p><strong>Division:</strong> {sData.division}</p>
+            <Separator className="my-4" />
+            <h3 className="font-semibold mb-2">Pay Details</h3>
+            <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
+            <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
+          </div>
+          <div className="space-y-1">
+            <h3 className="font-semibold mb-2">Attendance Summary</h3>
+            <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
+            <p><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
+            <p><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
+            <p><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
+            <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
+            <p className="invisible">&nbsp;</p>
+            <Separator className="my-4" />
+            <h3 className="font-semibold mb-2">Leave Used ({sData.period})</h3>
+            <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
+            <Separator className="my-4" />
+            <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYear > 0 ? nextMonthYear : ''})</h3>
+            <p>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
+          </div>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+          <div>
+            <h3 className="font-semibold text-lg mb-2">Earnings</h3>
+            {sData.earnings.map(item => (
+              <div key={`earning-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
+                <span>{item.component}</span>
+                <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-bold mt-2 pt-1">
+              <span>Total Earnings</span>
+              <span>₹{sData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg mb-2">Deductions</h3>
+            {sData.deductions.map(item => (
+              <div key={`deduction-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
+                <span>{item.component}</span>
+                <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-bold mt-2 pt-1">
+              <span>Total Deductions</span>
+              <span>₹{sData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+        </div>
+
+        <Separator className="my-6" />
+
+        <div className="text-right">
+          <p className="text-lg font-bold">Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(sData.netSalary)} Rupees Only</p>
+        </div>
+
+        <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 
 export default function SalarySlipPage() {
   const { toast } = useToast();
@@ -156,6 +273,12 @@ export default function SalarySlipPage() {
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
   const [allLeaveApplications, setAllLeaveApplications] = React.useState<LeaveApplication[]>([]);
 
+  // Company Config from Google Sheet
+  const [companyConfig, setCompanyConfig] = React.useState<CompanyConfig>({
+    company_logo: '',
+    company_name: ''
+  });
+  const [isConfigLoading, setIsConfigLoading] = React.useState(true);
 
   const [slipData, setSlipData] = React.useState<SalarySlipDataType | null>(null);
   const [bulkSlipsData, setBulkSlipsData] = React.useState<SalarySlipDataType[]>([]);
@@ -173,6 +296,20 @@ export default function SalarySlipPage() {
   const [toYearMulti, setToYearMulti] = React.useState<number>(0);
   const [isLoadingMultiMonth, setIsLoadingMultiMonth] = React.useState(false);
 
+  // Fetch Company Config from Google Sheet
+  React.useEffect(() => {
+    async function fetchConfig() {
+      try {
+        const config = await getCompanyConfig();
+        setCompanyConfig(config);
+      } catch (error) {
+        console.error('Error fetching company config:', error);
+      } finally {
+        setIsConfigLoading(false);
+      }
+    }
+    fetchConfig();
+  }, []);
 
   React.useEffect(() => {
     const year = new Date().getFullYear();
@@ -219,7 +356,7 @@ export default function SalarySlipPage() {
     if (selectedDivision && allEmployees.length > 0) {
       const filtered = allEmployees
         .filter(emp => emp.division === selectedDivision)
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort by name
+        .sort((a, b) => a.name.localeCompare(b.name));
       setFilteredEmployeesForSlip(filtered);
       if (selectedEmployeeId && !filtered.some(emp => emp.id === selectedEmployeeId)) {
         setSelectedEmployeeId(undefined);
@@ -235,7 +372,7 @@ export default function SalarySlipPage() {
     if (selectedDivisionForMultiMonth && allEmployees.length > 0) {
       const filtered = allEmployees
         .filter(emp => emp.division === selectedDivisionForMultiMonth)
-        .sort((a, b) => a.name.localeCompare(b.name)); // Sort by name
+        .sort((a, b) => a.name.localeCompare(b.name));
       setFilteredEmployeesForMultiMonth(filtered);
       if (selectedEmployeeForMultiMonth && !filtered.some(emp => emp.id === selectedEmployeeForMultiMonth)) {
         setSelectedEmployeeForMultiMonth(undefined); 
@@ -698,6 +835,24 @@ export default function SalarySlipPage() {
     ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
     : COMPANY_DETAILS_MAP.Default;
 
+  // Helper function to get next month info
+  const getNextMonthInfo = (period: string) => {
+    const parts = period.split(' ');
+    const monthStr = parts[0];
+    const yearStr = parts[1];
+    const parsedYear = parseInt(yearStr, 10);
+    const parsedMonthIndex = months.indexOf(monthStr);
+    
+    if (!isNaN(parsedYear) && parsedMonthIndex !== -1) {
+      const nextMonthDate = addMonths(new Date(parsedYear, parsedMonthIndex, 1), 1);
+      return {
+        name: format(nextMonthDate, "MMMM"),
+        year: getYear(nextMonthDate)
+      };
+    }
+    return { name: "N/A", year: 0 };
+  };
+
   let nextMonthNameForDisplay = "";
   let nextMonthYearNumForDisplay = 0;
 
@@ -711,10 +866,11 @@ export default function SalarySlipPage() {
   }
 
 
-  if (isLoadingEmployees && !selectedMonth && !selectedYear) {
+  if ((isLoadingEmployees || isConfigLoading) && !selectedMonth && !selectedYear) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
+  // Bulk Printing View
   if (isBulkPrintingView) {
     return (
       <div id="salary-slip-printable-area">
@@ -733,122 +889,19 @@ export default function SalarySlipPage() {
              ? COMPANY_DETAILS_MAP[sData.division as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
              : COMPANY_DETAILS_MAP.Default;
 
-          const slipMonthYear = sData.period;
-          let slipNextMonthName = "N/A";
-          let slipNextMonthYearNum = 0;
-
-          if (slipMonthYear) {
-            const yearStringFromPeriod = slipMonthYear.split(' ')[1];
-            const monthStringFromPeriod = slipMonthYear.split(' ')[0];
-            const parsedYear = parseInt(yearStringFromPeriod, 10);
-            const parsedMonthIndex = months.indexOf(monthStringFromPeriod);
-
-            if (!isNaN(parsedYear) && parsedMonthIndex !== -1 && isValid(new Date(parsedYear, parsedMonthIndex, 1))) {
-              const slipDateForNextMonthCalc = new Date(parsedYear, parsedMonthIndex, 1);
-              if (isValid(slipDateForNextMonthCalc)) {
-                  const slipNextMonthDate = addMonths(slipDateForNextMonthCalc, 1);
-                  slipNextMonthName = format(slipNextMonthDate, "MMMM");
-                  slipNextMonthYearNum = getYear(slipNextMonthDate);
-              }
-            }
-          }
-
+          const nextMonthInfo = getNextMonthInfo(sData.period);
 
           return (
-            <Card key={`bulk-slip-${sData.employeeId}-${index}`} className={`shadow-xl salary-slip-page ${index > 0 ? 'print-page-break-before' : ''} mb-4`}>
-              <CardHeader className="bg-muted/30 p-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                  <div>
-                    <Image
-                      src={`https://placehold.co/${empDivisionCompanyDetails.logoWidth}x${empDivisionCompanyDetails.logoHeight}.png?text=${encodeURIComponent(empDivisionCompanyDetails.logoText)}`}
-                      alt={`${empDivisionCompanyDetails.name} Logo`}
-                      width={empDivisionCompanyDetails.logoWidth}
-                      height={empDivisionCompanyDetails.logoHeight}
-                      className="mb-2"
-                      data-ai-hint={empDivisionCompanyDetails.dataAiHint}
-                    />
-                    <p className="text-sm font-semibold">{empDivisionCompanyDetails.name}</p>
-                    <p className="text-xs text-muted-foreground whitespace-pre-line">{empDivisionCompanyDetails.address}</p>
-                  </div>
-                  <div className="text-right mt-4 sm:mt-0">
-                    <CardTitle className="text-2xl">Salary Slip</CardTitle>
-                    <CardDescription>For {sData.period}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                    <div className="space-y-1">
-                        <h3 className="font-semibold mb-2">Employee Details</h3>
-                        <p><strong>Name:</strong> {sData.name}</p>
-                        <p><strong>Employee ID:</strong> {sData.employeeId}</p>
-                        <p><strong>Designation:</strong> {sData.designation}</p>
-                        <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
-                        <p><strong>Division:</strong> {sData.division}</p>
-                         <Separator className="my-4" />
-                        <h3 className="font-semibold mb-2">Pay Details</h3>
-                        <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
-                        <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
-                    </div>
-                    <div className="space-y-1">
-                        <h3 className="font-semibold mb-2">Attendance Summary</h3>
-                        <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
-                        <p><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
-                        <p><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
-                         <p><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
-                        <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                        <p className="invisible">&nbsp;</p> 
-                        <Separator className="my-4" />
-                        <h3 className="font-semibold mb-2">Leave Used ({sData.period})</h3>
-                        <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-                        <Separator className="my-4" />
-                        <h3 className="font-semibold mb-2">Leave Balance (Opening {slipNextMonthName} {slipNextMonthYearNum > 0 ? slipNextMonthYearNum : ''})</h3>
-                        <p>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
-                    </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">Earnings</h3>
-                    {sData.earnings.map(item => (
-                      <div key={`earning-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
-                        <span>{item.component}</span>
-                        <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-bold mt-2 pt-1">
-                      <span>Total Earnings</span>
-                      <span>₹{sData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">Deductions</h3>
-                    {sData.deductions.map(item => (
-                      <div key={`deduction-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
-                        <span>{item.component}</span>
-                        <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-bold mt-2 pt-1">
-                      <span>Total Deductions</span>
-                      <span>₹{sData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator className="my-6" />
-
-                <div className="text-right">
-                  <p className="text-lg font-bold">Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                  <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(sData.netSalary)} Rupees Only</p>
-                </div>
-
-                <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
-              </CardContent>
-            </Card>
-          )
+            <SalarySlipCard
+              key={`bulk-slip-${sData.employeeId}-${index}`}
+              sData={sData}
+              companyConfig={companyConfig}
+              companyDetails={empDivisionCompanyDetails}
+              nextMonthName={nextMonthInfo.name}
+              nextMonthYear={nextMonthInfo.year}
+              showPageBreak={index > 0}
+            />
+          );
         })}
       </div>
     );
@@ -1015,126 +1068,45 @@ export default function SalarySlipPage() {
       </Card>
 
 
+      {/* Single Slip Preview */}
       {showSlip && slipData && !isBulkPrintingView && (
-        <Card className="shadow-xl" id="salary-slip-preview">
-          <CardHeader className="bg-muted/30 p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-              <div>
-                <Image
-                  src={`https://placehold.co/${currentCompanyDetails.logoWidth}x${currentCompanyDetails.logoHeight}.png?text=${encodeURIComponent(currentCompanyDetails.logoText)}`}
-                  alt={`${currentCompanyDetails.name} Logo`}
-                  width={currentCompanyDetails.logoWidth}
-                  height={currentCompanyDetails.logoHeight}
-                  className="mb-2"
-                  data-ai-hint={currentCompanyDetails.dataAiHint}
-                />
-                <p className="text-sm font-semibold">{currentCompanyDetails.name}</p>
-                <p className="text-xs text-muted-foreground whitespace-pre-line">{currentCompanyDetails.address}</p>
-              </div>
-              <div className="text-right mt-4 sm:mt-0">
-                <CardTitle className="text-2xl">Salary Slip</CardTitle>
-                <CardDescription>For {slipData.period}</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
-                <div className="space-y-1">
-                    <h3 className="font-semibold mb-2">Employee Details</h3>
-                    <p><strong>Name:</strong> {slipData.name}</p>
-                    <p><strong>Employee ID:</strong> {slipData.employeeId}</p>
-                    <p><strong>Designation:</strong> {slipData.designation}</p>
-                    <p><strong>Date of Joining:</strong> {slipData.joinDate}</p>
-                    <p><strong>Division:</strong> {slipData.division}</p>
-                    <Separator className="my-4" />
-                    <h3 className="font-semibold mb-2">Pay Details</h3>
-                    <p><strong>Total Days:</strong> {slipData.totalDaysInMonth.toFixed(1)}</p>
-                    <p><strong>Pay Days:</strong> {slipData.actualPayDays.toFixed(1)}</p>
-                </div>
-                <div className="space-y-1">
-                    <h3 className="font-semibold mb-2">Attendance Summary</h3>
-                    <p><strong>Absent Days:</strong> {slipData.absentDays.toFixed(1)}</p>
-                    <p><strong>Week Offs:</strong> {slipData.weekOffs.toFixed(1)}</p>
-                    <p><strong>Paid Holidays:</strong> {slipData.paidHolidays.toFixed(1)}</p>
-                    <p><strong>Working Days:</strong> {slipData.workingDays.toFixed(1)}</p>
-                    <p><strong>Total Leaves Taken:</strong> {slipData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-                     <p className="invisible">&nbsp;</p> 
-                    <Separator className="my-4" />
-                    <h3 className="font-semibold mb-2">Leave Used ({slipData.period})</h3>
-                    <p>CL: {slipData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {slipData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {slipData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-                    <Separator className="my-4" />
-                    <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthNameForDisplay} {nextMonthYearNumForDisplay > 0 ? nextMonthYearNumForDisplay : ''})</h3>
-                    <p>CL: {slipData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {slipData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {slipData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
-                </div>
-            </div>
-
-            <Separator className="my-4" />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Earnings</h3>
-                {slipData.earnings.map(item => (
-                  <div key={`earning-${item.component}-${slipData.employeeId}`} className="flex justify-between py-1 border-b border-dashed">
-                    <span>{item.component}</span>
-                    <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between font-bold mt-2 pt-1">
-                  <span>Total Earnings</span>
-                  <span>₹{slipData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Deductions</h3>
-                {slipData.deductions.map(item => (
-                  <div key={`deduction-${item.component}-${slipData.employeeId}`} className="flex justify-between py-1 border-b border-dashed">
-                    <span>{item.component}</span>
-                    <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between font-bold mt-2 pt-1">
-                  <span>Total Deductions</span>
-                  <span>₹{slipData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-            </div>
-
-            <Separator className="my-6" />
-
-            <div className="text-right">
-              <p className="text-lg font-bold">Net Salary: ₹{slipData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(slipData.netSalary)} Rupees Only</p>
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
-          </CardContent>
-          <CardFooter className="p-6 border-t print:hidden">
-            <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
-            <Button
-              onClick={() => {
-                if (slipData) {
-                  const originalTitle = document.title;
-                  document.title = `${slipData.employeeId}-${slipData.name}-SalarySlip-${selectedMonth}-${selectedYear}`;
-                  try {
-                    window.print();
-                  } catch (e) {
-                    console.error('Error calling window.print():', e);
-                    toast({
-                      title: "Print Error",
-                      description: "Could not open print dialog. Please check browser console.",
-                      variant: "destructive",
-                    });
-                  } finally {
-                    document.title = originalTitle;
+        <>
+          <SalarySlipCard
+            sData={slipData}
+            companyConfig={companyConfig}
+            companyDetails={currentCompanyDetails}
+            nextMonthName={nextMonthNameForDisplay}
+            nextMonthYear={nextMonthYearNumForDisplay}
+          />
+          <Card className="shadow-md print:hidden">
+            <CardFooter className="p-6 border-t">
+              <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
+              <Button
+                onClick={() => {
+                  if (slipData) {
+                    const originalTitle = document.title;
+                    document.title = `${slipData.employeeId}-${slipData.name}-SalarySlip-${selectedMonth}-${selectedYear}`;
+                    try {
+                      window.print();
+                    } catch (e) {
+                      console.error('Error calling window.print():', e);
+                      toast({
+                        title: "Print Error",
+                        description: "Could not open print dialog. Please check browser console.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      document.title = originalTitle;
+                    }
                   }
-                }
-              }}
-              className="ml-auto print:hidden"
-            >
-              <Printer className="mr-2 h-4 w-4" /> Print / Save as PDF
-            </Button>
-          </CardFooter>
-        </Card>
+                }}
+                className="ml-auto print:hidden"
+              >
+                <Printer className="mr-2 h-4 w-4" /> Print / Save as PDF
+              </Button>
+            </CardFooter>
+          </Card>
+        </>
       )}
        {!showSlip && !isLoading && !isLoadingEmployees && !isBulkPrintingView && (
         <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
@@ -1209,8 +1181,3 @@ function convertToWords(num: number): string {
 
   return words.trim() ? words.trim() + (decimalPart === 0 && wholePart !== 0 && !words.endsWith("Paise") ? " Only" : "") : 'Zero Rupees Only';
 }
-
-
-    
-
-    
