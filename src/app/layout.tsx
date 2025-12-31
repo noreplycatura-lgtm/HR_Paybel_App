@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'HR Payroll App',
+  title: 'Novita Payroll',
   description: 'Human Resource Management System',
 };
 
