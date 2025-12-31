@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -8,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Download, Eye, Loader2, Printer, XCircle } from "lucide-react";
-import Image from "next/image";
 import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth, isBefore, isEqual, isAfter } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,49 +26,12 @@ import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-interface CompanyDetail {
-  name: string;
-  address: string;
-  logoText: string;
-  dataAiHint: string;
-  logoWidth: number;
-  logoHeight: number;
-}
-
-const COMPANY_DETAILS_MAP: Record<string, CompanyDetail> = {
-  FMCG: {
-    name: "Novita Healthcare",
-    address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
-    logoText: "Novita",
-    dataAiHint: "company logo healthcare",
-    logoWidth: 160,
-    logoHeight: 60,
-  },
-  Wellness: {
-    name: "Catura Shine Pharma LLP.",
-    address: "35,FF, JP Estate, Sanathal Changodar Highway, Navapura,\nTa- Sanand, Dist-Ahmedabad Gujrat (382210).",
-    logoText: "Catura Shine Pharma",
-    dataAiHint: "company logo pharma wellness",
-    logoWidth: 180,
-    logoHeight: 55,
-  },
-  "Office-Staff": {
-    name: "Novita Healthcare (Office)",
-    address: "37B, Mangal Compound, Dewas Naka, Lasudia Mori, Indore, Madhya Pradesh 452010.",
-    logoText: "Novita",
-    dataAiHint: "company logo healthcare",
-    logoWidth: 160,
-    logoHeight: 60,
-  },
-  Default: {
-    name: "HR Payroll App",
-    address: "123 Placeholder St, Placeholder City, PC 12345",
-    logoText: "HR App",
-    dataAiHint: "company logo",
-    logoWidth: 150,
-    logoHeight: 50,
-  }
-};
+// Company Address with proper line breaks
+const COMPANY_ADDRESS_LINES = [
+  "37 B, Mangal Compound,",
+  "Pipliya Kumar Dewas Naka,",
+  "Indore - 452010, Madhya Pradesh"
+];
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
@@ -144,119 +105,236 @@ const addActivityLog = (message: string) => {
   }
 };
 
-// Reusable Salary Slip Card Component
+// Reusable Salary Slip Card Component with Light Theme
 interface SalarySlipCardProps {
   sData: SalarySlipDataType;
   companyConfig: CompanyConfig;
-  companyDetails: CompanyDetail;
   nextMonthName: string;
   nextMonthYear: number;
   showPageBreak?: boolean;
 }
 
-function SalarySlipCard({ sData, companyConfig, companyDetails, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
+function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
   return (
-    <Card className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} mb-4`}>
-      <CardHeader className="bg-muted/30 p-6">
+    <Card 
+      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} mb-4`}
+      style={{ 
+        backgroundColor: '#ffffff', 
+        color: '#000000',
+        border: '1px solid #e0e0e0'
+      }}
+    >
+      <CardHeader 
+        className="p-6"
+        style={{ 
+          backgroundColor: '#f8f9fa', 
+          borderBottom: '2px solid #e0e0e0' 
+        }}
+      >
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
           <div>
-            {/* Dynamic Logo from Google Sheet Config */}
+            {/* Dynamic Logo from Google Sheet Config - Bigger Size */}
             {companyConfig.company_logo ? (
-              <Image
+              <img
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
-                width={companyDetails.logoWidth || 160}
-                height={companyDetails.logoHeight || 60}
-                className="h-auto mb-2 object-contain"
-                style={{width: `${companyDetails.logoWidth || 160}px`}}
-                unoptimized
+                style={{ 
+                  height: '120px', 
+                  width: 'auto', 
+                  maxWidth: '250px',
+                  marginBottom: '12px', 
+                  objectFit: 'contain' 
+                }}
               />
             ) : (
-              <div className="h-16 w-40 mb-2 bg-primary/10 flex items-center justify-center rounded">
-                <span className="text-xl font-bold text-primary">
-                  {companyConfig.company_name || companyDetails.logoText}
+              <div 
+                style={{ 
+                  height: '120px', 
+                  width: '250px', 
+                  marginBottom: '12px', 
+                  backgroundColor: '#e8f4f8', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  borderRadius: '8px',
+                  border: '1px solid #ccc'
+                }}
+              >
+                <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#0066cc' }}>
+                  {companyConfig.company_name ? companyConfig.company_name.charAt(0) : 'N'}
                 </span>
               </div>
             )}
-            <p className="text-sm font-semibold">{companyConfig.company_name || companyDetails.name}</p>
-            <p className="text-xs text-muted-foreground whitespace-pre-line">{companyDetails.address}</p>
+            {/* Company Name */}
+            <p style={{ fontSize: '16px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
+              {companyConfig.company_name || 'Novita Healthcare Pvt. Ltd.'}
+            </p>
+            {/* Company Address with Line Breaks */}
+            <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
+              {COMPANY_ADDRESS_LINES.map((line, index) => (
+                <p key={index} style={{ margin: 0 }}>{line}</p>
+              ))}
+            </div>
           </div>
           <div className="text-right mt-4 sm:mt-0">
-            <CardTitle className="text-2xl">Salary Slip</CardTitle>
-            <CardDescription>For {sData.period}</CardDescription>
+            <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#000', marginBottom: '4px' }}>
+              Salary Slip
+            </h2>
+            <p style={{ fontSize: '14px', color: '#666' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-6">
+      
+      <CardContent className="p-6" style={{ backgroundColor: '#ffffff' }}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
           <div className="space-y-1">
-            <h3 className="font-semibold mb-2">Employee Details</h3>
-            <p><strong>Name:</strong> {sData.name}</p>
-            <p><strong>Employee ID:</strong> {sData.employeeId}</p>
-            <p><strong>Designation:</strong> {sData.designation}</p>
-            <p><strong>Date of Joining:</strong> {sData.joinDate}</p>
-            <p><strong>Division:</strong> {sData.division}</p>
-            <Separator className="my-4" />
-            <h3 className="font-semibold mb-2">Pay Details</h3>
-            <p><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
-            <p><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
+            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+              Employee Details
+            </h3>
+            <p style={{ color: '#333' }}><strong>Name:</strong> {sData.name}</p>
+            <p style={{ color: '#333' }}><strong>Employee ID:</strong> {sData.employeeId}</p>
+            <p style={{ color: '#333' }}><strong>Designation:</strong> {sData.designation}</p>
+            <p style={{ color: '#333' }}><strong>Date of Joining:</strong> {sData.joinDate}</p>
+            <p style={{ color: '#333' }}><strong>Division:</strong> {sData.division}</p>
+            
+            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
+            
+            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+              Pay Details
+            </h3>
+            <p style={{ color: '#333' }}><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
           </div>
+          
           <div className="space-y-1">
-            <h3 className="font-semibold mb-2">Attendance Summary</h3>
-            <p><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
-            <p><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
-            <p><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
-            <p><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
-            <p><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-            <p className="invisible">&nbsp;</p>
-            <Separator className="my-4" />
-            <h3 className="font-semibold mb-2">Leave Used ({sData.period})</h3>
-            <p>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-            <Separator className="my-4" />
-            <h3 className="font-semibold mb-2">Leave Balance (Opening {nextMonthName} {nextMonthYear > 0 ? nextMonthYear : ''})</h3>
-            <p>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
+            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+              Attendance Summary
+            </h3>
+            <p style={{ color: '#333' }}><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
+            
+            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
+            
+            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+              Leave Used ({sData.period})
+            </h3>
+            <p style={{ color: '#333' }}>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
+            
+            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
+            
+            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+              Leave Balance (Opening {nextMonthName} {nextMonthYear > 0 ? nextMonthYear : ''})
+            </h3>
+            <p style={{ color: '#333' }}>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
           </div>
         </div>
 
-        <Separator className="my-4" />
+        <div style={{ margin: '20px 0', borderTop: '2px solid #ddd' }} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
           <div>
-            <h3 className="font-semibold text-lg mb-2">Earnings</h3>
+            <h3 style={{ fontWeight: '600', fontSize: '16px', marginBottom: '12px', color: '#000', backgroundColor: '#e8f5e9', padding: '8px', borderRadius: '4px' }}>
+              Earnings
+            </h3>
             {sData.earnings.map(item => (
-              <div key={`earning-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
+              <div 
+                key={`earning-${item.component}-${sData.employeeId}-${sData.period}`} 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  padding: '6px 0', 
+                  borderBottom: '1px dashed #ddd',
+                  color: '#333'
+                }}
+              >
                 <span>{item.component}</span>
                 <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             ))}
-            <div className="flex justify-between font-bold mt-2 pt-1">
+            <div 
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                fontWeight: 'bold', 
+                marginTop: '8px', 
+                paddingTop: '8px',
+                borderTop: '2px solid #4caf50',
+                color: '#2e7d32'
+              }}
+            >
               <span>Total Earnings</span>
               <span>₹{sData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
+          
           <div>
-            <h3 className="font-semibold text-lg mb-2">Deductions</h3>
+            <h3 style={{ fontWeight: '600', fontSize: '16px', marginBottom: '12px', color: '#000', backgroundColor: '#ffebee', padding: '8px', borderRadius: '4px' }}>
+              Deductions
+            </h3>
             {sData.deductions.map(item => (
-              <div key={`deduction-${item.component}-${sData.employeeId}-${sData.period}`} className="flex justify-between py-1 border-b border-dashed">
+              <div 
+                key={`deduction-${item.component}-${sData.employeeId}-${sData.period}`} 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  padding: '6px 0', 
+                  borderBottom: '1px dashed #ddd',
+                  color: '#333'
+                }}
+              >
                 <span>{item.component}</span>
                 <span>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             ))}
-            <div className="flex justify-between font-bold mt-2 pt-1">
+            <div 
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                fontWeight: 'bold', 
+                marginTop: '8px', 
+                paddingTop: '8px',
+                borderTop: '2px solid #f44336',
+                color: '#c62828'
+              }}
+            >
               <span>Total Deductions</span>
               <span>₹{sData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>
 
-        <Separator className="my-6" />
+        <div style={{ margin: '24px 0', borderTop: '2px solid #ddd' }} />
 
-        <div className="text-right">
-          <p className="text-lg font-bold">Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          <p className="text-sm text-muted-foreground">Amount in words: {convertToWords(sData.netSalary)} Rupees Only</p>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ 
+            fontSize: '20px', 
+            fontWeight: 'bold', 
+            color: '#1565c0',
+            backgroundColor: '#e3f2fd',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            display: 'inline-block'
+          }}>
+            Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
+            Amount in words: {convertToWords(sData.netSalary)}
+          </p>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-8 text-center">This is a computer-generated salary slip and does not require a signature.</p>
+        <p style={{ 
+          fontSize: '11px', 
+          color: '#888', 
+          marginTop: '32px', 
+          textAlign: 'center',
+          borderTop: '1px solid #eee',
+          paddingTop: '16px'
+        }}>
+          This is a computer-generated salary slip and does not require a signature.
+        </p>
       </CardContent>
     </Card>
   );
@@ -279,10 +357,9 @@ export default function SalarySlipPage() {
   const [allPerformanceDeductions, setAllPerformanceDeductions] = React.useState<PerformanceDeductionEntry[]>([]);
   const [allLeaveApplications, setAllLeaveApplications] = React.useState<LeaveApplication[]>([]);
 
-  // Company Config from Google Sheet
   const [companyConfig, setCompanyConfig] = React.useState<CompanyConfig>({
     company_logo: '',
-    company_name: ''
+    company_name: 'Novita Healthcare Pvt. Ltd.'
   });
   const [isConfigLoading, setIsConfigLoading] = React.useState(true);
 
@@ -302,12 +379,16 @@ export default function SalarySlipPage() {
   const [toYearMulti, setToYearMulti] = React.useState<number>(0);
   const [isLoadingMultiMonth, setIsLoadingMultiMonth] = React.useState(false);
 
-  // Fetch Company Config from Google Sheet
   React.useEffect(() => {
     async function fetchConfig() {
       try {
         const config = await getCompanyConfig();
-        setCompanyConfig(config);
+        if (config) {
+          setCompanyConfig({
+            company_logo: config.company_logo || '',
+            company_name: config.company_name || 'Novita Healthcare Pvt. Ltd.'
+          });
+        }
       } catch (error) {
         console.error('Error fetching company config:', error);
       } finally {
@@ -333,30 +414,30 @@ export default function SalarySlipPage() {
   React.useEffect(() => {
     setIsLoadingEmployees(true);
     if (typeof window !== 'undefined') {
-        try {
-            const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-            setAllEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
+      try {
+        const storedEmployees = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        setAllEmployees(storedEmployees ? JSON.parse(storedEmployees) : []);
 
-            const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
-            setOpeningBalances(storedOB ? JSON.parse(storedOB) : []);
+        const storedOB = localStorage.getItem(LOCAL_STORAGE_OPENING_BALANCES_KEY);
+        setOpeningBalances(storedOB ? JSON.parse(storedOB) : []);
 
-            const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
-            setAllPerformanceDeductions(storedPerfDeductions ? JSON.parse(storedPerfDeductions) : []);
+        const storedPerfDeductions = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        setAllPerformanceDeductions(storedPerfDeductions ? JSON.parse(storedPerfDeductions) : []);
 
-            const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-            setAllLeaveApplications(storedLeaveApps ? JSON.parse(storedLeaveApps) : []);
+        const storedLeaveApps = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        setAllLeaveApplications(storedLeaveApps ? JSON.parse(storedLeaveApps) : []);
 
-        } catch (error) {
-            console.error("Error loading initial data for Salary Slip page:", error);
-            toast({ title: "Data Load Error", description: "Could not load some initial data from localStorage. Salary slip generation might be affected.", variant: "destructive" });
-            setAllEmployees([]);
-            setOpeningBalances([]);
-            setAllPerformanceDeductions([]);
-            setAllLeaveApplications([]);
-        }
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        toast({ title: "Data Load Error", variant: "destructive" });
+        setAllEmployees([]);
+        setOpeningBalances([]);
+        setAllPerformanceDeductions([]);
+        setAllLeaveApplications([]);
+      }
     }
     setIsLoadingEmployees(false);
-  }, []);
+  }, [toast]);
 
   React.useEffect(() => {
     if (selectedDivision && allEmployees.length > 0) {
@@ -371,8 +452,7 @@ export default function SalarySlipPage() {
       setFilteredEmployeesForSlip([]);
       setSelectedEmployeeId(undefined);
     }
-  }, [selectedDivision, allEmployees]);
-
+  }, [selectedDivision, allEmployees, selectedEmployeeId]);
 
   React.useEffect(() => {
     if (selectedDivisionForMultiMonth && allEmployees.length > 0) {
@@ -381,14 +461,13 @@ export default function SalarySlipPage() {
         .sort((a, b) => a.name.localeCompare(b.name));
       setFilteredEmployeesForMultiMonth(filtered);
       if (selectedEmployeeForMultiMonth && !filtered.some(emp => emp.id === selectedEmployeeForMultiMonth)) {
-        setSelectedEmployeeForMultiMonth(undefined); 
+        setSelectedEmployeeForMultiMonth(undefined);
       }
-    } else { 
+    } else {
       setFilteredEmployeesForMultiMonth([]);
-      setSelectedEmployeeForMultiMonth(undefined); 
+      setSelectedEmployeeForMultiMonth(undefined);
     }
-  }, [selectedDivisionForMultiMonth, allEmployees]);
-
+  }, [selectedDivisionForMultiMonth, allEmployees, selectedEmployeeForMultiMonth]);
 
   const generateSlipDataForEmployee = (
     employee: EmployeeDetail,
@@ -403,15 +482,13 @@ export default function SalarySlipPage() {
 
     let parsedEmployeeDOJ: Date | null = null;
     if (employee && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
-        const tempDOJ = parseISO(employee.doj);
-        if (isValid(tempDOJ)) {
-            parsedEmployeeDOJ = tempDOJ;
-        } else {
-            console.warn(`Employee ${employee.code} has an invalid DOJ string: "${employee.doj}" in master data. Cannot parse for slip generation.`);
-            return null;
-        }
+      const tempDOJ = parseISO(employee.doj);
+      if (isValid(tempDOJ)) {
+        parsedEmployeeDOJ = tempDOJ;
+      } else {
+        return null;
+      }
     } else {
-      console.warn(`Missing DOJ for employee ${employee.code}. Cannot generate slip.`);
       return null;
     }
 
@@ -419,12 +496,12 @@ export default function SalarySlipPage() {
     const selectedPeriodEndDate = endOfMonth(selectedPeriodStartDate);
 
     if (isAfter(parsedEmployeeDOJ, selectedPeriodEndDate)) {
-      return null; 
+      return null;
     }
     if (employee.dor) {
       const employeeDOR = parseISO(employee.dor);
       if (isValid(employeeDOR) && isBefore(employeeDOR, selectedPeriodStartDate)) {
-        return null; 
+        return null;
       }
     }
 
@@ -432,35 +509,34 @@ export default function SalarySlipPage() {
     let salaryEditsForEmployee: EditableSalaryFields | undefined;
 
     if (typeof window !== 'undefined') {
-        const attendanceStorageKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`;
-        const storedAttendanceForMonth = localStorage.getItem(attendanceStorageKey);
-        if (storedAttendanceForMonth) {
-            try {
-                const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceForMonth);
-                attendanceForMonthEmployee = allMonthAttendance.find(att => att.code === employee.code);
-            } catch (e) {
-                console.warn(`Error parsing attendance for ${month} ${year} for employee ${employee.code}:`, e);
-            }
+      const attendanceStorageKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`;
+      const storedAttendanceForMonth = localStorage.getItem(attendanceStorageKey);
+      if (storedAttendanceForMonth) {
+        try {
+          const allMonthAttendance: MonthlyEmployeeAttendance[] = JSON.parse(storedAttendanceForMonth);
+          attendanceForMonthEmployee = allMonthAttendance.find(att => att.code === employee.code);
+        } catch (e) {
+          console.warn(`Error parsing attendance:`, e);
         }
+      }
 
-        if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
-            return null; 
-        }
+      if (!attendanceForMonthEmployee || !attendanceForMonthEmployee.attendance || attendanceForMonthEmployee.attendance.length === 0) {
+        return null;
+      }
 
-        const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${month}_${year}`;
-        const storedSalaryEditsForMonth = localStorage.getItem(salaryEditsStorageKey);
-        if (storedSalaryEditsForMonth) {
-            try {
-                const allMonthEdits: Record<string, EditableSalaryFields> = JSON.parse(storedSalaryEditsForMonth);
-                salaryEditsForEmployee = allMonthEdits[employee.id];
-            } catch (e) {
-                 console.warn(`Error parsing salary edits for ${month} ${year} for employee ${employee.code}:`, e);
-            }
+      const salaryEditsStorageKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${month}_${year}`;
+      const storedSalaryEditsForMonth = localStorage.getItem(salaryEditsStorageKey);
+      if (storedSalaryEditsForMonth) {
+        try {
+          const allMonthEdits: Record<string, EditableSalaryFields> = JSON.parse(storedSalaryEditsForMonth);
+          salaryEditsForEmployee = allMonthEdits[employee.id];
+        } catch (e) {
+          console.warn(`Error parsing salary edits:`, e);
         }
+      }
     } else {
-        return null; 
+      return null;
     }
-    
 
     const attendanceStatuses: string[] = attendanceForMonthEmployee.attendance;
     const salaryEdits = salaryEditsForEmployee || {};
@@ -480,15 +556,14 @@ export default function SalarySlipPage() {
     let halfDaysTaken = 0;
     let workingDaysCount = 0;
 
-
     dailyStatuses.forEach(status => {
-      if (status === 'P') {actualPayDaysValue++; workingDaysCount++; }
+      if (status === 'P') { actualPayDaysValue++; workingDaysCount++; }
       else if (status === 'W') { actualPayDaysValue++; weekOffsCount++; }
       else if (status === 'PH') { actualPayDaysValue++; paidHolidaysCount++; }
       else if (status === 'CL') { actualPayDaysValue++; usedCLInMonth++; }
       else if (status === 'SL') { actualPayDaysValue++; usedSLInMonth++; }
       else if (status === 'PL') { actualPayDaysValue++; usedPLInMonth++; }
-      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; workingDaysCount +=0.5; }
+      else if (status === 'HD') { actualPayDaysValue += 0.5; halfDaysTaken++; workingDaysCount += 0.5; }
       else if (status === 'A') absentDaysCount += 1;
     });
     actualPayDaysValue = Math.min(actualPayDaysValue, totalDaysInMonthValue);
@@ -524,9 +599,9 @@ export default function SalarySlipPage() {
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
 
     const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
-        employee, year, monthIndex,
-        localAllLeaveApplications.filter(app => app.employeeId === employee.id),
-        localOpeningBalances
+      employee, year, monthIndex,
+      localAllLeaveApplications.filter(app => app.employeeId === employee.id),
+      localOpeningBalances
     );
 
     let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
@@ -540,34 +615,33 @@ export default function SalarySlipPage() {
 
     const obForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
 
-    if (nextMonthIdx === 3) { 
-        nextMonthOpeningCL = obForNextFY?.openingCL || 0;
-        nextMonthOpeningSL = obForNextFY?.openingSL || 0;
-        if (obForNextFY && obForNextFY.openingPL !== undefined) {
-          nextMonthOpeningPL = obForNextFY.openingPL;
-        } else { 
-          nextMonthOpeningPL = closingBalancePLForSelectedMonth;
-        }
-    } else {
-        nextMonthOpeningCL = closingBalanceCLForSelectedMonth;
-        nextMonthOpeningSL = closingBalanceSLForSelectedMonth;
+    if (nextMonthIdx === 3) {
+      nextMonthOpeningCL = obForNextFY?.openingCL || 0;
+      nextMonthOpeningSL = obForNextFY?.openingSL || 0;
+      if (obForNextFY && obForNextFY.openingPL !== undefined) {
+        nextMonthOpeningPL = obForNextFY.openingPL;
+      } else {
         nextMonthOpeningPL = closingBalancePLForSelectedMonth;
+      }
+    } else {
+      nextMonthOpeningCL = closingBalanceCLForSelectedMonth;
+      nextMonthOpeningSL = closingBalanceSLForSelectedMonth;
+      nextMonthOpeningPL = closingBalancePLForSelectedMonth;
     }
 
     const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
     const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
 
     if (isEligibleForAccrualNextMonth) {
-        nextMonthOpeningCL += CL_ACCRUAL_RATE;
-        nextMonthOpeningSL += SL_ACCRUAL_RATE;
-        nextMonthOpeningPL += PL_ACCRUAL_RATE;
+      nextMonthOpeningCL += CL_ACCRUAL_RATE;
+      nextMonthOpeningSL += SL_ACCRUAL_RATE;
+      nextMonthOpeningPL += PL_ACCRUAL_RATE;
     }
 
     let formattedDOJ = "N/A";
     if (parsedEmployeeDOJ && isValid(parsedEmployeeDOJ)) {
-        formattedDOJ = format(parsedEmployeeDOJ, "dd MMM yyyy");
+      formattedDOJ = format(parsedEmployeeDOJ, "dd MMM yyyy");
     }
-
 
     return {
       employeeId: employee.code, name: employee.name, designation: employee.designation,
@@ -578,16 +652,15 @@ export default function SalarySlipPage() {
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
       absentDays: finalAbsentDays, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
-      workingDays: workingDaysCount, 
+      workingDays: workingDaysCount,
       totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
       period: `${format(selectedPeriodStartDate, "MMMM")} ${year}`,
     };
   };
 
-
   const handleGenerateSlip = () => {
     if (!selectedMonth || !selectedYear || !selectedEmployeeId || !selectedDivision) {
-      toast({ title: "Selection Missing", description: "Please select month, year, division, and employee.", variant: "destructive" });
+      toast({ title: "Selection Missing", description: "Please select all fields.", variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -595,14 +668,14 @@ export default function SalarySlipPage() {
 
     const employee = allEmployees.find(e => e.id === selectedEmployeeId);
     if (!employee) {
-      toast({ title: "Employee Not Found", description: "Selected employee details could not be found.", variant: "destructive" });
+      toast({ title: "Employee Not Found", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     const generatedData = generateSlipDataForEmployee(
-        employee, selectedMonth, selectedYear,
-        openingBalances, allPerformanceDeductions, allLeaveApplications
+      employee, selectedMonth, selectedYear,
+      openingBalances, allPerformanceDeductions, allLeaveApplications
     );
 
     if (generatedData) {
@@ -610,7 +683,7 @@ export default function SalarySlipPage() {
       setShowSlip(true);
       addActivityLog(`Salary slip generated for ${employee.name} (${selectedMonth} ${selectedYear}).`);
     } else {
-      toast({ title: "Cannot Generate Slip", description: `Could not generate slip for ${employee.name}. Required data (e.g. attendance) might be missing for ${selectedMonth} ${selectedYear}, or employee was not active/employed during this period.`, variant: "destructive", duration: 7000 });
+      toast({ title: "Cannot Generate Slip", description: `Attendance data missing for ${selectedMonth} ${selectedYear}.`, variant: "destructive" });
       setSlipData(null);
       setShowSlip(false);
     }
@@ -619,34 +692,33 @@ export default function SalarySlipPage() {
 
   const handleDownloadAllSummaries = () => {
     if (!selectedMonth || !selectedYear || !selectedDivision) {
-      toast({ title: "Selection Missing", description: "Please select month, year, and division to download summaries.", variant: "destructive" });
+      toast({ title: "Selection Missing", variant: "destructive" });
       return;
     }
     setIsLoading(true);
 
     const employeesForSummary = allEmployees
       .filter(emp => emp.division === selectedDivision)
-      .sort((a,b) => a.code.localeCompare(b.code));
+      .sort((a, b) => a.code.localeCompare(b.code));
 
     if (employeesForSummary.length === 0) {
-      toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division.`, variant: "destructive" });
+      toast({ title: "No Employees", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     const csvRows: string[][] = [];
-    const headers = ["Employee (Code-Name-Designation)", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"];
-    csvRows.push(headers);
+    csvRows.push(["Employee (Code-Name-Designation)", "Gross Salary", "Total Earnings", "Total Deductions", "Net Salary"]);
 
     let processedCount = 0;
     for (const emp of employeesForSummary) {
       const salaryComponents = calculateMonthlySalaryComponents(emp, selectedYear, months.indexOf(selectedMonth));
       const slipSummaryData = generateSlipDataForEmployee(
-          emp, selectedMonth, selectedYear,
-          openingBalances, allPerformanceDeductions, allLeaveApplications
+        emp, selectedMonth, selectedYear,
+        openingBalances, allPerformanceDeductions, allLeaveApplications
       );
       if (slipSummaryData) {
-         csvRows.push([
+        csvRows.push([
           `"${emp.code}-${emp.name}-${emp.designation}"`,
           salaryComponents.totalGross.toFixed(2),
           slipSummaryData.totalEarnings.toFixed(2),
@@ -658,30 +730,28 @@ export default function SalarySlipPage() {
     }
 
     if (processedCount === 0) {
-        toast({ title: "No Data for CSV", description: `No employees in ${selectedDivision} had necessary data (e.g., attendance) for ${selectedMonth} ${selectedYear} to generate summaries, or were ineligible. CSV not generated.`, variant: "destructive", duration: 7000 });
-        setIsLoading(false);
-        return;
+      toast({ title: "No Data for CSV", variant: "destructive" });
+      setIsLoading(false);
+      return;
     }
 
     const csvContent = csvRows.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `salary_summaries_${selectedDivision}_${selectedMonth}_${selectedYear}.csv`);
+    link.href = URL.createObjectURL(blob);
+    link.download = `salary_summaries_${selectedDivision}_${selectedMonth}_${selectedYear}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
 
-    addActivityLog(`Salary summaries CSV for ${selectedDivision} (${selectedMonth} ${selectedYear}) downloaded.`);
-    toast({ title: "Summaries Downloaded", description: `CSV with ${processedCount} employee summaries for ${selectedDivision} division (${selectedMonth} ${selectedYear}) generated.` });
+    addActivityLog(`Salary summaries CSV downloaded for ${selectedDivision}.`);
+    toast({ title: "Summaries Downloaded" });
     setIsLoading(false);
   };
 
   const handlePrintAllSlips = () => {
     if (!selectedMonth || !selectedYear || !selectedDivision) {
-      toast({ title: "Selection Missing", description: "Please select month, year, and division.", variant: "destructive" });
+      toast({ title: "Selection Missing", variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -689,49 +759,47 @@ export default function SalarySlipPage() {
     setSlipData(null);
 
     const employeesToPrint = allEmployees
-        .filter(emp => emp.division === selectedDivision)
-        .sort((a, b) => a.code.localeCompare(b.code));
+      .filter(emp => emp.division === selectedDivision)
+      .sort((a, b) => a.code.localeCompare(b.code));
 
     if (employeesToPrint.length === 0) {
-      toast({ title: "No Employees", description: `No employees found for ${selectedDivision} division to print slips.`, variant: "destructive" });
+      toast({ title: "No Employees", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     const generatedSlips: SalarySlipDataType[] = [];
-    let countWithData = 0;
     let countSkipped = 0;
 
     for (const emp of employeesToPrint) {
-        const sData = generateSlipDataForEmployee(
-            emp, selectedMonth, selectedYear,
-            openingBalances, allPerformanceDeductions, allLeaveApplications
-        );
-        if (sData) {
-            generatedSlips.push(sData);
-            countWithData++;
-        } else {
-            countSkipped++;
-        }
+      const sData = generateSlipDataForEmployee(
+        emp, selectedMonth, selectedYear,
+        openingBalances, allPerformanceDeductions, allLeaveApplications
+      );
+      if (sData) {
+        generatedSlips.push(sData);
+      } else {
+        countSkipped++;
+      }
     }
 
-    if (countWithData === 0) {
-      toast({ title: "No Slips Generated", description: `No employees in ${selectedDivision} had necessary data (e.g. attendance) or were eligible for ${selectedMonth} ${selectedYear}. Cannot print slips.`, variant: "destructive", duration: 7000 });
+    if (generatedSlips.length === 0) {
+      toast({ title: "No Slips Generated", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
-    addActivityLog(`Bulk salary slips generated for ${selectedDivision} (${selectedMonth} ${selectedYear}) - ${countWithData} slips.`);
-     if (countSkipped > 0) {
-        toast({ title: "Note", description: `${countSkipped} employee(s) were skipped due to missing attendance data or ineligibility for the selected period.`, duration: 7000});
+    addActivityLog(`Bulk slips generated for ${selectedDivision}.`);
+    if (countSkipped > 0) {
+      toast({ title: "Note", description: `${countSkipped} employee(s) skipped.` });
     }
   };
 
   const handleGenerateMultiMonthSlips = () => {
     if (!selectedDivisionForMultiMonth || !selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0) {
-      toast({ title: "Selection Missing", description: "Please select division, employee, and a valid date range for multi-month slips.", variant: "destructive" });
+      toast({ title: "Selection Missing", variant: "destructive" });
       return;
     }
 
@@ -739,7 +807,7 @@ export default function SalarySlipPage() {
     const toDate = endOfMonth(new Date(toYearMulti, months.indexOf(toMonthMulti)));
 
     if (isBefore(toDate, fromDate)) {
-      toast({ title: "Invalid Date Range", description: "'From' date cannot be after 'To' date.", variant: "destructive" });
+      toast({ title: "Invalid Date Range", variant: "destructive" });
       return;
     }
 
@@ -749,7 +817,7 @@ export default function SalarySlipPage() {
 
     const employee = allEmployees.find(e => e.id === selectedEmployeeForMultiMonth);
     if (!employee) {
-      toast({ title: "Employee Not Found", description: "Selected employee details could not be found.", variant: "destructive" });
+      toast({ title: "Employee Not Found", variant: "destructive" });
       setIsLoadingMultiMonth(false);
       return;
     }
@@ -778,31 +846,28 @@ export default function SalarySlipPage() {
     }
 
     if (generatedSlips.length === 0) {
-      toast({ title: "No Slips Generated", description: `No data found or employee ineligible for ${employee.name} within the selected date range to generate slips. (${countSkipped} months skipped).`, variant: "destructive", duration: 7000 });
+      toast({ title: "No Slips Generated", variant: "destructive" });
       setIsLoadingMultiMonth(false);
       return;
     }
 
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
-    addActivityLog(`Multi-month salary slips generated for ${employee.name} (${format(fromDate, 'MMM yyyy')} to ${format(toDate, 'MMM yyyy')}).`);
+    addActivityLog(`Multi-month slips generated for ${employee.name}.`);
     if (countSkipped > 0) {
-        toast({ title: "Note", description: `Slips for ${countSkipped} month(s) were skipped due to missing attendance data or ineligibility.`, duration: 7000});
+      toast({ title: "Note", description: `${countSkipped} month(s) skipped.` });
     }
     setIsLoadingMultiMonth(false);
   };
 
-
   React.useEffect(() => {
     if (isBulkPrintingView && bulkSlipsData.length > 0) {
       let printTitle = `SalarySlips-${selectedMonth}-${selectedYear}`;
-      if(bulkSlipsData.length > 0 && bulkSlipsData[0].period !== bulkSlipsData[bulkSlipsData.length -1]?.period){
-          const empName = bulkSlipsData[0].name.replace(/\s+/g, '_');
-          const fromPeriod = bulkSlipsData[0].period.replace(/\s+/g, '-');
-          const toPeriod = bulkSlipsData[bulkSlipsData.length - 1].period.replace(/\s+/g, '-');
-          printTitle = `Slips_${empName}_${fromPeriod}_to_${toPeriod}`;
+      if (bulkSlipsData.length > 0 && bulkSlipsData[0].period !== bulkSlipsData[bulkSlipsData.length - 1]?.period) {
+        const empName = bulkSlipsData[0].name.replace(/\s+/g, '_');
+        printTitle = `Slips_${empName}_MultiMonth`;
       } else if (bulkSlipsData.length > 0) {
-          printTitle = `AllSlips-${selectedDivision || 'AllDivisions'}-${bulkSlipsData[0].period.replace(/\s+/g, '-')}`;
+        printTitle = `AllSlips-${selectedDivision || 'All'}-${bulkSlipsData[0].period.replace(/\s+/g, '-')}`;
       }
 
       const originalTitle = document.title;
@@ -811,22 +876,14 @@ export default function SalarySlipPage() {
       const timer = setTimeout(() => {
         try {
           window.print();
-          toast({
-            title: "Print Initiated",
-            description: "Use your browser's 'Save as PDF' option. Click 'Close Bulk View' to return.",
-            duration: 9000,
-          });
+          toast({ title: "Print Initiated", description: "Use 'Save as PDF' option." });
         } catch (e) {
-          console.error("Error calling window.print():", e);
-          toast({
-            title: "Print Error",
-            description: "Could not open print dialog. Please check browser console.",
-            variant: "destructive",
-          });
+          console.error("Print error:", e);
+          toast({ title: "Print Error", variant: "destructive" });
         } finally {
-            setIsLoading(false);
-            setIsLoadingMultiMonth(false);
-            document.title = originalTitle;
+          setIsLoading(false);
+          setIsLoadingMultiMonth(false);
+          document.title = originalTitle;
         }
       }, 500);
       return () => {
@@ -836,25 +893,16 @@ export default function SalarySlipPage() {
     }
   }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear, toast]);
 
-
-  const currentCompanyDetails = selectedDivision
-    ? COMPANY_DETAILS_MAP[selectedDivision as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
-    : COMPANY_DETAILS_MAP.Default;
-
-  // Helper function to get next month info
   const getNextMonthInfo = (period: string) => {
     const parts = period.split(' ');
     const monthStr = parts[0];
     const yearStr = parts[1];
     const parsedYear = parseInt(yearStr, 10);
     const parsedMonthIndex = months.indexOf(monthStr);
-    
+
     if (!isNaN(parsedYear) && parsedMonthIndex !== -1) {
       const nextMonthDate = addMonths(new Date(parsedYear, parsedMonthIndex, 1), 1);
-      return {
-        name: format(nextMonthDate, "MMMM"),
-        year: getYear(nextMonthDate)
-      };
+      return { name: format(nextMonthDate, "MMMM"), year: getYear(nextMonthDate) };
     }
     return { name: "N/A", year: 0 };
   };
@@ -865,44 +913,33 @@ export default function SalarySlipPage() {
   if (showSlip && slipData && selectedMonth && selectedYear > 0) {
     const currentSlipMonthIndex = months.indexOf(selectedMonth);
     if (currentSlipMonthIndex !== -1) {
-        const nextMonthDateForSlipDisplay = addMonths(new Date(selectedYear, currentSlipMonthIndex, 1), 1);
-        nextMonthNameForDisplay = format(nextMonthDateForSlipDisplay, "MMMM");
-        nextMonthYearNumForDisplay = getYear(nextMonthDateForSlipDisplay);
+      const nextMonthDateForSlipDisplay = addMonths(new Date(selectedYear, currentSlipMonthIndex, 1), 1);
+      nextMonthNameForDisplay = format(nextMonthDateForSlipDisplay, "MMMM");
+      nextMonthYearNumForDisplay = getYear(nextMonthDateForSlipDisplay);
     }
   }
-
 
   if ((isLoadingEmployees || isConfigLoading) && !selectedMonth && !selectedYear) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
-  // Bulk Printing View
   if (isBulkPrintingView) {
     return (
-      <div id="salary-slip-printable-area">
+      <div id="salary-slip-printable-area" style={{ backgroundColor: '#fff' }}>
         <Button
-          onClick={() => {
-            setIsBulkPrintingView(false);
-            setBulkSlipsData([]);
-          }}
+          onClick={() => { setIsBulkPrintingView(false); setBulkSlipsData([]); }}
           variant="outline"
           className="fixed top-4 right-4 no-print z-[101]"
         >
           <XCircle className="mr-2 h-4 w-4" /> Close Bulk View
         </Button>
         {bulkSlipsData.map((sData, index) => {
-          const empDivisionCompanyDetails = sData.division
-             ? COMPANY_DETAILS_MAP[sData.division as keyof typeof COMPANY_DETAILS_MAP] || COMPANY_DETAILS_MAP.Default
-             : COMPANY_DETAILS_MAP.Default;
-
           const nextMonthInfo = getNextMonthInfo(sData.period);
-
           return (
             <SalarySlipCard
               key={`bulk-slip-${sData.employeeId}-${index}`}
               sData={sData}
               companyConfig={companyConfig}
-              companyDetails={empDivisionCompanyDetails}
               nextMonthName={nextMonthInfo.name}
               nextMonthYear={nextMonthInfo.year}
               showPageBreak={index > 0}
@@ -915,217 +952,144 @@ export default function SalarySlipPage() {
 
   return (
     <>
-      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips for employees. Data is loaded from localStorage for this prototype.">
-          <Button
-            onClick={handleDownloadAllSummaries}
-            disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
-            variant="outline"
-          >
-            {isLoading && !bulkSlipsData.length ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-             Download All Summaries (CSV)
-          </Button>
-          <Button
-            onClick={handlePrintAllSlips}
-            disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading}
-            variant="outline"
-          >
-            {isLoading && bulkSlipsData.length > 0 && !showSlip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-            Print All Slips (PDF)
-          </Button>
+      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips.">
+        <Button onClick={handleDownloadAllSummaries} disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} variant="outline">
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+          Download Summaries (CSV)
+        </Button>
+        <Button onClick={handlePrintAllSlips} disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} variant="outline">
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+          Print All Slips (PDF)
+        </Button>
       </PageHeader>
 
-      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
-        <CardHeader>
-          <CardTitle>Select Criteria (Single Slip / Division Bulk Print)</CardTitle>
-        </CardHeader>
+      <Card className="mb-6 shadow-md print:hidden">
+        <CardHeader><CardTitle>Select Criteria</CardTitle></CardHeader>
         <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth} >
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Select Month" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map(month => <SelectItem key={`single-month-${month}`} value={month}>{month}</SelectItem>)}
-            </SelectContent>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Month" /></SelectTrigger>
+            <SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
           </Select>
-          <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={(val) => setSelectedYear(parseInt(val))}>
-             <SelectTrigger className="w-full sm:w-[120px]">
-                <SelectValue placeholder="Select Year" />
-            </SelectTrigger>
-            <SelectContent>
-                {availableYears.map(year => <SelectItem key={`single-year-${year}`} value={year.toString()}>{year}</SelectItem>)}
-            </SelectContent>
+          <Select value={selectedYear > 0 ? selectedYear.toString() : ""} onValueChange={v => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-full sm:w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}</SelectContent>
           </Select>
-           <Select value={selectedDivision} onValueChange={(value) => {
-             setSelectedDivision(value);
-             setSelectedEmployeeId(undefined); 
-             setShowSlip(false);
-             setSlipData(null);
-           }}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Select Division" />
-            </SelectTrigger>
+          <Select value={selectedDivision} onValueChange={v => { setSelectedDivision(v); setSelectedEmployeeId(undefined); setShowSlip(false); }}>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Division" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="FMCG">FMCG Division</SelectItem>
-              <SelectItem value="Wellness">Wellness Division</SelectItem>
+              <SelectItem value="FMCG">FMCG</SelectItem>
+              <SelectItem value="Wellness">Wellness</SelectItem>
               <SelectItem value="Office-Staff">Office-Staff</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={!selectedDivision || filteredEmployeesForSlip.length === 0} >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Select Employee for Single Slip" />
-            </SelectTrigger>
+          <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={!selectedDivision || filteredEmployeesForSlip.length === 0}>
+            <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Employee" /></SelectTrigger>
             <SelectContent>
-              {filteredEmployeesForSlip.length > 0 ? (
-                filteredEmployeesForSlip.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code}) - {emp.status}</SelectItem>)
-              ) : (
-                <SelectItem value="no-employee" disabled>
-                  {selectedDivision ? `No employees in ${selectedDivision}` : "Select division first"}
-                </SelectItem>
-              )}
+              {filteredEmployeesForSlip.length > 0 ?
+                filteredEmployeesForSlip.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>) :
+                <SelectItem value="none" disabled>No employees</SelectItem>
+              }
             </SelectContent>
           </Select>
-          <Button
-            onClick={handleGenerateSlip}
-            disabled={!selectedMonth || !selectedEmployeeId || selectedYear === 0 || !selectedDivision || isLoading}
-          >
-            {isLoading && !bulkSlipsData.length && showSlip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
-             Generate Single Slip
+          <Button onClick={handleGenerateSlip} disabled={!selectedMonth || !selectedEmployeeId || selectedYear === 0 || !selectedDivision || isLoading}>
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+            Generate Slip
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow print:hidden">
+      <Card className="mb-6 shadow-md print:hidden">
         <CardHeader>
-          <CardTitle>Multi-Month Salary Slips (Single Employee)</CardTitle>
-          <CardDescription>Generate and print all salary slips for a single employee over a selected date range.</CardDescription>
+          <CardTitle>Multi-Month Slips</CardTitle>
+          <CardDescription>Generate slips for one employee over a date range.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
-            
-                 <Select 
-                    value={selectedDivisionForMultiMonth} 
-                    onValueChange={(value) => {
-                        setSelectedDivisionForMultiMonth(value);
-                        setSelectedEmployeeForMultiMonth(undefined); 
-                    }}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select Division" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="FMCG">FMCG Division</SelectItem>
-                        <SelectItem value="Wellness">Wellness Division</SelectItem>
-                        <SelectItem value="Office-Staff">Office-Staff</SelectItem>
-                    </SelectContent>
-                </Select>
-            
-             <Select 
-                value={selectedEmployeeForMultiMonth} 
-                onValueChange={setSelectedEmployeeForMultiMonth}
-                disabled={!selectedDivisionForMultiMonth || filteredEmployeesForMultiMonth.length === 0}
-            >
-                <SelectTrigger>
-                <SelectValue placeholder="Select Employee" />
-                </SelectTrigger>
-                <SelectContent>
-                {filteredEmployeesForMultiMonth.length > 0 ? (
-                    filteredEmployeesForMultiMonth.map(emp => (
-                    <SelectItem key={`multi-emp-${emp.id}`} value={emp.id}>
-                        {emp.name} ({emp.code}) - {emp.status}
-                    </SelectItem>
-                    ))
-                ) : (
-                    <SelectItem value="no-emp-multi-filtered" disabled>
-                        {selectedDivisionForMultiMonth ? `No employees in ${selectedDivisionForMultiMonth}` : "Select division first"}
-                    </SelectItem>
-                )}
-                </SelectContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <Select value={selectedDivisionForMultiMonth} onValueChange={v => { setSelectedDivisionForMultiMonth(v); setSelectedEmployeeForMultiMonth(undefined); }}>
+              <SelectTrigger><SelectValue placeholder="Division" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="FMCG">FMCG</SelectItem>
+                <SelectItem value="Wellness">Wellness</SelectItem>
+                <SelectItem value="Office-Staff">Office-Staff</SelectItem>
+              </SelectContent>
             </Select>
-            <div/> {/* Spacer for grid alignment */}
+            <Select value={selectedEmployeeForMultiMonth} onValueChange={setSelectedEmployeeForMultiMonth} disabled={!selectedDivisionForMultiMonth || filteredEmployeesForMultiMonth.length === 0}>
+              <SelectTrigger><SelectValue placeholder="Employee" /></SelectTrigger>
+              <SelectContent>
+                {filteredEmployeesForMultiMonth.length > 0 ?
+                  filteredEmployeesForMultiMonth.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>) :
+                  <SelectItem value="none" disabled>No employees</SelectItem>
+                }
+              </SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <Select value={fromMonthMulti} onValueChange={setFromMonthMulti}>
-              <SelectTrigger> <SelectValue placeholder="From Month" /> </SelectTrigger>
-              <SelectContent> {months.map(m => <SelectItem key={`from-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
+              <SelectTrigger><SelectValue placeholder="From Month" /></SelectTrigger>
+              <SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
             </Select>
-            <Select value={fromYearMulti > 0 ? fromYearMulti.toString() : ""} onValueChange={val => setFromYearMulti(parseInt(val))}>
-              <SelectTrigger> <SelectValue placeholder="From Year" /> </SelectTrigger>
-              <SelectContent> {availableYears.map(y => <SelectItem key={`from-multi-${y}`} value={y.toString()}>{y}</SelectItem>)} </SelectContent>
+            <Select value={fromYearMulti > 0 ? fromYearMulti.toString() : ""} onValueChange={v => setFromYearMulti(parseInt(v))}>
+              <SelectTrigger><SelectValue placeholder="From Year" /></SelectTrigger>
+              <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}</SelectContent>
             </Select>
-            <div/> {/* Spacer for grid alignment */}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
-             <Select value={toMonthMulti} onValueChange={setToMonthMulti}>
-              <SelectTrigger> <SelectValue placeholder="To Month" /> </SelectTrigger>
-              <SelectContent> {months.map(m => <SelectItem key={`to-multi-${m}`} value={m}>{m}</SelectItem>)} </SelectContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <Select value={toMonthMulti} onValueChange={setToMonthMulti}>
+              <SelectTrigger><SelectValue placeholder="To Month" /></SelectTrigger>
+              <SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
             </Select>
-            <Select value={toYearMulti > 0 ? toYearMulti.toString() : ""} onValueChange={val => setToYearMulti(parseInt(val))}>
-              <SelectTrigger> <SelectValue placeholder="To Year" /> </SelectTrigger>
-              <SelectContent> {availableYears.map(y => <SelectItem key={`to-multi-${y}`} value={y.toString()}>{y}</SelectItem>)} </SelectContent>
+            <Select value={toYearMulti > 0 ? toYearMulti.toString() : ""} onValueChange={v => setToYearMulti(parseInt(v))}>
+              <SelectTrigger><SelectValue placeholder="To Year" /></SelectTrigger>
+              <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}</SelectContent>
             </Select>
-             <Button
-              onClick={handleGenerateMultiMonthSlips}
-              disabled={!selectedDivisionForMultiMonth || !selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0 || isLoadingMultiMonth}
-              className="md:mt-auto" 
-            >
+            <Button onClick={handleGenerateMultiMonthSlips} disabled={!selectedDivisionForMultiMonth || !selectedEmployeeForMultiMonth || !fromMonthMulti || fromYearMulti === 0 || !toMonthMulti || toYearMulti === 0 || isLoadingMultiMonth}>
               {isLoadingMultiMonth ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-              Generate & Print Multi-Month Slips
+              Generate Multi-Month
             </Button>
           </div>
         </CardContent>
       </Card>
 
-
-      {/* Single Slip Preview */}
       {showSlip && slipData && !isBulkPrintingView && (
         <>
           <SalarySlipCard
             sData={slipData}
             companyConfig={companyConfig}
-            companyDetails={currentCompanyDetails}
             nextMonthName={nextMonthNameForDisplay}
             nextMonthYear={nextMonthYearNumForDisplay}
           />
           <Card className="shadow-md print:hidden">
             <CardFooter className="p-6 border-t">
-              <p className="text-xs text-muted-foreground mr-auto">Use your browser's 'Save as PDF' option in the print dialog to download.</p>
+              <p className="text-xs text-muted-foreground mr-auto">Use browser's 'Save as PDF' option.</p>
               <Button
                 onClick={() => {
                   if (slipData) {
                     const originalTitle = document.title;
-                    document.title = `${slipData.employeeId}-${slipData.name}-SalarySlip-${selectedMonth}-${selectedYear}`;
-                    try {
-                      window.print();
-                    } catch (e) {
-                      console.error('Error calling window.print():', e);
-                      toast({
-                        title: "Print Error",
-                        description: "Could not open print dialog. Please check browser console.",
-                        variant: "destructive",
-                      });
-                    } finally {
-                      document.title = originalTitle;
-                    }
+                    document.title = `${slipData.employeeId}-${slipData.name}-Slip-${selectedMonth}-${selectedYear}`;
+                    try { window.print(); } catch (e) { console.error(e); }
+                    finally { document.title = originalTitle; }
                   }
                 }}
                 className="ml-auto print:hidden"
               >
-                <Printer className="mr-2 h-4 w-4" /> Print / Save as PDF
+                <Printer className="mr-2 h-4 w-4" /> Print / Save PDF
               </Button>
             </CardFooter>
           </Card>
         </>
       )}
-       {!showSlip && !isLoading && !isLoadingEmployees && !isBulkPrintingView && (
-        <Card className="shadow-md hover:shadow-lg transition-shadow items-center flex justify-center py-12">
+
+      {!showSlip && !isLoading && !isLoadingEmployees && !isBulkPrintingView && (
+        <Card className="shadow-md flex justify-center py-12">
           <CardContent className="text-center text-muted-foreground">
-            <p>Please select criteria to generate a salary slip. Data is loaded from localStorage for this prototype.</p>
+            <p>Select criteria to generate a salary slip.</p>
           </CardContent>
         </Card>
       )}
+
       {(isLoading || isLoadingEmployees || isLoadingMultiMonth) && !isBulkPrintingView && !showSlip && (
         <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       )}
     </>
@@ -1161,51 +1125,35 @@ function convertToWords(num: number): string {
   } else if (wholePart < 1000) {
     words = convertThreeDigits(wholePart);
   } else if (wholePart < 100000) {
-    // Thousands (Indian system)
     const thousands = Math.floor(wholePart / 1000);
     const remainder = wholePart % 1000;
     words = convertTwoDigits(thousands) + ' Thousand';
-    if (remainder > 0) {
-      words += ' ' + convertThreeDigits(remainder);
-    }
+    if (remainder > 0) words += ' ' + convertThreeDigits(remainder);
   } else if (wholePart < 10000000) {
-    // Lakhs (Indian system)
     const lakhs = Math.floor(wholePart / 100000);
     const remainder = wholePart % 100000;
     words = convertTwoDigits(lakhs) + ' Lakh';
     if (remainder > 0) {
       const thousands = Math.floor(remainder / 1000);
       const rest = remainder % 1000;
-      if (thousands > 0) {
-        words += ' ' + convertTwoDigits(thousands) + ' Thousand';
-      }
-      if (rest > 0) {
-        words += ' ' + convertThreeDigits(rest);
-      }
+      if (thousands > 0) words += ' ' + convertTwoDigits(thousands) + ' Thousand';
+      if (rest > 0) words += ' ' + convertThreeDigits(rest);
     }
   } else {
-    // Crores (Indian system)
     const crores = Math.floor(wholePart / 10000000);
     const remainder = wholePart % 10000000;
     words = convertTwoDigits(crores) + ' Crore';
     if (remainder > 0) {
       const lakhs = Math.floor(remainder / 100000);
       const restAfterLakh = remainder % 100000;
-      if (lakhs > 0) {
-        words += ' ' + convertTwoDigits(lakhs) + ' Lakh';
-      }
+      if (lakhs > 0) words += ' ' + convertTwoDigits(lakhs) + ' Lakh';
       const thousands = Math.floor(restAfterLakh / 1000);
       const rest = restAfterLakh % 1000;
-      if (thousands > 0) {
-        words += ' ' + convertTwoDigits(thousands) + ' Thousand';
-      }
-      if (rest > 0) {
-        words += ' ' + convertThreeDigits(rest);
-      }
+      if (thousands > 0) words += ' ' + convertTwoDigits(thousands) + ' Thousand';
+      if (rest > 0) words += ' ' + convertThreeDigits(rest);
     }
   }
 
-  // Add Rupees and Paise
   if (wholePart > 0 && decimalPart > 0) {
     words += ' Rupees and ' + convertTwoDigits(decimalPart) + ' Paise Only';
   } else if (wholePart > 0) {

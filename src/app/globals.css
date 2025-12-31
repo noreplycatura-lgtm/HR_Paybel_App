@@ -1,236 +1,103 @@
-
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+  --sidebar-background: 222.2 84% 4.9%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 217.2 91.2% 59.8%;
+  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+  --sidebar-accent: 217.2 32.6% 17.5%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217.2 32.6% 17.5%;
+  --sidebar-ring: 224.3 76.3% 48%;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 224.3 76.3% 48%;
+  --sidebar-background: 222.2 84% 4.9%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 217.2 91.2% 59.8%;
+  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+  --sidebar-accent: 217.2 32.6% 17.5%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217.2 32.6% 17.5%;
+  --sidebar-ring: 224.3 76.3% 48%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
 body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  font-size: 13px; /* Further reduced base font size */
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 162.1 76.1% 43.1%;
-    --chart-3: 352.1 76.1% 43.1%;
-    --chart-4: 292.1 76.1% 43.1%;
-    --chart-5: 42.1 76.1% 43.1%;
-    --radius: 0.75rem;
-
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222.2 84% 4.9%;
-    --sidebar-primary: 221.2 83.2% 53.3%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 96.1%;
-    --sidebar-accent-foreground: 222.2 47.4% 11.2%;
-    --sidebar-border: 214.3 31.8% 91.4%;
-    --sidebar-ring: 222.2 84% 4.9%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 217.2 91.2% 59.8%;
-    --chart-2: 162.1 86.1% 43.1%;
-    --chart-3: 352.1 86.1% 43.1%;
-    --chart-4: 292.1 86.1% 43.1%;
-    --chart-5: 42.1 86.1% 43.1%;
-    
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217.2 91.2% 59.8%;
-    --sidebar-primary-foreground: 222.2 47.4% 11.2%;
-    --sidebar-accent: 217.2 32.6% 17.5%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217.2 32.6% 17.5%;
-    --sidebar-ring: 212.7 26.8% 83.9%;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-
-  /* Smaller font sizes for a more compact UI */
-  .text-xs {
-    font-size: 0.65rem; /* 10.4px */
-    line-height: 0.9rem;
-  }
-  .text-sm {
-    font-size: 0.75rem; /* 12px */
-    line-height: 1.1rem;
-  }
-  .text-base {
-    font-size: 0.8125rem; /* 13px */
-    line-height: 1.25rem;
-  }
-  .text-lg {
-    font-size: 1rem;
-    line-height: 1.5rem;
-  }
-  .text-xl {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-  }
-  .text-2xl {
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-  }
-  .text-3xl {
-    font-size: 1.5rem;
-    line-height: 2rem;
-  }
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print styles */
 @media print {
-  @page {
-    size: A4;
-    margin: 1cm; /* Standard margin, browser might override some */
-  }
-
-  body {
-    margin: 0 !important;
-    padding: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    font-size: 9pt !important;
-  }
-
-  body * {
-    visibility: hidden !important;
-  }
-
-  #salary-slip-printable-area,
-  #salary-slip-printable-area *,
-  #salary-slip-preview,
-  #salary-slip-preview * {
-    visibility: visible !important;
-  }
-
-  #salary-slip-printable-area,
-  #salary-slip-preview {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  
-  .salary-slip-page, #salary-slip-preview {
-    width: 100%; /* Let it take full printable width */
-    height: auto; 
-    page-break-inside: avoid !important;
-    box-shadow: none !important;
-    border: none !important; /* No border for actual print */
-    margin: 0 auto !important; /* Try to center content on the virtual page */
-    font-size: 9pt !important;
-    box-sizing: border-box !important;
-  }
-
-  .salary-slip-page .p-6, #salary-slip-preview .p-6 {
-    padding: 0.4rem !important; 
-  }
-  .salary-slip-page .text-sm, #salary-slip-preview .text-sm {
-    font-size: 8pt !important;
-  }
-  .salary-slip-page .text-xs, #salary-slip-preview .text-xs {
-    font-size: 7pt !important;
-  }
-  .salary-slip-page .text-lg, #salary-slip-preview .text-lg {
-    font-size: 10pt !important; 
-  }
-  .salary-slip-page .text-2xl, #salary-slip-preview .text-2xl {
-    font-size: 14pt !important; 
-  }
-
-  .salary-slip-page h3, #salary-slip-preview h3 {
-    margin-bottom: 0.1rem !important; 
-    font-size: 9pt !important;
-  }
-  .salary-slip-page .py-1, #salary-slip-preview .py-1 {
-    padding-top: 0.02rem !important;
-    padding-bottom: 0.02rem !important;
-  }
-  .salary-slip-page .my-4, #salary-slip-preview .my-4 { 
-    margin-top: 0.2rem !important;
-    margin-bottom: 0.2rem !important;
-  }
-  .salary-slip-page .my-6, #salary-slip-preview .my-6 { 
-    margin-top: 0.3rem !important;
-    margin-bottom: 0.3rem !important;
-  }
-   .salary-slip-page .mt-8, #salary-slip-preview .mt-8 { 
-    margin-top: 0.5rem !important;
-  }
-
-  .no-print, .no-print * {
+  .no-print {
     display: none !important;
   }
-
+  
   .print-page-break-before {
-    page-break-before: always !important;
-  }
-
-  /* Adjustments for salary slip layout to be more compact */
-  #salary-slip-preview .grid.md\:grid-cols-2,
-  .salary-slip-page .grid.md\:grid-cols-2 {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important; 
-    gap: 0.25rem !important; /* Reduce gap */
-  }
-  
-  #salary-slip-preview .flex.flex-col.sm\:flex-row,
-  .salary-slip-page .flex.flex-col.sm\:flex-row {
-    flex-direction: row !important;
-  }
-  
-  #salary-slip-preview img, .salary-slip-page img {
-    max-width: 100px !important; 
-    max-height: 35px !important;
-    margin-bottom: 0.1rem !important;
+    page-break-before: always;
   }
 }
-
-    

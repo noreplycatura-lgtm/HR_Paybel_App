@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
-
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, type NavItem } from "@/lib/constants";
+import { type NavItem } from "@/lib/constants";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSidebar } from "@/components/ui/sidebar"; // Ensure this hook exists and provides 'state'
+import { useSidebar } from "@/components/ui/sidebar";
 
 interface SidebarNavProps {
   items: NavItem[];
@@ -19,40 +17,42 @@ interface SidebarNavProps {
 
 export function SidebarNav({ items }: SidebarNavProps) {
   const pathname = usePathname();
-  const { state: sidebarState } = useSidebar(); // 'state' can be "expanded" or "collapsed"
+  const { state: sidebarState } = useSidebar();
 
   if (!items?.length) {
     return null;
   }
 
   return (
-    <nav className="grid items-start gap-2">
+    <nav className="grid items-start gap-1">
       {items.map((item, index) => {
         const Icon = item.icon;
-        const isActive = item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
-        
+        const isActive = item.href === "/" 
+          ? pathname === item.href 
+          : pathname.startsWith(item.href);
+
         return item.href ? (
           <Tooltip key={index} delayDuration={0}>
             <TooltipTrigger asChild>
               <Link
                 href={item.disabled ? "#" : item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sidebar-foreground transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  isActive && "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                  "text-slate-300 hover:text-white hover:bg-slate-700",
+                  isActive && "bg-blue-600 text-white hover:bg-blue-700",
                   item.disabled && "cursor-not-allowed opacity-50",
-                  sidebarState === "collapsed" && "justify-center"
+                  sidebarState === "collapsed" && "justify-center px-2"
                 )}
                 aria-disabled={item.disabled}
-                tabIndex={item.disabled ? -1 : undefined}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-5 w-5 flex-shrink-0" />
                 {sidebarState === "expanded" && (
                   <span className="truncate">{item.title}</span>
                 )}
               </Link>
             </TooltipTrigger>
             {sidebarState === "collapsed" && (
-              <TooltipContent side="right" className="bg-sidebar text-sidebar-foreground border-sidebar-border">
+              <TooltipContent side="right" className="bg-slate-800 text-white border-slate-700">
                 {item.title}
               </TooltipContent>
             )}
