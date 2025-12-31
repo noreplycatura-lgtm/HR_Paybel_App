@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarChart3, UserCog, TrendingDownIcon } from 'lucide-react';
 
-export const APP_NAME = 'HR Payroll App';
+export const APP_NAME = 'Novita_Payroll';
 export const COMPANY_NAME = 'Novita Healthcare Pvt. Ltd.';
 
 export interface NavItem {
