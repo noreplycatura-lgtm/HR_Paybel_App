@@ -231,15 +231,7 @@ export default function SalarySheetPage() {
         
         dailyStatuses.forEach(status => {
           const s = status.toUpperCase();
-          if (s !== 'A' && s !== '-') {
-            if (s === 'HD' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
-              daysPaid += 0.5;
-            } else {
-              daysPaid += 1;
-            }
-          }
-          // The working portion of half-day leaves should be paid. So `P` and the `0.5P` part of `HCL/HSL/HPL` and `HD`
-          // Paid days logic: P, W, PH, CL, SL, PL are full paid days. HCL, HSL, HPL are full paid days. HD is half paid.
+          
           if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
               daysPaid++;
           } else if (s === 'HD') {
@@ -284,7 +276,7 @@ export default function SalarySheetPage() {
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
         
-        const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+        const esic = monthlyComponents.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
         
         const totalDeduction = esic + professionalTax + providentFund +
                                    tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
@@ -347,7 +339,7 @@ export default function SalarySheetPage() {
 
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
           
-          const newEsic = newTotalAllowance <= 21010 ? newTotalAllowance * 0.0075 : 0;
+          const newEsic = updatedEmp.calculatedGross <= 21010 ? newTotalAllowance * 0.0075 : 0;
           updatedEmp.esic = newEsic;
           
           const newTotalDeduction = newEsic + updatedEmp.professionalTax + updatedEmp.providentFund +
@@ -501,7 +493,7 @@ export default function SalarySheetPage() {
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
         
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+        const esic = monthlyComponents.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
 
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
@@ -669,7 +661,7 @@ export default function SalarySheetPage() {
           <CardTitle>Salary Details for {selectedMonth} {selectedYear > 0 ? selectedYear : ''}</CardTitle>
           <CardDescription>
             Displaying active employees for whom attendance data was found for the selected period.
-            ESIC is 0.75% of Total Allowance if Total Allowance &lt;= 21010. Editable fields reflect manual adjustments. Data saved in browser's local storage.
+            ESIC is 0.75% of Total Allowance if applicable Gross Salary &lt;= 21010. Editable fields reflect manual adjustments. Data saved in browser's local storage.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">

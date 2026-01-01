@@ -603,7 +603,7 @@ export default function SalarySlipPage() {
     const manualOtherDeductionVal = salaryEdits.manualOtherDeduction ?? 0;
     const totalOtherDeductionOnSlip = manualOtherDeductionVal + performanceDeductionAmount;
     
-    const esicDeduction = totalEarningsValue <= 21010 ? totalEarningsValue * 0.0075 : 0;
+    const esicDeduction = monthlyComp.totalGross <= 21010 ? totalEarningsValue * 0.0075 : 0;
     const pfDeduction = salaryEdits.providentFund ?? 0;
     const ptDeduction = salaryEdits.professionalTax ?? 0;
     const tdsDeduction = salaryEdits.tds ?? 0;

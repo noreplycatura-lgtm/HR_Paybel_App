@@ -242,8 +242,11 @@ export default function ReportsPage() {
                             let halfDaysTaken = 0;
                             dailyStatuses.forEach(status => {
                                 const s = status.toUpperCase();
-                                if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') actualPayDaysValue++;
-                                else if (s === 'HD') actualPayDaysValue += 0.5;
+                                if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
+                                  actualPayDaysValue++;
+                                } else if (s === 'HD') {
+                                  actualPayDaysValue += 0.5;
+                                }
 
                                 if (s === 'CL') usedCLInMonth++;
                                 else if (s === 'SL') usedSLInMonth++;
@@ -310,7 +313,7 @@ export default function ReportsPage() {
 
             const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
             
-            const esic = totalAllowance <= 21010 ? totalAllowance * 0.0075 : 0;
+            const esic = monthlySalaryComps.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
 
             const totalDeductionValue = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeduction;
             const netPaid = totalAllowance - totalDeductionValue;
@@ -633,7 +636,7 @@ export default function ReportsPage() {
             const totalOtherDeductionValLedger = manualOtherDeductionValLedger + performanceDeductionValLedger;
             
             const totalAllowanceValue = actualBasicLedger + actualHRALedger + actualCALedger + actualMedicalLedger + actualOtherAllowanceLedger + arrearsValue;
-            const esicValue = totalAllowanceValue <= 21010 ? totalAllowanceValue * 0.0075 : 0;
+            const esicValue = monthlyComps.totalGross <= 21010 ? totalAllowanceValue * 0.0075 : 0;
             const totalDeductionVal = esicValue + professionalTaxValue + providentFundValue + tdsValue + loanValue + salaryAdvanceValue + totalOtherDeductionValLedger;
             const netPaidValue = totalAllowanceValue - totalDeductionVal;
 
