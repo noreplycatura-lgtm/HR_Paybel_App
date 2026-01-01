@@ -4,9 +4,9 @@ import { differenceInMonths, parseISO, startOfMonth, endOfMonth, isBefore, isEqu
 import type { EmployeeDetail } from './hr-data';
 import type { LeaveApplication, OpeningLeaveBalance } from './hr-types';
 
-// This is a temporary flag to handle the special one-time seeding for Dec 2025.
-// As requested, for this specific month, we will not add the default monthly accrual.
-const TEMPORARY_SEED_MONTH_TARGET = { year: 2025, monthIndex: 11 }; // December 2025
+// This is a temporary flag to handle the special one-time seeding for Jan 2026.
+// For this specific month, we will not add the default monthly accrual.
+const TEMPORARY_SEED_MONTH_TARGET = { year: 2026, monthIndex: 0 }; // January 2026
 
 export const CL_ACCRUAL_RATE = 0.6;
 export const SL_ACCRUAL_RATE = 0.6;
@@ -124,7 +124,7 @@ export const calculateEmployeeLeaveDetailsForPeriod = (
         if(isBefore(doj, endOfMonth(monthIteratorForFY)) || isEqual(doj, endOfMonth(monthIteratorForFY))) {
             const serviceMonthsAtIterEnd = calculateMonthsOfService(employee.doj, endOfMonth(monthIteratorForFY));
             if (serviceMonthsAtIterEnd >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL) {
-                // Special check for Dec 2025 seeding
+                // Special check for Jan 2026 seeding
                 const isSeedingMonth = iteratorYear === TEMPORARY_SEED_MONTH_TARGET.year && iteratorMonthIndex === TEMPORARY_SEED_MONTH_TARGET.monthIndex;
                 if (!isSeedingMonth) {
                     accruedCLInCurrentFY += clAccrualRate;
@@ -192,7 +192,7 @@ export const calculateEmployeeLeaveDetailsForPeriod = (
           if(isBefore(doj, endOfMonth(monthIteratorForPL)) || isEqual(doj, endOfMonth(monthIteratorForPL))) {
               const serviceMonthsAtIterEnd = calculateMonthsOfService(employee.doj, endOfMonth(monthIteratorForPL));
               if (serviceMonthsAtIterEnd >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL) {
-                // Special check for Dec 2025 seeding
+                // Special check for Jan 2026 seeding
                 const isSeedingMonth = iteratorYear === TEMPORARY_SEED_MONTH_TARGET.year && iteratorMonthIndex === TEMPORARY_SEED_MONTH_TARGET.monthIndex;
                 if (!isSeedingMonth) {
                   accruedPLOverall += plAccrualRate;

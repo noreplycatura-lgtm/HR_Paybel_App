@@ -18,6 +18,7 @@ import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateEmployeeLeaveDetailsForPeriod } from "@/lib/hr-calculations";
 import type { LeaveApplication, OpeningLeaveBalance } from "@/lib/hr-types";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
+import { SEED_BALANCES_JAN_2026 } from "@/lib/leave-seed-data";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
@@ -72,35 +73,6 @@ const getDynamicAttendanceStorageKeys = (month: string, year: number) => {
     rawDataKey: `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${month}_${year}`,
   };
 };
-
-const SEED_BALANCES_2025: Omit<OpeningLeaveBalance, 'monthIndex'>[] = [
-    { employeeCode: "17358", openingCL: 1.5, openingSL: 1.5, openingPL: 16, financialYearStart: 2025 },
-    { employeeCode: "17357", openingCL: 1.5, openingSL: 1.5, openingPL: 51, financialYearStart: 2025 },
-    { employeeCode: "17084", openingCL: 0, openingSL: 0, openingPL: 0.75, financialYearStart: 2025 },
-    { employeeCode: "17098", openingCL: 4.5, openingSL: 4.5, openingPL: 33, financialYearStart: 2025 },
-    { employeeCode: "17835", openingCL: 2.5, openingSL: 0.5, openingPL: 5, financialYearStart: 2025 },
-    { employeeCode: "13268", openingCL: 3.5, openingSL: 2, openingPL: 3, financialYearStart: 2025 },
-    { employeeCode: "17208", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
-    { employeeCode: "14717", openingCL: 4, openingSL: 3, openingPL: 63, financialYearStart: 2025 },
-    { employeeCode: "17784", openingCL: 2, openingSL: 0, openingPL: 7, financialYearStart: 2025 },
-    { employeeCode: "10036", openingCL: 4.5, openingSL: 4.5, openingPL: 97, financialYearStart: 2025 },
-    { employeeCode: "10051", openingCL: 1.5, openingSL: 1, openingPL: 3, financialYearStart: 2025 },
-    { employeeCode: "14103", openingCL: 4.5, openingSL: 3, openingPL: 37, financialYearStart: 2025 },
-    { employeeCode: "17362", openingCL: 2, openingSL: 2, openingPL: 2, financialYearStart: 2025 },
-    { employeeCode: "13042", openingCL: 2.5, openingSL: 1.5, openingPL: 56, financialYearStart: 2025 },
-    { employeeCode: "19210", openingCL: 1.5, openingSL: 1.5, openingPL: 8.75, financialYearStart: 2025 },
-    { employeeCode: "17012", openingCL: 2, openingSL: 2, openingPL: 0, financialYearStart: 2025 },
-    { employeeCode: "18679", openingCL: 4.5, openingSL: 3, openingPL: 7, financialYearStart: 2025 },
-    { employeeCode: "18894", openingCL: 3.5, openingSL: 1.5, openingPL: 10, financialYearStart: 2025 },
-    { employeeCode: "19131", openingCL: 1, openingSL: 1, openingPL: -0.5, financialYearStart: 2025 },
-    { employeeCode: "14766", openingCL: 3.5, openingSL: 3.5, openingPL: 87.5, financialYearStart: 2025 },
-    { employeeCode: "17834", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
-    { employeeCode: "17054", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2025 },
-    { employeeCode: "17863", openingCL: 3, openingSL: 3, openingPL: 4, financialYearStart: 2025 },
-    { employeeCode: "17402", openingCL: 1.5, openingSL: 1.5, openingPL: 0, financialYearStart: 2025 },
-    { employeeCode: "13413", openingCL: 2, openingSL: 2, openingPL: 13, financialYearStart: 2025 },
-    { employeeCode: "17785", openingCL: 3, openingSL: 3, openingPL: 66, financialYearStart: 2025 },
-];
 
 
 export default function LeavePage() {
@@ -164,13 +136,13 @@ export default function LeavePage() {
             }
         }
         
-        // Seed Dec 2025 balances if not already present
+        // Seed Jan 2026 balances if not already present
         const seededBalancesMap = new Map(currentOBs.map(b => [`${b.employeeCode}-${b.financialYearStart}-${b.monthIndex}`, b]));
         let didSeed = false;
-        SEED_BALANCES_2025.forEach(seed => {
-            const key = `${seed.employeeCode}-${seed.financialYearStart}-11`; // 11 for December
+        SEED_BALANCES_JAN_2026.forEach(seed => {
+            const key = `${seed.employeeCode}-${seed.financialYearStart}-${seed.monthIndex}`;
             if (!seededBalancesMap.has(key)) {
-                seededBalancesMap.set(key, { ...seed, monthIndex: 11 });
+                seededBalancesMap.set(key, { ...seed });
                 didSeed = true;
             }
         });
@@ -179,7 +151,7 @@ export default function LeavePage() {
             const updatedBalances = Array.from(seededBalancesMap.values());
             setOpeningBalances(updatedBalances);
             localStorage.setItem(LOCAL_STORAGE_OPENING_BALANCES_KEY, JSON.stringify(updatedBalances));
-            toast({ title: "Data Seeded", description: "Initial leave balances for Dec 2025 have been set." });
+            toast({ title: "Data Seeded", description: "Initial leave balances for Jan 2026 have been set." });
         } else {
             setOpeningBalances(currentOBs);
         }

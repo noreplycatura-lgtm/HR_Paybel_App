@@ -1,0 +1,25 @@
+import type { OpeningLeaveBalance } from './hr-types';
+
+export const SEED_BALANCES_JAN_2026: OpeningLeaveBalance[] = [
+    { employeeCode: "17358", openingCL: 1, openingSL: 1, openingPL: 15, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17357", openingCL: 2, openingSL: 2, openingPL: 51, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17098", openingCL: 5, openingSL: 4, openingPL: 33, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17835", openingCL: 1, openingSL: 1, openingPL: 3, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "13268", openingCL: 4, openingSL: 1.5, openingPL: 3, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17208", openingCL: 2.5, openingSL: 2.5, openingPL: 0, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "14717", openingCL: 4.5, openingSL: 2.5, openingPL: 63, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17784", openingCL: 0.5, openingSL: 0.5, openingPL: 3, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "10036", openingCL: 5, openingSL: 4, openingPL: 97, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "10051", openingCL: 2, openingSL: 1.5, openingPL: 3, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "14103", openingCL: 5, openingSL: 3.5, openingPL: 37, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "13042", openingCL: 2, openingSL: 0.5, openingPL: 56, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "19210", openingCL: 1, openingSL: 1, openingPL: 8.75, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17012", openingCL: 2.5, openingSL: 2.5, openingPL: 0, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "18679", openingCL: 5, openingSL: 2.5, openingPL: 7, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "18894", openingCL: 1, openingSL: 0.5, openingPL: 10, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17362", openingCL: 2.5, openingSL: 2.5, openingPL: 2, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "19131", openingCL: 1.5, openingSL: 1.5, openingPL: -0.5, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17084", openingCL: 0.5, openingSL: 0.5, openingPL: 0.75, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "17863", openingCL: 3.5, openingSL: 3.5, openingPL: 15, financialYearStart: 2026, monthIndex: 0 },
+    { employeeCode: "19251", openingCL: 0, openingSL: 0, openingPL: 0, financialYearStart: 2026, monthIndex: 0 },
+];
