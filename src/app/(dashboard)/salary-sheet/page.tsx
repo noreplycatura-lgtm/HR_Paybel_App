@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Loader2, Search } from "lucide-react";
+import { Download, Loader2, Search, Upload } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents, type MonthlySalaryComponents } from "@/lib/salary-calculations";
 import { format, parseISO, isValid, getDaysInMonth, startOfMonth } from "date-fns";
+import { FileUploadButton } from "@/components/shared/file-upload-button";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
@@ -599,6 +600,132 @@ export default function SalarySheetPage() {
     addActivityLog(`Salary sheet for ${selectedMonth} ${selectedYear} downloaded.`);
     toast({ title: "Download Started", description: "Salary sheet CSV is being downloaded." });
   };
+  
+  const handleDownloadDeductionTemplate = () => {
+    if (!selectedMonth || !selectedYear || selectedYear === 0) {
+      toast({ title: "Select Period First", description: "Please select a month and year to download the template.", variant: "destructive" });
+      return;
+    }
+
+    const headers = [ "Code", "Name", "Arrears", "ProfessionalTax", "ProvidentFund", "TDS", "Loan", "SalaryAdvance", "ManualOtherDeduction"];
+    const activeEmployees = allEmployees.filter(emp => emp.status === "Active");
+
+    if (activeEmployees.length === 0) {
+      toast({ title: "No Active Employees", description: "No active employees found to generate a template for.", variant: "destructive" });
+      return;
+    }
+    const csvContent = [
+      headers.join(','),
+      ...activeEmployees.map(emp => {
+        return [`"${emp.code}"`, `"${emp.name}"`,"","","","","","",""].join(',');
+      })
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Deduction_Template_${selectedMonth}_${selectedYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Template Downloaded", description: "Deduction template for the selected period has been downloaded." });
+  };
+
+  const handleUploadDeductions = (file: File) => {
+    if (!selectedMonth || !selectedYear || selectedYear === 0) {
+        toast({ title: "Select Period First", description: "Please select month and year before uploading deductions.", variant: "destructive" });
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target?.result as string;
+        if (!text) {
+            toast({ title: "Error Reading File", variant: "destructive" });
+            return;
+        }
+
+        try {
+            const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
+            if (lines.length < 2) {
+                toast({ title: "Invalid File", description: "File is empty or has no data rows.", variant: "destructive" });
+                return;
+            }
+
+            const headerLine = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+            const expectedHeaders: (keyof EditableSalaryFields | 'code' | 'name')[] = ["code", "arrears", "professionaltax", "providentfund", "tds", "loan", "salaryadvance", "manualotherdeduction"];
+
+            const missingHeaders = expectedHeaders.filter(eh => eh !== 'name' && !headerLine.includes(eh));
+            if (missingHeaders.length > 0) {
+                toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 7000 });
+                return;
+            }
+            
+            const getIndex = (name: string) => headerLine.indexOf(name);
+            const idxCode = getIndex('code');
+
+            const newSalaryEdits = { ...salaryEditsForPeriod };
+            let updatedCount = 0;
+            let skippedCount = 0;
+            const dataRows = lines.slice(1);
+
+            dataRows.forEach(row => {
+                const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                const code = values[idxCode];
+
+                const employee = allEmployees.find(emp => emp.code === code);
+                if (!employee) {
+                    skippedCount++;
+                    console.warn(`Skipping deduction upload for code '${code}': not found in employee master.`);
+                    return;
+                }
+
+                if (!newSalaryEdits[employee.id]) {
+                    newSalaryEdits[employee.id] = {};
+                }
+                
+                let employeeUpdated = false;
+
+                const fieldsToUpdate: (keyof EditableSalaryFields)[] = ['arrears', 'professionalTax', 'providentFund', 'tds', 'loan', 'salaryAdvance', 'manualOtherDeduction'];
+                fieldsToUpdate.forEach(field => {
+                    const fieldNameInCsv = field.toLowerCase();
+                    const idx = getIndex(fieldNameInCsv);
+                    if (idx > -1 && values[idx] && values[idx].trim() !== "") {
+                        const val = parseFloat(values[idx]);
+                        if (!isNaN(val)) {
+                            newSalaryEdits[employee.id]![field] = val;
+                            employeeUpdated = true;
+                        }
+                    }
+                });
+                if(employeeUpdated) updatedCount++;
+            });
+
+            if (updatedCount > 0) {
+                setSalaryEditsForPeriod(newSalaryEdits);
+                // Trigger recalculation by updating salarySheetData
+                setSalarySheetData(prevData => [...prevData]);
+                
+                if(typeof window !== 'undefined') {
+                    const editsKey = `${LOCAL_STORAGE_SALARY_EDITS_PREFIX}${selectedMonth}_${selectedYear}`;
+                    localStorage.setItem(editsKey, JSON.stringify(newSalaryEdits));
+                }
+
+                toast({ title: "Deductions Uploaded", description: `${updatedCount} employee records updated from file. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`});
+                addActivityLog(`${updatedCount} salary deductions uploaded for ${selectedMonth} ${selectedYear}.`);
+            } else {
+                 toast({ title: "No Matching Data", description: `No matching employee records found to update. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
+            }
+
+        } catch (error) {
+            console.error("Error parsing deductions CSV:", error);
+            toast({ title: "Parsing Error", description: "Could not parse CSV file.", variant: "destructive" });
+        }
+    };
+    reader.readAsText(file);
+  };
+
 
   const availableYears = currentYearState > 0 ? Array.from({ length: 5 }, (_, i) => currentYearState - i) : [];
 
@@ -613,6 +740,16 @@ export default function SalarySheetPage() {
   return (
     <>
       <PageHeader title="Salary Sheet" description="Generate and download month-wise salary sheets. Data is saved in browser's local storage.">
+        <Button onClick={handleDownloadDeductionTemplate} variant="outline">
+          <Download className="mr-2 h-4 w-4" />
+          Download Deduction Template
+        </Button>
+        <FileUploadButton
+          onFileUpload={handleUploadDeductions}
+          buttonText="Upload Deductions"
+          acceptedFileTypes=".csv"
+          icon={<Upload className="mr-2 h-4 w-4" />}
+        />
         <Button
           onClick={handleDownloadSheet}
           disabled={isLoadingCalculations || isLoadingData || (!selectedMonth || !selectedYear || selectedYear === 0)}
@@ -785,7 +922,7 @@ export default function SalarySheetPage() {
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.professionalTax, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.providentFund, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.tds, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.loan, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.loan, 0).toLocaleString('en-IN', { minimumFraction Digits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.salaryAdvance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.manualOtherDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.performanceDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -812,3 +949,5 @@ export default function SalarySheetPage() {
     </>
   );
 }
+
+    
