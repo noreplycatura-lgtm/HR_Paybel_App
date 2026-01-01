@@ -1,7 +1,8 @@
 
+// src/lib/google-sheets.ts
 
-// Replace this URL with your NEW deployment URL
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec';
+// ⚠️ IMPORTANT: Apna latest "Web App URL" yahan check karke update karein
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec'; 
 
 export interface AppData {
   employees?: any[];
@@ -17,61 +18,71 @@ export interface CompanyConfig {
   company_name: string;
 }
 
-// Google Sheet se data load karo
+/**
+ * 1. Load Data (GET Request)
+ */
 export async function loadFromGoogleSheet(): Promise<AppData> {
   try {
     const response = await fetch(`${WEBAPP_URL}?action=load`);
     const data = await response.json();
     return data || {};
   } catch (error) {
-    console.error('Google Sheet se load nahi ho paya:', error);
+    console.error('Google Sheet load error:', error);
     return {};
   }
 }
 
-// Google Sheet me data save karo
+/**
+ * 2. Save Data (POST Request)
+ */
 export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ action: 'save', ...data }),
+      body: JSON.stringify({ action: 'save', data: data }),
     });
     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('Google Sheet me save nahi ho paya:', error);
+    console.error('Google Sheet save error:', error);
     return false;
   }
 }
 
-// NEW: Company Config fetch karo (Logo + Name)
+/**
+ * 3. Get Company Config
+ */
 export async function getCompanyConfig(): Promise<CompanyConfig> {
   try {
     const response = await fetch(`${WEBAPP_URL}?action=getConfig`);
     const data = await response.json();
+    
+    // Fix for broken image URL
+    const logoUrl = (data.company_logo || '').includes('novitahealthcare.in') 
+      ? '' 
+      : data.company_logo || '';
+
     return {
-      company_logo: data.company_logo || '',
+      company_logo: logoUrl,
       company_name: data.company_name || 'Novita Payroll'
     };
   } catch (error) {
-    console.error('Config load nahi ho paya:', error);
-    return {
-      company_logo: '',
-      company_name: 'Novita Payroll'
-    };
+    return { company_logo: '', company_name: 'Novita Payroll' };
   }
 }
 
-// NEW: Create Folder in Drive
+/**
+ * 4. Create Folder (Optimized for CORS)
+ */
 export async function createDriveFolder(folderName: string): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'text/plain',
       },
       body: JSON.stringify({
         action: 'createFolder',
@@ -81,18 +92,24 @@ export async function createDriveFolder(folderName: string): Promise<boolean> {
     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('Drive folder create failed:', error);
-    return false;
+    console.error('Drive folder creation error:', error);
+    return false; 
   }
 }
 
-// NEW: Upload PDF to Drive
-export async function uploadPDFToDrive(folderName: string, fileName: string, pdfBase64: string): Promise<boolean> {
+/**
+ * 5. Upload PDF (Optimized for CORS)
+ */
+export async function uploadPDFToDrive(
+  folderName: string, 
+  fileName: string, 
+  pdfBase64: string
+): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        'Content-Type': 'text/plain',
       },
       body: JSON.stringify({
         action: 'uploadPDF',
@@ -101,10 +118,10 @@ export async function uploadPDFToDrive(folderName: string, fileName: string, pdf
         pdfBase64: pdfBase64
       }),
     });
-    const result = await response.json();
+     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('PDF upload failed:', error);
+     console.error('Upload PDF to Drive error:', error);
     return false;
   }
 }
