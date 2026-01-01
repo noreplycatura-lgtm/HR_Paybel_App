@@ -123,12 +123,13 @@ interface SalarySlipCardProps {
 function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
   return (
     <Card 
-      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-0`}
+      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:shadow-none print:border-none`}
       style={{ 
         backgroundColor: '#ffffff', 
         color: '#000000',
         border: '1px solid #e0e0e0',
         padding: '0.4in', // Simulates margin for printing
+        marginBottom: '0', // remove margin for printing
       }}
     >
       <CardHeader 
@@ -181,10 +182,10 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             </div>
           </div>
           <div className="text-right">
-             <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
+             <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '10px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
@@ -791,7 +792,8 @@ export default function SalarySlipPage() {
       setIsLoading(false);
       return;
     }
-
+    
+    document.body.classList.add("printing-active");
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
     addActivityLog(`Bulk slips generated for ${selectedDivision}.`);
@@ -853,7 +855,8 @@ export default function SalarySlipPage() {
       setIsLoadingMultiMonth(false);
       return;
     }
-
+    
+    document.body.classList.add("printing-active");
     setBulkSlipsData(generatedSlips);
     setIsBulkPrintingView(true);
     addActivityLog(`Multi-month slips generated for ${employee.name}.`);
@@ -865,21 +868,15 @@ export default function SalarySlipPage() {
 
   React.useEffect(() => {
     if (isBulkPrintingView && bulkSlipsData.length > 0) {
-      document.body.classList.add('bulk-printing-active');
       const timer = setTimeout(() => {
         try {
           window.print();
         } catch (e) {
           console.error("Print error:", e);
-        } finally {
-          document.body.classList.remove('bulk-printing-active');
         }
       }, 500);
 
-      return () => {
-        clearTimeout(timer);
-        document.body.classList.remove('bulk-printing-active');
-      };
+      return () => clearTimeout(timer);
     }
   }, [isBulkPrintingView, bulkSlipsData]);
 
@@ -918,7 +915,11 @@ export default function SalarySlipPage() {
     return (
       <div id="salary-slip-printable-area">
         <Button
-          onClick={() => { setIsBulkPrintingView(false); setBulkSlipsData([]); }}
+          onClick={() => { 
+            document.body.classList.remove("printing-active");
+            setIsBulkPrintingView(false); 
+            setBulkSlipsData([]); 
+          }}
           variant="outline"
           className="fixed top-4 right-4 no-print z-[101]"
         >
@@ -1059,20 +1060,17 @@ export default function SalarySlipPage() {
                   if (slipData) {
                     const originalTitle = document.title;
                     document.title = `${slipData.employeeId}-${slipData.name}-Slip-${selectedMonth}-${selectedYear}`;
-                    const printableArea = document.getElementById('salary-slip-printable-area-single');
-                    if (printableArea) {
-                      document.body.classList.add('single-slip-printing');
-                      const timer = setTimeout(() => {
-                        try {
-                          window.print();
-                        } catch(e) {
-                          console.error("Print error:", e);
-                        } finally {
-                          document.body.classList.remove('single-slip-printing');
-                          document.title = originalTitle;
-                        }
-                      }, 500);
-                    }
+                    document.body.classList.add('printing-active');
+                    const timer = setTimeout(() => {
+                      try {
+                        window.print();
+                      } catch(e) {
+                        console.error("Print error:", e);
+                      } finally {
+                        document.body.classList.remove('printing-active');
+                        document.title = originalTitle;
+                      }
+                    }, 500);
                   }
                 }}
                 className="ml-auto print:hidden"
