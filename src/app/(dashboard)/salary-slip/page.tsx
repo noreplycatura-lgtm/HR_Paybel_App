@@ -131,32 +131,32 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
       }}
     >
       <CardHeader 
-        className="p-6"
+        className="p-4"
         style={{ 
           backgroundColor: '#f8f9fa', 
           borderBottom: '2px solid #e0e0e0' 
         }}
       >
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+        <div className="flex justify-between items-start">
           <div>
             {companyConfig.company_logo ? (
               <img
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
                 style={{ 
-                  height: '80px', // Reduced height
+                  height: '60px', 
                   width: 'auto', 
-                  maxWidth: '200px', // Reduced max-width
-                  marginBottom: '12px', 
+                  maxWidth: '150px',
+                  marginBottom: '8px', 
                   objectFit: 'contain' 
                 }}
               />
             ) : (
               <div 
                 style={{ 
-                  height: '80px', 
-                  width: '200px', 
-                  marginBottom: '12px', 
+                  height: '60px', 
+                  width: '150px', 
+                  marginBottom: '8px', 
                   backgroundColor: '#e8f4f8', 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -165,33 +165,33 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                   border: '1px solid #ccc'
                 }}
               >
-                <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#0066cc' }}>
+                <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#0066cc' }}>
                   {companyConfig.company_name ? companyConfig.company_name.charAt(0) : 'N'}
                 </span>
               </div>
             )}
-            <p style={{ fontSize: '16px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
+            <p style={{ fontSize: '14px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
               {companyConfig.company_name || 'Novita Healthcare Pvt. Ltd.'}
             </p>
-            <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
+            <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.5' }}>
               {COMPANY_ADDRESS_LINES.map((line, index) => (
                 <p key={index} style={{ margin: 0 }}>{line}</p>
               ))}
             </div>
           </div>
-          <div className="text-right mt-4 sm:mt-0">
-             <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
+          <div className="text-right">
+             <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '18px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '16px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
       
-      <CardContent className="p-6" style={{ backgroundColor: '#ffffff' }}>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+      <CardContent className="p-4" style={{ backgroundColor: '#ffffff' }}>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-4 text-xs">
           <div className="space-y-1">
-            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+            <h3 style={{ fontWeight: '600', marginBottom: '6px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>
               Employee Details
             </h3>
             <p style={{ color: '#333' }}><strong>Name:</strong> {sData.name}</p>
@@ -201,47 +201,40 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             {sData.division !== 'Office-Staff' && (
                 <p style={{ color: '#333' }}><strong>Division:</strong> {sData.division}</p>
             )}
-            
-            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
-            
-            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
-              Pay Details
-            </h3>
-            <p style={{ color: '#333' }}><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
-            <p style={{ color: '#333' }}><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
           </div>
           
           <div className="space-y-1">
-            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+            <h3 style={{ fontWeight: '600', marginBottom: '6px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>
               Attendance Summary
             </h3>
+            <p style={{ color: '#333' }}><strong>Total Days:</strong> {sData.totalDaysInMonth.toFixed(1)}</p>
+            <p style={{ color: '#333' }}><strong>Pay Days:</strong> {sData.actualPayDays.toFixed(1)}</p>
             <p style={{ color: '#333' }}><strong>Absent Days:</strong> {sData.absentDays.toFixed(1)}</p>
             <p style={{ color: '#333' }}><strong>Week Offs:</strong> {sData.weekOffs.toFixed(1)}</p>
-            <p style={{ color: '#333' }}><strong>Paid Holidays:</strong> {sData.paidHolidays.toFixed(1)}</p>
             <p style={{ color: '#333' }}><strong>Working Days:</strong> {sData.workingDays.toFixed(1)}</p>
-            <p style={{ color: '#333' }}><strong>Total Leaves Taken:</strong> {sData.totalLeavesTakenThisMonth.toFixed(1)}</p>
-            
-            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
-            
-            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+          </div>
+
+          <div className="space-y-1">
+             <h3 style={{ fontWeight: '600', marginTop: '8px', marginBottom: '6px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>
               Leave Used ({sData.period})
             </h3>
             <p style={{ color: '#333' }}>CL: {sData.leaveUsedThisMonth.cl.toFixed(1)} | SL: {sData.leaveUsedThisMonth.sl.toFixed(1)} | PL: {sData.leaveUsedThisMonth.pl.toFixed(1)}</p>
-            
-            <div style={{ margin: '16px 0', borderTop: '1px solid #eee' }} />
-            
-            <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+          </div>
+
+          <div className="space-y-1">
+             <h3 style={{ fontWeight: '600', marginTop: '8px', marginBottom: '6px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '2px' }}>
               Leave Balance (Opening {nextMonthName} {nextMonthYear > 0 ? nextMonthYear : ''})
             </h3>
             <p style={{ color: '#333' }}>CL: {sData.leaveBalanceNextMonth.cl.toFixed(1)} | SL: {sData.leaveBalanceNextMonth.sl.toFixed(1)} | PL: {sData.leaveBalanceNextMonth.pl.toFixed(1)}</p>
           </div>
         </div>
 
-        <div style={{ margin: '20px 0', borderTop: '2px solid #ddd' }} />
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+        <div style={{ margin: '16px 0', borderTop: '2px solid #ddd' }} />
+
+        <div className="grid grid-cols-2 gap-x-6 text-xs">
           <div>
-            <h3 style={{ fontWeight: '600', fontSize: '16px', marginBottom: '12px', color: '#000', backgroundColor: '#e8f5e9', padding: '8px', borderRadius: '4px' }}>
+            <h3 style={{ fontWeight: '600', fontSize: '14px', marginBottom: '8px', color: '#000', backgroundColor: '#e8f5e9', padding: '6px', borderRadius: '4px' }}>
               Earnings
             </h3>
             {sData.earnings.map(item => (
@@ -250,7 +243,7 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 style={{ 
                   display: 'flex', 
                   justifyContent: 'space-between', 
-                  padding: '6px 0', 
+                  padding: '4px 0', 
                   borderBottom: '1px dashed #ddd',
                   color: '#333'
                 }}
@@ -264,8 +257,8 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 fontWeight: 'bold', 
-                marginTop: '8px', 
-                paddingTop: '8px',
+                marginTop: '6px', 
+                paddingTop: '6px',
                 borderTop: '2px solid #4caf50',
                 color: '#2e7d32'
               }}
@@ -276,7 +269,7 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
           </div>
           
           <div>
-            <h3 style={{ fontWeight: '600', fontSize: '16px', marginBottom: '12px', color: '#000', backgroundColor: '#ffebee', padding: '8px', borderRadius: '4px' }}>
+            <h3 style={{ fontWeight: '600', fontSize: '14px', marginBottom: '8px', color: '#000', backgroundColor: '#ffebee', padding: '6px', borderRadius: '4px' }}>
               Deductions
             </h3>
             {sData.deductions.map(item => (
@@ -285,7 +278,7 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 style={{ 
                   display: 'flex', 
                   justifyContent: 'space-between', 
-                  padding: '6px 0', 
+                  padding: '4px 0', 
                   borderBottom: '1px dashed #ddd',
                   color: '#333'
                 }}
@@ -299,8 +292,8 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 fontWeight: 'bold', 
-                marginTop: '8px', 
-                paddingTop: '8px',
+                marginTop: '6px', 
+                paddingTop: '6px',
                 borderTop: '2px solid #f44336',
                 color: '#c62828'
               }}
@@ -311,32 +304,32 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
           </div>
         </div>
 
-        <div style={{ margin: '24px 0', borderTop: '2px solid #ddd' }} />
+        <div style={{ margin: '20px 0', borderTop: '2px solid #ddd' }} />
 
         <div style={{ textAlign: 'right' }}>
           <p style={{ 
-            fontSize: '20px', 
+            fontSize: '18px', 
             fontWeight: 'bold', 
             color: '#1565c0',
             backgroundColor: '#e3f2fd',
-            padding: '12px 16px',
+            padding: '10px 14px',
             borderRadius: '8px',
             display: 'inline-block'
           }}>
             Net Salary: ₹{sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
             Amount in words: {convertToWords(sData.netSalary)}
           </p>
         </div>
 
         <p style={{ 
-          fontSize: '11px', 
+          fontSize: '10px', 
           color: '#888', 
-          marginTop: '32px', 
+          marginTop: '24px', 
           textAlign: 'center',
           borderTop: '1px solid #eee',
-          paddingTop: '16px'
+          paddingTop: '12px'
         }}>
           This is a computer-generated salary slip and does not require a signature.
         </p>
