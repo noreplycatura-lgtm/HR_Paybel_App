@@ -179,10 +179,10 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             </div>
           </div>
           <div className="text-right mt-4 sm:mt-0">
-            <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#000', marginBottom: '4px' }}>
+            <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '14px', color: '#666' }}>For {sData.period}</p>
+            <p style={{ fontSize: '16px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
