@@ -1,4 +1,5 @@
 
+
 // Replace this URL with your NEW deployment URL
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec';
 
@@ -34,7 +35,7 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify(data),
     });
@@ -70,7 +71,7 @@ export async function createDriveFolder(folderName: string): Promise<boolean> {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({
         action: 'createFolder',
@@ -91,7 +92,7 @@ export async function uploadPDFToDrive(folderName: string, fileName: string, pdf
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({
         action: 'uploadPDF',
@@ -107,3 +108,4 @@ export async function uploadPDFToDrive(folderName: string, fileName: string, pdf
     return false;
   }
 }
+
