@@ -197,9 +197,7 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             <p style={{ color: '#333' }}><strong>Employee ID:</strong> {sData.employeeId}</p>
             <p style={{ color: '#333' }}><strong>Designation:</strong> {sData.designation}</p>
             <p style={{ color: '#333' }}><strong>Date of Joining:</strong> {sData.joinDate}</p>
-            {sData.division === 'Office-Staff' ? (
-                <p style={{ color: '#333' }}><strong>Department:</strong> {sData.division}</p>
-            ) : (
+            {sData.division !== 'Office-Staff' && (
                 <p style={{ color: '#333' }}><strong>Division:</strong> {sData.division}</p>
             )}
             
