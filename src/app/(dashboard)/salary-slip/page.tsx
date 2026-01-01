@@ -123,12 +123,12 @@ interface SalarySlipCardProps {
 function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
   return (
     <Card 
-      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-4`}
+      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-0`} // Removed mb-4
       style={{ 
         backgroundColor: '#ffffff', 
         color: '#000000',
         border: '1px solid #e0e0e0',
-        padding: '0.2in', // Simulates margin for printing
+        padding: '0.4in', // Simulates margin for printing
       }}
     >
       <CardHeader 
@@ -145,9 +145,9 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
                 style={{ 
-                  height: '40px', 
+                  height: '35px', // Reduced size
                   width: 'auto', 
-                  maxWidth: '120px',
+                  maxWidth: '100px', // Reduced size
                   marginBottom: '4px', 
                   objectFit: 'contain' 
                 }}
@@ -155,8 +155,8 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             ) : (
               <div 
                 style={{ 
-                  height: '40px', 
-                  width: '120px', 
+                  height: '35px', 
+                  width: '100px', 
                   marginBottom: '4px', 
                   backgroundColor: '#e8f4f8', 
                   display: 'flex', 
@@ -166,25 +166,25 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                   border: '1px solid #ccc'
                 }}
               >
-                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#0066cc' }}>
+                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#0066cc' }}>
                   {companyConfig.company_name ? companyConfig.company_name.charAt(0) : 'N'}
                 </span>
               </div>
             )}
-            <p style={{ fontSize: '13px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
+            <p style={{ fontSize: '12px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
               {companyConfig.company_name || 'Novita Healthcare Pvt. Ltd.'}
             </p>
-            <div style={{ fontSize: '10px', color: '#555', lineHeight: '1.4' }}>
+            <div style={{ fontSize: '9px', color: '#555', lineHeight: '1.3' }}>
               {COMPANY_ADDRESS_LINES.map((line, index) => (
                 <p key={index} style={{ margin: 0 }}>{line}</p>
               ))}
             </div>
           </div>
           <div className="text-right">
-             <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
+             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '14px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
@@ -873,6 +873,7 @@ export default function SalarySlipPage() {
         printTitle = `AllSlips-${selectedDivision || 'All'}-${bulkSlipsData[0].period.replace(/\s+/g, '-')}`;
       }
 
+      document.body.classList.add('bulk-printing-active');
       const originalTitle = document.title;
       document.title = printTitle;
 
@@ -887,11 +888,13 @@ export default function SalarySlipPage() {
           setIsLoading(false);
           setIsLoadingMultiMonth(false);
           document.title = originalTitle;
+          document.body.classList.remove('bulk-printing-active');
         }
       }, 500);
       return () => {
         clearTimeout(timer);
         document.title = originalTitle;
+        document.body.classList.remove('bulk-printing-active');
       };
     }
   }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear, toast]);
@@ -928,7 +931,7 @@ export default function SalarySlipPage() {
 
   if (isBulkPrintingView) {
     return (
-      <div id="salary-slip-printable-area" style={{ backgroundColor: '#fff' }}>
+      <div id="salary-slip-printable-area">
         <Button
           onClick={() => { setIsBulkPrintingView(false); setBulkSlipsData([]); }}
           variant="outline"
@@ -1055,12 +1058,14 @@ export default function SalarySlipPage() {
 
       {showSlip && slipData && !isBulkPrintingView && (
         <>
-          <SalarySlipCard
-            sData={slipData}
-            companyConfig={companyConfig}
-            nextMonthName={nextMonthNameForDisplay}
-            nextMonthYear={nextMonthYearNumForDisplay}
-          />
+          <div id="salary-slip-printable-area-single">
+            <SalarySlipCard
+              sData={slipData}
+              companyConfig={companyConfig}
+              nextMonthName={nextMonthNameForDisplay}
+              nextMonthYear={nextMonthYearNumForDisplay}
+            />
+          </div>
           <Card className="shadow-md print:hidden">
             <CardFooter className="p-6 border-t">
               <p className="text-xs text-muted-foreground mr-auto">Use browser's 'Save as PDF' option.</p>
@@ -1069,8 +1074,25 @@ export default function SalarySlipPage() {
                   if (slipData) {
                     const originalTitle = document.title;
                     document.title = `${slipData.employeeId}-${slipData.name}-Slip-${selectedMonth}-${selectedYear}`;
-                    try { window.print(); } catch (e) { console.error(e); }
-                    finally { document.title = originalTitle; }
+                    const printableArea = document.getElementById('salary-slip-printable-area-single');
+                    if (printableArea) {
+                        const allElements = document.body.children;
+                        for(let i=0; i<allElements.length; i++) {
+                            if(allElements[i] !== printableArea) {
+                                (allElements[i] as HTMLElement).style.display = 'none';
+                            }
+                        }
+                        printableArea.style.display = 'block';
+                        window.print();
+                        for(let i=0; i<allElements.length; i++) {
+                            if(allElements[i] !== printableArea) {
+                                (allElements[i] as HTMLElement).style.display = '';
+                            }
+                        }
+                    } else {
+                        window.print();
+                    }
+                    document.title = originalTitle;
                   }
                 }}
                 className="ml-auto print:hidden"

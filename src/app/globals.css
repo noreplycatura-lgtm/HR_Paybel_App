@@ -22,7 +22,6 @@
   --border: 214.3 31.8% 91.4%;
   --input: 214.3 31.8% 91.4%;
   --ring: 221.2 83.2% 53.3%;
-  --radius: 0.5rem;
   --sidebar-background: 222.2 84% 4.9%;
   --sidebar-foreground: 210 40% 98%;
   --sidebar-primary: 217.2 91.2% 59.8%;
@@ -94,11 +93,27 @@ body {
 
 /* Print styles */
 @media print {
-  body {
+  body.bulk-printing-active {
+    padding: 0;
+  }
+  body:not(.bulk-printing-active) {
     padding: 0.4in;
   }
+
   .no-print {
     display: none !important;
+  }
+
+  body.bulk-printing-active > *:not(#salary-slip-printable-area) {
+    display: none;
+  }
+
+  #salary-slip-printable-area {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
   }
   
   .print-page-break-before {
