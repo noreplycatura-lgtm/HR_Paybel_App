@@ -1,7 +1,6 @@
-
 // src/lib/google-sheets.ts
 
-// ⚠️ IMPORTANT: Apna latest "Web App URL" yahan check karke update karein
+// ⚠️ IMPORTANT: New Deployment URL paste karo yahan
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec'; 
 
 export interface AppData {
@@ -19,11 +18,11 @@ export interface CompanyConfig {
 }
 
 /**
- * 1. Load Data (GET Request)
+ * 1. Google Sheet se saara data load karne ke liye
  */
 export async function loadFromGoogleSheet(): Promise<AppData> {
   try {
-    const response = await fetch(`${WEBAPP_URL}?action=load`);
+    const response = await fetch(WEBAPP_URL);
     const data = await response.json();
     return data || {};
   } catch (error) {
@@ -33,16 +32,13 @@ export async function loadFromGoogleSheet(): Promise<AppData> {
 }
 
 /**
- * 2. Save Data (POST Request)
+ * 2. Data save karne ke liye
  */
 export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: JSON.stringify({ action: 'save', data: data }),
+      body: JSON.stringify(data),
     });
     const result = await response.json();
     return result.success === true;
@@ -53,52 +49,67 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
 }
 
 /**
- * 3. Get Company Config
+ * 3. Company Logo aur Name fetch karne ke liye
  */
 export async function getCompanyConfig(): Promise<CompanyConfig> {
   try {
     const response = await fetch(`${WEBAPP_URL}?action=getConfig`);
     const data = await response.json();
-    
-    // Fix for broken image URL
-    const logoUrl = (data.company_logo || '').includes('novitahealthcare.in') 
-      ? '' 
-      : data.company_logo || '';
-
     return {
-      company_logo: logoUrl,
+      company_logo: data.company_logo || '',
       company_name: data.company_name || 'Novita Payroll'
     };
   } catch (error) {
+    console.error('Config fetch error:', error);
     return { company_logo: '', company_name: 'Novita Payroll' };
   }
 }
 
 /**
- * 4. Create Folder (Optimized for CORS)
+ * 4. Google Drive me Month folder banane ke liye
  */
 export async function createDriveFolder(folderName: string): Promise<boolean> {
   try {
+    console.log('Creating folder:', folderName);
+    
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({
         action: 'createFolder',
         folderName: folderName
       }),
+      redirect: 'follow'
     });
-    const result = await response.json();
-    return result.success === true;
+
+    // Get response text first
+    const responseText = await response.text();
+    console.log('Folder creation response:', responseText);
+    
+    // Try to parse as JSON
+    try {
+      const result = JSON.parse(responseText);
+      if (result.success) {
+        console.log('Folder created/found:', result.folderName || folderName);
+        return true;
+      } else {
+        console.error('Folder creation failed:', result.error);
+        return false;
+      }
+    } catch (parseError) {
+      console.error('Response parse error:', parseError, 'Response was:', responseText);
+      return false;
+    }
   } catch (error) {
     console.error('Drive folder creation error:', error);
-    return false; 
+    return false;
   }
 }
 
 /**
- * 5. Upload PDF (Optimized for CORS)
+ * 5. PDF upload karne ke liye Google Drive mein
  */
 export async function uploadPDFToDrive(
   folderName: string, 
@@ -109,7 +120,7 @@ export async function uploadPDFToDrive(
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify({
         action: 'uploadPDF',
@@ -117,11 +128,25 @@ export async function uploadPDFToDrive(
         fileName: fileName,
         pdfBase64: pdfBase64
       }),
+      redirect: 'follow'
     });
-     const result = await response.json();
-    return result.success === true;
+
+    const responseText = await response.text();
+    
+    try {
+      const result = JSON.parse(responseText);
+      if (result.success) {
+        return true;
+      } else {
+        console.error('PDF upload failed:', result.error);
+        return false;
+      }
+    } catch (parseError) {
+      console.error('Upload response parse error:', parseError);
+      return false;
+    }
   } catch (error) {
-     console.error('Upload PDF to Drive error:', error);
+    console.error('PDF upload error:', error);
     return false;
   }
 }
