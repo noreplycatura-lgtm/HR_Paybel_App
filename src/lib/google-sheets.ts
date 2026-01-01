@@ -20,7 +20,7 @@ export interface CompanyConfig {
 // Google Sheet se data load karo
 export async function loadFromGoogleSheet(): Promise<AppData> {
   try {
-    const response = await fetch(WEBAPP_URL);
+    const response = await fetch(`${WEBAPP_URL}?action=load`);
     const data = await response.json();
     return data || {};
   } catch (error) {
@@ -37,7 +37,7 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ action: 'save', ...data }),
     });
     const result = await response.json();
     return result.success === true;
@@ -108,4 +108,3 @@ export async function uploadPDFToDrive(folderName: string, fileName: string, pdf
     return false;
   }
 }
-
