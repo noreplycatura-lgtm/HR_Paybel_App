@@ -123,11 +123,12 @@ interface SalarySlipCardProps {
 function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
   return (
     <Card 
-      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} mb-4`}
+      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-4`}
       style={{ 
         backgroundColor: '#ffffff', 
         color: '#000000',
-        border: '1px solid #e0e0e0'
+        border: '1px solid #e0e0e0',
+        padding: '0.2in', // Simulates margin for printing
       }}
     >
       <CardHeader 
@@ -144,19 +145,19 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
                 style={{ 
-                  height: '60px', 
+                  height: '40px', 
                   width: 'auto', 
-                  maxWidth: '150px',
-                  marginBottom: '8px', 
+                  maxWidth: '120px',
+                  marginBottom: '4px', 
                   objectFit: 'contain' 
                 }}
               />
             ) : (
               <div 
                 style={{ 
-                  height: '60px', 
-                  width: '150px', 
-                  marginBottom: '8px', 
+                  height: '40px', 
+                  width: '120px', 
+                  marginBottom: '4px', 
                   backgroundColor: '#e8f4f8', 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -165,25 +166,25 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                   border: '1px solid #ccc'
                 }}
               >
-                <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#0066cc' }}>
+                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#0066cc' }}>
                   {companyConfig.company_name ? companyConfig.company_name.charAt(0) : 'N'}
                 </span>
               </div>
             )}
-            <p style={{ fontSize: '14px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
+            <p style={{ fontSize: '13px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
               {companyConfig.company_name || 'Novita Healthcare Pvt. Ltd.'}
             </p>
-            <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.5' }}>
+            <div style={{ fontSize: '10px', color: '#555', lineHeight: '1.4' }}>
               {COMPANY_ADDRESS_LINES.map((line, index) => (
                 <p key={index} style={{ margin: 0 }}>{line}</p>
               ))}
             </div>
           </div>
           <div className="text-right">
-             <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
+             <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '16px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '14px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
@@ -615,9 +616,26 @@ export default function SalarySlipPage() {
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
     
     const nextMonthDateObject = addMonths(selectedPeriodStartDate, 1);
-    const nextMonthDetails = calculateEmployeeLeaveDetailsForPeriod(
-        employee, getYear(nextMonthDateObject), getMonth(nextMonthDateObject), localAllLeaveApplications, localOpeningBalances
-    );
+    
+    const isSeededMonth = getYear(nextMonthDateObject) === 2026 && getMonth(nextMonthDateObject) === 0; // Jan 2026
+    let nextMonthCL = 0, nextMonthSL = 0, nextMonthPL = 0;
+
+    if (isSeededMonth) {
+        const seededBalance = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === 2026 && ob.monthIndex === 0);
+        if (seededBalance) {
+            nextMonthCL = seededBalance.openingCL;
+            nextMonthSL = seededBalance.openingSL;
+            nextMonthPL = seededBalance.openingPL;
+        }
+    } else {
+        const nextMonthDetails = calculateEmployeeLeaveDetailsForPeriod(
+            employee, getYear(nextMonthDateObject), getMonth(nextMonthDateObject), localAllLeaveApplications, localOpeningBalances
+        );
+        nextMonthCL = nextMonthDetails.balanceCLAtMonthEnd;
+        nextMonthSL = nextMonthDetails.balanceSLAtMonthEnd;
+        nextMonthPL = nextMonthDetails.balancePLAtMonthEnd;
+    }
+
     
     let formattedDOJ = "N/A";
     if (parsedEmployeeDOJ && isValid(parsedEmployeeDOJ)) {
@@ -632,9 +650,9 @@ export default function SalarySlipPage() {
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
       leaveBalanceNextMonth: { 
-          cl: nextMonthDetails.balanceCLAtMonthEnd, 
-          sl: nextMonthDetails.balanceSLAtMonthEnd, 
-          pl: nextMonthDetails.balancePLAtMonthEnd 
+          cl: nextMonthCL, 
+          sl: nextMonthSL, 
+          pl: nextMonthPL 
       },
       absentDays: absentDaysCount, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
       workingDays: workingDaysCount,
