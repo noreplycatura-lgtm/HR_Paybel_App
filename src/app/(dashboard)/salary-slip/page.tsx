@@ -18,7 +18,10 @@ import {
   MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL,
   CL_ACCRUAL_RATE,
   SL_ACCRUAL_RATE,
-  PL_ACCRUAL_RATE
+  PL_ACCRUAL_RATE,
+  OFFICE_STAFF_CL_ACCRUAL_RATE,
+  OFFICE_STAFF_SL_ACCRUAL_RATE,
+  OFFICE_STAFF_ANNUAL_PL_GRANT,
 } from "@/lib/hr-calculations";
 import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
 import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
@@ -619,47 +622,14 @@ export default function SalarySlipPage() {
     ];
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
-
-    const leaveDetailsEOM = calculateEmployeeLeaveDetailsForPeriod(
-      employee, year, monthIndex,
-      localAllLeaveApplications.filter(app => app.employeeId === employee.id),
-      localOpeningBalances
-    );
-
-    let nextMonthOpeningCL = 0, nextMonthOpeningSL = 0, nextMonthOpeningPL = 0;
+    
+    // START: Corrected Leave Balance Logic for Salary Slip
     const nextMonthDateObject = addMonths(selectedPeriodStartDate, 1);
-    const nextMonthIdx = getMonth(nextMonthDateObject);
-    const nextYr = getYear(nextMonthDateObject);
-
-    const closingBalanceCLForSelectedMonth = leaveDetailsEOM.balanceCLAtMonthEnd - usedCLInMonth;
-    const closingBalanceSLForSelectedMonth = leaveDetailsEOM.balanceSLAtMonthEnd - usedSLInMonth;
-    const closingBalancePLForSelectedMonth = leaveDetailsEOM.balancePLAtMonthEnd - usedPLInMonth;
-
-    const obForNextFY = localOpeningBalances.find(ob => ob.employeeCode === employee.code && ob.financialYearStart === nextYr);
-
-    if (nextMonthIdx === 3) {
-      nextMonthOpeningCL = obForNextFY?.openingCL || 0;
-      nextMonthOpeningSL = obForNextFY?.openingSL || 0;
-      if (obForNextFY && obForNextFY.openingPL !== undefined) {
-        nextMonthOpeningPL = obForNextFY.openingPL;
-      } else {
-        nextMonthOpeningPL = closingBalancePLForSelectedMonth;
-      }
-    } else {
-      nextMonthOpeningCL = closingBalanceCLForSelectedMonth;
-      nextMonthOpeningSL = closingBalanceSLForSelectedMonth;
-      nextMonthOpeningPL = closingBalancePLForSelectedMonth;
-    }
-
-    const serviceMonthsAtNextMonthStart = calculateMonthsOfService(employee.doj, startOfMonth(nextMonthDateObject));
-    const isEligibleForAccrualNextMonth = serviceMonthsAtNextMonthStart >= MIN_SERVICE_MONTHS_FOR_LEAVE_ACCRUAL;
-
-    if (isEligibleForAccrualNextMonth) {
-      nextMonthOpeningCL += CL_ACCRUAL_RATE;
-      nextMonthOpeningSL += SL_ACCRUAL_RATE;
-      nextMonthOpeningPL += PL_ACCRUAL_RATE;
-    }
-
+    const nextMonthDetails = calculateEmployeeLeaveDetailsForPeriod(
+        employee, getYear(nextMonthDateObject), getMonth(nextMonthDateObject), localAllLeaveApplications, localOpeningBalances
+    );
+    // END: Corrected Leave Balance Logic for Salary Slip
+    
     let formattedDOJ = "N/A";
     if (parsedEmployeeDOJ && isValid(parsedEmployeeDOJ)) {
       formattedDOJ = format(parsedEmployeeDOJ, "dd MMM yyyy");
@@ -672,7 +642,11 @@ export default function SalarySlipPage() {
       earnings: earningsList, deductions: deductionsList,
       totalEarnings: calculatedTotalEarnings, totalDeductions: calculatedTotalDeductions, netSalary: calculatedNetSalary,
       leaveUsedThisMonth: { cl: usedCLInMonth, sl: usedSLInMonth, pl: usedPLInMonth },
-      leaveBalanceNextMonth: { cl: nextMonthOpeningCL, sl: nextMonthOpeningSL, pl: nextMonthOpeningPL },
+      leaveBalanceNextMonth: { 
+          cl: nextMonthDetails.balanceCLAtMonthEnd, 
+          sl: nextMonthDetails.balanceSLAtMonthEnd, 
+          pl: nextMonthDetails.balancePLAtMonthEnd 
+      },
       absentDays: absentDaysCount, weekOffs: weekOffsCount, paidHolidays: paidHolidaysCount,
       workingDays: workingDaysCount,
       totalLeavesTakenThisMonth: totalLeavesTakenThisMonth,
