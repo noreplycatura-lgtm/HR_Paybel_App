@@ -93,29 +93,34 @@ body {
 
 /* Print styles */
 @media print {
-  body.bulk-printing-active {
+  body {
     padding: 0;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  body:not(.bulk-printing-active) {
-    padding: 0.4in;
-  }
-
   .no-print {
     display: none !important;
   }
-
-  body.bulk-printing-active > *:not(#salary-slip-printable-area) {
+  
+  body > *:not(.printing-active) {
     display: none;
   }
 
-  #salary-slip-printable-area {
-    display: block;
+  body.single-slip-printing > *:not(#salary-slip-printable-area-single),
+  body.bulk-printing-active > *:not(#salary-slip-printable-area) {
+    display: none !important;
+  }
+
+  body.single-slip-printing #salary-slip-printable-area-single,
+  body.bulk-printing-active #salary-slip-printable-area {
+    display: block !important;
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
   }
-  
+
   .print-page-break-before {
     page-break-before: always;
   }

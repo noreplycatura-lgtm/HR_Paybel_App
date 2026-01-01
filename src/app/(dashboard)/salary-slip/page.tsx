@@ -123,7 +123,7 @@ interface SalarySlipCardProps {
 function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, showPageBreak }: SalarySlipCardProps) {
   return (
     <Card 
-      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-0`} // Removed mb-4
+      className={`shadow-xl salary-slip-page ${showPageBreak ? 'print-page-break-before' : ''} print:mb-0 print:shadow-none print:border-none mb-0`}
       style={{ 
         backgroundColor: '#ffffff', 
         color: '#000000',
@@ -181,10 +181,10 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             </div>
           </div>
           <div className="text-right">
-             <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
+             <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#dc2626', marginBottom: '2px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '10px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
@@ -865,39 +865,24 @@ export default function SalarySlipPage() {
 
   React.useEffect(() => {
     if (isBulkPrintingView && bulkSlipsData.length > 0) {
-      let printTitle = `SalarySlips-${selectedMonth}-${selectedYear}`;
-      if (bulkSlipsData.length > 0 && bulkSlipsData[0].period !== bulkSlipsData[bulkSlipsData.length - 1]?.period) {
-        const empName = bulkSlipsData[0].name.replace(/\s+/g, '_');
-        printTitle = `Slips_${empName}_MultiMonth`;
-      } else if (bulkSlipsData.length > 0) {
-        printTitle = `AllSlips-${selectedDivision || 'All'}-${bulkSlipsData[0].period.replace(/\s+/g, '-')}`;
-      }
-
       document.body.classList.add('bulk-printing-active');
-      const originalTitle = document.title;
-      document.title = printTitle;
-
       const timer = setTimeout(() => {
         try {
           window.print();
-          toast({ title: "Print Initiated", description: "Use 'Save as PDF' option." });
         } catch (e) {
           console.error("Print error:", e);
-          toast({ title: "Print Error", variant: "destructive" });
         } finally {
-          setIsLoading(false);
-          setIsLoadingMultiMonth(false);
-          document.title = originalTitle;
           document.body.classList.remove('bulk-printing-active');
         }
       }, 500);
+
       return () => {
         clearTimeout(timer);
-        document.title = originalTitle;
         document.body.classList.remove('bulk-printing-active');
       };
     }
-  }, [isBulkPrintingView, bulkSlipsData, selectedDivision, selectedMonth, selectedYear, toast]);
+  }, [isBulkPrintingView, bulkSlipsData]);
+
 
   const getNextMonthInfo = (period: string) => {
     const parts = period.split(' ');
@@ -1076,23 +1061,18 @@ export default function SalarySlipPage() {
                     document.title = `${slipData.employeeId}-${slipData.name}-Slip-${selectedMonth}-${selectedYear}`;
                     const printableArea = document.getElementById('salary-slip-printable-area-single');
                     if (printableArea) {
-                        const allElements = document.body.children;
-                        for(let i=0; i<allElements.length; i++) {
-                            if(allElements[i] !== printableArea) {
-                                (allElements[i] as HTMLElement).style.display = 'none';
-                            }
+                      document.body.classList.add('single-slip-printing');
+                      const timer = setTimeout(() => {
+                        try {
+                          window.print();
+                        } catch(e) {
+                          console.error("Print error:", e);
+                        } finally {
+                          document.body.classList.remove('single-slip-printing');
+                          document.title = originalTitle;
                         }
-                        printableArea.style.display = 'block';
-                        window.print();
-                        for(let i=0; i<allElements.length; i++) {
-                            if(allElements[i] !== printableArea) {
-                                (allElements[i] as HTMLElement).style.display = '';
-                            }
-                        }
-                    } else {
-                        window.print();
+                      }, 500);
                     }
-                    document.title = originalTitle;
                   }
                 }}
                 className="ml-auto print:hidden"
