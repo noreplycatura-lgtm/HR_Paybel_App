@@ -232,21 +232,17 @@ export default function SalarySheetPage() {
         
         dailyStatuses.forEach(status => {
           const s = status.toUpperCase();
-          
-          if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
-              daysPaid++;
+          if (s === 'A') {
+              absentDays += 1;
           } else if (s === 'HD') {
               daysPaid += 0.5;
+              absentDays += 0.5;
+          } else if (s !== '-') {
+              daysPaid += 1;
           }
         
           if (s === 'W') {
             weekOffs++;
-          }
-        
-          if (s === 'A') {
-            absentDays += 1;
-          } else if (s === 'HD') {
-            absentDays += 0.5;
           }
         });
         
@@ -445,20 +441,17 @@ export default function SalarySheetPage() {
             const dailyStatuses = empAttendanceRecord.attendance.slice(0, totalDaysInMonth);
             dailyStatuses.forEach(status => {
                 const s = status.toUpperCase();
-                if (s === 'P' || s === 'W' || s === 'PH' || s === 'CL' || s === 'SL' || s === 'PL' || s === 'HCL' || s === 'HSL' || s === 'HPL') {
-                    daysPaid++;
+                if (s === 'A') {
+                    absentDays += 1;
                 } else if (s === 'HD') {
                     daysPaid += 0.5;
+                    absentDays += 0.5;
+                } else if (s !== '-') {
+                    daysPaid += 1;
                 }
               
                 if (s === 'W') {
                   weekOffs++;
-                }
-              
-                if (s === 'A') {
-                  absentDays += 1;
-                } else if (s === 'HD') {
-                  absentDays += 0.5;
                 }
             });
             daysPaid = Math.min(daysPaid, totalDaysInMonth);
@@ -922,7 +915,7 @@ export default function SalarySheetPage() {
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.professionalTax, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.providentFund, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.tds, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.loan, 0).toLocaleString('en-IN', { minimumFraction Digits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.loan, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.salaryAdvance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.manualOtherDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right font-bold">{filteredSalarySheetData.reduce((acc, curr) => acc + curr.performanceDeduction, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
