@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -7,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Download, Eye, Loader2, Printer, XCircle } from "lucide-react";
+import { Download, Eye, Loader2, Printer, XCircle, Send } from "lucide-react";
 import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth, isBefore, isEqual, isAfter } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { calculateMonthlySalaryComponents } from "@/lib/salary-calculations";
@@ -20,12 +21,9 @@ import {
   CL_ACCRUAL_RATE,
   SL_ACCRUAL_RATE,
   PL_ACCRUAL_RATE,
-  OFFICE_STAFF_CL_ACCRUAL_RATE,
-  OFFICE_STAFF_SL_ACCRUAL_RATE,
-  OFFICE_STAFF_ANNUAL_PL_GRANT,
 } from "@/lib/hr-calculations";
 import type { OpeningLeaveBalance, LeaveApplication } from "@/lib/hr-types";
-import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
+import { getCompanyConfig, type CompanyConfig, uploadPDFToDrive, createDriveFolder } from "@/lib/google-sheets";
 
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -111,6 +109,91 @@ const addActivityLog = (message: string) => {
   }
 };
 
+// Helper function to generate HTML String for PDF (Hidden from user)
+const getSlipHTMLString = (sData: SalarySlipDataType, companyConfig: CompanyConfig) => {
+  const logoHtml = companyConfig.company_logo 
+    ? `<img src="${companyConfig.company_logo}" style="height: 60px; width: auto; object-fit: contain; margin-bottom: 5px;" />`
+    : `<div style="height: 40px; width: 40px; background: #0066cc; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 5px;">N</div>`;
+
+  const earningsHtml = sData.earnings.map(item => `
+    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #eee;">
+      <span>${item.component}</span>
+      <span>Rs. ${item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+    </div>
+  `).join('');
+
+  const deductionsHtml = sData.deductions.map(item => `
+    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #eee;">
+      <span>${item.component}</span>
+      <span>Rs. ${item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+    </div>
+  `).join('');
+
+  return `
+    <div style="width: 800px; padding: 40px; background: white; font-family: Arial, sans-serif; color: black;">
+      <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
+        <div>
+          ${logoHtml}
+          <h2 style="margin: 5px 0 0; font-size: 18px;">${companyConfig.company_name || 'Novita Healthcare'}</h2>
+          <p style="margin: 5px 0 0; font-size: 12px; color: #555;">
+            37 B, Mangal Compound,<br/>Pipliya Kumar Dewas Naka,<br/>Indore - 452010, Madhya Pradesh
+          </p>
+        </div>
+        <div style="text-align: right;">
+          <h1 style="color: #dc2626; margin: 0; font-size: 24px;">SALARY SLIP</h1>
+          <p style="margin: 5px 0 0; font-weight: bold;">${sData.period}</p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 40px; margin-bottom: 30px;">
+        <div style="flex: 1;">
+          <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px;">Employee Details</h3>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Name:</strong> ${sData.name}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>ID:</strong> ${sData.employeeId}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Designation:</strong> ${sData.designation}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>DOJ:</strong> ${sData.joinDate}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Division:</strong> ${sData.division}</p>
+        </div>
+        <div style="flex: 1;">
+          <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px;">Attendance</h3>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Total Days:</strong> ${sData.totalDaysInMonth}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Pay Days:</strong> ${sData.actualPayDays}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Absent:</strong> ${sData.absentDays}</p>
+          <p style="margin: 3px 0; font-size: 12px;"><strong>Leaves Used:</strong> CL:${sData.leaveUsedThisMonth.cl} | SL:${sData.leaveUsedThisMonth.sl} | PL:${sData.leaveUsedThisMonth.pl}</p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 40px; margin-bottom: 30px;">
+        <div style="flex: 1;">
+          <h3 style="background: #f0fdf4; padding: 8px; margin: 0 0 10px; font-size: 14px; border-radius: 4px;">Earnings</h3>
+          <div style="font-size: 12px;">${earningsHtml}</div>
+          <div style="display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid #22c55e; font-weight: bold; color: #15803d;">
+            <span>Total Earnings</span>
+            <span>Rs. ${sData.totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <h3 style="background: #fef2f2; padding: 8px; margin: 0 0 10px; font-size: 14px; border-radius: 4px;">Deductions</h3>
+          <div style="font-size: 12px;">${deductionsHtml}</div>
+          <div style="display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid #ef4444; font-weight: bold; color: #b91c1c;">
+            <span>Total Deductions</span>
+            <span>Rs. ${sData.totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align: right; background: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 40px;">
+        <p style="margin: 0; font-size: 18px; font-weight: bold; color: #1d4ed8;">Net Salary: Rs. ${sData.netSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+        <p style="margin: 5px 0 0; font-size: 12px; color: #666;">(${convertToWords(sData.netSalary)})</p>
+      </div>
+
+      <div style="text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 20px;">
+        This is a computer generated document and does not require a signature.
+      </div>
+    </div>
+  `;
+};
+
 // Reusable Salary Slip Card Component with Light Theme
 interface SalarySlipCardProps {
   sData: SalarySlipDataType;
@@ -128,8 +211,8 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
         backgroundColor: '#ffffff', 
         color: '#000000',
         border: '1px solid #e0e0e0',
-        padding: '0.4in', // Simulates margin for printing
-        marginBottom: '0', // remove margin for printing
+        padding: '0.4in',
+        marginBottom: '0',
       }}
     >
       <CardHeader 
@@ -146,9 +229,9 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
                 style={{ 
-                  height: '35px', // Reduced size
+                  height: '35px',
                   width: 'auto', 
-                  maxWidth: '100px', // Reduced size
+                  maxWidth: '100px',
                   marginBottom: '4px', 
                   objectFit: 'contain' 
                 }}
@@ -378,6 +461,10 @@ export default function SalarySlipPage() {
   const [toMonthMulti, setToMonthMulti] = React.useState<string>('');
   const [toYearMulti, setToYearMulti] = React.useState<number>(0);
   const [isLoadingMultiMonth, setIsLoadingMultiMonth] = React.useState(false);
+
+  // Drive Sending State
+  const [isSendingToDrive, setIsSendingToDrive] = React.useState(false);
+  const [sendProgress, setSendProgress] = React.useState({ current: 0, total: 0 });
 
   React.useEffect(() => {
     async function fetchConfig() {
@@ -618,7 +705,7 @@ export default function SalarySlipPage() {
     
     const nextMonthDateObject = addMonths(selectedPeriodStartDate, 1);
     
-    const isSeededMonth = getYear(nextMonthDateObject) === 2026 && getMonth(nextMonthDateObject) === 0; // Jan 2026
+    const isSeededMonth = getYear(nextMonthDateObject) === 2026 && getMonth(nextMonthDateObject) === 0;
     let nextMonthCL = 0, nextMonthSL = 0, nextMonthPL = 0;
 
     if (isSeededMonth) {
@@ -692,6 +779,120 @@ export default function SalarySlipPage() {
       setShowSlip(false);
     }
     setIsLoading(false);
+  };
+
+  const handleSendAllToDrive = async () => {
+    if (!selectedMonth || !selectedYear || !selectedDivision) {
+      toast({ 
+        title: "Selection Missing", 
+        description: "Please select month, year, and division.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsSendingToDrive(true);
+    
+    try {
+      const employeesToProcess = allEmployees
+        .filter(emp => emp.division === selectedDivision)
+        .sort((a, b) => a.code.localeCompare(b.code));
+
+      if (employeesToProcess.length === 0) {
+        toast({ 
+          title: "No Employees", 
+          description: `No employees found for ${selectedDivision} division.`, 
+          variant: "destructive" 
+        });
+        setIsSendingToDrive(false);
+        return;
+      }
+
+      // Folder name: "Jan-2025" or "Dec-2024"
+      const folderName = `${selectedMonth.substring(0, 3)}-${selectedYear}`;
+
+      toast({ 
+        title: "Creating Folder", 
+        description: `Creating/Checking folder: ${folderName}...` 
+      });
+      
+      const folderResult = await createDriveFolder(folderName);
+      if (!folderResult) {
+        throw new Error('Failed to create folder in Drive');
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      const totalEmployees = employeesToProcess.length;
+      setSendProgress({ current: 0, total: totalEmployees });
+
+      for (let i = 0; i < employeesToProcess.length; i++) {
+        const emp = employeesToProcess[i];
+        setSendProgress({ current: i + 1, total: totalEmployees });
+
+        const slipData = generateSlipDataForEmployee(
+          emp, selectedMonth, selectedYear,
+          openingBalances, allPerformanceDeductions, allLeaveApplications
+        );
+
+        if (!slipData) {
+          failCount++;
+          continue;
+        }
+
+        try {
+          const tempDiv = document.createElement('div');
+          tempDiv.style.position = 'absolute';
+          tempDiv.style.left = '-9999px';
+          tempDiv.innerHTML = getSlipHTMLString(slipData, companyConfig);
+          document.body.appendChild(tempDiv);
+
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
+          document.body.removeChild(tempDiv);
+
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const imgData = canvas.toDataURL('image/png');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+          const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+          const fileName = `${emp.code}.pdf`;
+          const uploadResult = await uploadPDFToDrive(folderName, fileName, pdfBase64);
+
+          if (uploadResult) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+
+        } catch (err) {
+          failCount++;
+          console.error(`Error processing ${emp.code}:`, err);
+        }
+      }
+
+      toast({
+        title: "Upload Complete",
+        description: `${successCount} salary slips uploaded to Drive folder "${folderName}".`,
+      });
+
+      addActivityLog(`Sent ${successCount} salary slips to Google Drive (${folderName}).`);
+
+    } catch (error) {
+      console.error('Error sending to Drive:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send salary slips to Drive.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingToDrive(false);
+      setSendProgress({ current: 0, total: 0 });
+    }
   };
 
   const handleDownloadAllSummaries = () => {
@@ -952,6 +1153,23 @@ export default function SalarySlipPage() {
         <Button onClick={handlePrintAllSlips} disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} variant="outline">
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
           Print All Slips (PDF)
+        </Button>
+        <Button 
+          onClick={handleSendAllToDrive} 
+          disabled={!selectedMonth || !selectedYear || !selectedDivision || isSendingToDrive}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          {isSendingToDrive ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Sending... ({sendProgress.current}/{sendProgress.total})
+            </>
+          ) : (
+            <>
+              <Send className="mr-2 h-4 w-4" />
+              Send All to Drive
+            </>
+          )}
         </Button>
       </PageHeader>
 

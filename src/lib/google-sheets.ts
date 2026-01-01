@@ -1,3 +1,5 @@
+
+// Replace this URL with your NEW deployment URL
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec';
 
 export interface AppData {
@@ -31,6 +33,9 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(data),
     });
     const result = await response.json();
@@ -56,5 +61,49 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
       company_logo: '',
       company_name: 'Novita Payroll'
     };
+  }
+}
+
+// NEW: Create Folder in Drive
+export async function createDriveFolder(folderName: string): Promise<boolean> {
+  try {
+    const response = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'createFolder',
+        folderName: folderName
+      }),
+    });
+    const result = await response.json();
+    return result.success === true;
+  } catch (error) {
+    console.error('Drive folder create failed:', error);
+    return false;
+  }
+}
+
+// NEW: Upload PDF to Drive
+export async function uploadPDFToDrive(folderName: string, fileName: string, pdfBase64: string): Promise<boolean> {
+  try {
+    const response = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'uploadPDF',
+        folderName: folderName,
+        fileName: fileName,
+        pdfBase64: pdfBase64
+      }),
+    });
+    const result = await response.json();
+    return result.success === true;
+  } catch (error) {
+    console.error('PDF upload failed:', error);
+    return false;
   }
 }
