@@ -139,15 +139,14 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
       >
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
           <div>
-            {/* Dynamic Logo from Google Sheet Config - Bigger Size */}
             {companyConfig.company_logo ? (
               <img
                 src={companyConfig.company_logo}
                 alt={`${companyConfig.company_name} Logo`}
                 style={{ 
-                  height: '120px', 
+                  height: '80px', // Reduced height
                   width: 'auto', 
-                  maxWidth: '250px',
+                  maxWidth: '200px', // Reduced max-width
                   marginBottom: '12px', 
                   objectFit: 'contain' 
                 }}
@@ -155,8 +154,8 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             ) : (
               <div 
                 style={{ 
-                  height: '120px', 
-                  width: '250px', 
+                  height: '80px', 
+                  width: '200px', 
                   marginBottom: '12px', 
                   backgroundColor: '#e8f4f8', 
                   display: 'flex', 
@@ -166,16 +165,14 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
                   border: '1px solid #ccc'
                 }}
               >
-                <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#0066cc' }}>
+                <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#0066cc' }}>
                   {companyConfig.company_name ? companyConfig.company_name.charAt(0) : 'N'}
                 </span>
               </div>
             )}
-            {/* Company Name */}
             <p style={{ fontSize: '16px', fontWeight: '600', color: '#000', marginBottom: '4px' }}>
               {companyConfig.company_name || 'Novita Healthcare Pvt. Ltd.'}
             </p>
-            {/* Company Address with Line Breaks */}
             <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
               {COMPANY_ADDRESS_LINES.map((line, index) => (
                 <p key={index} style={{ margin: 0 }}>{line}</p>
@@ -183,16 +180,16 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
             </div>
           </div>
           <div className="text-right mt-4 sm:mt-0">
-            <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
+             <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#dc2626', marginBottom: '4px' }}>
               Salary Slip
             </h2>
-            <p style={{ fontSize: '16px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
+            <p style={{ fontSize: '18px', color: '#dc2626', fontWeight: 'bold' }}>For {sData.period}</p>
           </div>
         </div>
       </CardHeader>
       
       <CardContent className="p-6" style={{ backgroundColor: '#ffffff' }}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 text-sm">
           <div className="space-y-1">
             <h3 style={{ fontWeight: '600', marginBottom: '8px', color: '#000', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
               Employee Details
@@ -242,7 +239,7 @@ function SalarySlipCard({ sData, companyConfig, nextMonthName, nextMonthYear, sh
 
         <div style={{ margin: '20px 0', borderTop: '2px solid #ddd' }} />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
           <div>
             <h3 style={{ fontWeight: '600', fontSize: '16px', marginBottom: '12px', color: '#000', backgroundColor: '#e8f5e9', padding: '8px', borderRadius: '4px' }}>
               Earnings
@@ -624,12 +621,10 @@ export default function SalarySlipPage() {
     const calculatedTotalDeductions = deductionsList.reduce((sum, item) => sum + item.amount, 0);
     const calculatedNetSalary = calculatedTotalEarnings - calculatedTotalDeductions;
     
-    // START: Corrected Leave Balance Logic for Salary Slip
     const nextMonthDateObject = addMonths(selectedPeriodStartDate, 1);
     const nextMonthDetails = calculateEmployeeLeaveDetailsForPeriod(
         employee, getYear(nextMonthDateObject), getMonth(nextMonthDateObject), localAllLeaveApplications, localOpeningBalances
     );
-    // END: Corrected Leave Balance Logic for Salary Slip
     
     let formattedDOJ = "N/A";
     if (parsedEmployeeDOJ && isValid(parsedEmployeeDOJ)) {
@@ -1163,5 +1158,3 @@ function convertToWords(num: number): string {
 
   return words.trim();
 }
-
-    
