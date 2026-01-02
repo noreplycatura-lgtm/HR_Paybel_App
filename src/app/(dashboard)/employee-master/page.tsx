@@ -1,11 +1,9 @@
-
 "use client";
 
 import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search } from "lucide-react";
+import { PlusCircle, Upload, Edit, Trash2, Download, Loader2, Search, Users, UserCheck, UserX, Building2, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { format, parseISO, isValid, isBefore } from "date-fns";
@@ -107,7 +105,6 @@ const employeeFormSchema = z.object({
   return {};
 });
 
-
 type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
 interface ActivityLogEntry {
@@ -120,16 +117,46 @@ const addActivityLog = (message: string) => {
   try {
     const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
-    if (!Array.isArray(activities)) activities = []; 
-
+    if (!Array.isArray(activities)) activities = [];
     activities.unshift({ timestamp: new Date().toISOString(), message });
-    activities = activities.slice(0, 10); 
+    activities = activities.slice(0, 10);
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
   } catch (error) {
     console.error("Error adding to activity log:", error);
   }
 };
 
+// Stat Card Component
+function StatCard({ title, value, icon: Icon, color, subtitle }: {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  color: string;
+  subtitle?: string;
+}) {
+  const colorClasses: Record<string, { bg: string; icon: string; text: string }> = {
+    blue: { bg: 'bg-blue-50 border-blue-200', icon: 'text-blue-600 bg-blue-100', text: 'text-blue-700' },
+    green: { bg: 'bg-green-50 border-green-200', icon: 'text-green-600 bg-green-100', text: 'text-green-700' },
+    red: { bg: 'bg-red-50 border-red-200', icon: 'text-red-600 bg-red-100', text: 'text-red-700' },
+    purple: { bg: 'bg-purple-50 border-purple-200', icon: 'text-purple-600 bg-purple-100', text: 'text-purple-700' },
+  };
+  const colors = colorClasses[color] || colorClasses.blue;
+
+  return (
+    <div className={`rounded-xl border-2 ${colors.bg} p-4 transition-all hover:shadow-md`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className={`text-2xl font-bold ${colors.text}`}>{value}</p>
+          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+        </div>
+        <div className={`rounded-lg p-2.5 ${colors.icon}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EmployeeMasterPage() {
   const { toast } = useToast();
@@ -142,7 +169,6 @@ export default function EmployeeMasterPage() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
   const [isDeleteSelectedDialogOpen, setIsDeleteSelectedDialogOpen] = React.useState(false);
   const [employeeToDelete, setEmployeeToDelete] = React.useState<EmployeeDetail | null>(null);
-
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -172,12 +198,7 @@ export default function EmployeeMasterPage() {
             setEmployees(Array.isArray(parsed) ? parsed : []);
           } catch (e) {
             console.error("Error parsing employees from localStorage:", e);
-            toast({
-              title: "Storage Error",
-              description: "Could not parse employee data. List may be empty or show defaults.",
-              variant: "destructive",
-              duration: 7000,
-            });
+            toast({ title: "Storage Error", description: "Could not parse employee data.", variant: "destructive" });
             setEmployees([]);
           }
         } else {
@@ -185,17 +206,12 @@ export default function EmployeeMasterPage() {
         }
       } catch (error) {
         console.error("Error loading employees from localStorage:", error);
-        toast({
-          title: "Storage Error",
-          description: "Could not load employee data. Using empty lists.",
-          variant: "destructive",
-          duration: 7000,
-        });
+        toast({ title: "Storage Error", description: "Could not load employee data.", variant: "destructive" });
         setEmployees([]);
       }
     }
     setIsLoadingData(false);
-  }, []);
+  }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
     if (typeof window !== 'undefined') {
@@ -220,16 +236,12 @@ export default function EmployeeMasterPage() {
     } else {
       const existingEmployee = employees.find(emp => emp.code === values.code);
       if (existingEmployee) {
-        toast({
-          title: "Duplicate Employee Code",
-          description: `An employee with code '${values.code}' already exists.`,
-          variant: "destructive",
-        });
+        toast({ title: "Duplicate Employee Code", description: `An employee with code '${values.code}' already exists.`, variant: "destructive" });
         form.setError("code", { type: "manual", message: "This employee code already exists." });
         return;
       }
       const newEmployee: EmployeeDetail = {
-        id: values.code, // Simple ID for this version
+        id: values.code,
         ...values,
         dor: values.dor || undefined,
         revisedGrossMonthlySalary: values.revisedGrossMonthlySalary || undefined,
@@ -282,19 +294,14 @@ export default function EmployeeMasterPage() {
     setEmployees(updatedEmployees);
     saveEmployeesToLocalStorage(updatedEmployees);
     setSelectedEmployeeIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(employeeToDelete.id);
-        return newSet;
+      const newSet = new Set(prev);
+      newSet.delete(employeeToDelete.id);
+      return newSet;
     });
     addActivityLog(`Employee ${employeeToDelete.name} (Code: ${employeeToDelete.code}) deleted.`);
-    toast({
-        title: "Employee Removed",
-        description: `${employeeToDelete.name} has been removed.`,
-        variant: "destructive"
-    });
+    toast({ title: "Employee Removed", description: `${employeeToDelete.name} has been removed.`, variant: "destructive" });
     setEmployeeToDelete(null);
   };
-
 
   const handleUploadEmployees = (file: File) => {
     const reader = new FileReader();
@@ -307,7 +314,7 @@ export default function EmployeeMasterPage() {
       try {
         const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line);
         if (lines.length < 2) {
-          toast({ title: "Invalid File", description: "File is empty or has no data rows. Header + at least one data row expected.", variant: "destructive" });
+          toast({ title: "Invalid File", description: "File is empty or has no data rows.", variant: "destructive" });
           return;
         }
 
@@ -316,8 +323,8 @@ export default function EmployeeMasterPage() {
 
         const missingHeaders = expectedHeaders.filter(eh => !headerLine.includes(eh));
         if (missingHeaders.length > 0) {
-             toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 9000 });
-             return;
+          toast({ title: "File Header Error", description: `Missing/misnamed headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 9000 });
+          return;
         }
 
         const getIndex = (headerName: string) => headerLine.indexOf(headerName);
@@ -345,10 +352,9 @@ export default function EmployeeMasterPage() {
         dataRows.forEach((row, rowIndex) => {
           const values = row.split(',').map(v => v.trim());
 
-          if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary, idxRevisedGrossSalary, idxSalaryEffectiveDate )) {
-             console.warn(`Skipping row ${rowIndex + 2}: insufficient columns.`);
-             malformedRows++;
-             return;
+          if (values.length <= Math.max(idxStatus, idxDivision, idxCode, idxName, idxDesignation, idxHq, idxDoj, idxDor, idxGrossSalary, idxRevisedGrossSalary, idxSalaryEffectiveDate)) {
+            malformedRows++;
+            return;
           }
 
           let status = values[idxStatus] as "Active" | "Left";
@@ -367,40 +373,36 @@ export default function EmployeeMasterPage() {
           const revisedGrossMonthlySalary = revisedGrossMonthlySalaryStr ? parseFloat(revisedGrossMonthlySalaryStr) : undefined;
 
           if (!code || !name || !status || !division || !designation || !hq || !doj || isNaN(grossMonthlySalary) || grossMonthlySalary <= 0) {
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}): missing/invalid critical data.`);
             malformedRows++;
             return;
           }
           if (status !== "Active" && status !== "Left") {
-            status = "Active"; 
-            console.warn(`Row ${rowIndex + 2} (Code: ${code}): invalid status '${values[idxStatus]}'. Defaulted to 'Active'.`);
+            status = "Active";
           }
-          if (status === "Active") dor = ""; 
+          if (status === "Active") dor = "";
 
           if (codesInCsv.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) due to duplicate code within this CSV file.`);
             skippedForDuplicateInCsv++;
             return;
           }
           codesInCsv.add(code);
-          
+
           if (currentEmployeesMap.has(code)) {
-            console.warn(`Skipping row ${rowIndex + 2} (Code: ${code}) as employee code already exists in master list.`);
             skippedForExistingInMaster++;
             return;
           }
 
           let formattedDoj = doj;
-          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) { 
+          if (doj && !/^\d{4}-\d{2}-\d{2}$/.test(doj)) {
             try { const d = new Date(doj.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDoj = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
           let formattedDor = dor;
           if (dor && !/^\d{4}-\d{2}-\d{2}$/.test(dor)) {
-             try { const d = new Date(dor.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDor = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
+            try { const d = new Date(dor.replace(/[-/.]/g, '/')); if (isValid(d)) formattedDor = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
           let formattedSalaryEffectiveDate = salaryEffectiveDateStr;
           if (salaryEffectiveDateStr && !/^\d{4}-\d{2}-\d{2}$/.test(salaryEffectiveDateStr)) {
-             try { const d = new Date(salaryEffectiveDateStr.replace(/[-/.]/g, '/')); if (isValid(d)) formattedSalaryEffectiveDate = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
+            try { const d = new Date(salaryEffectiveDateStr.replace(/[-/.]/g, '/')); if (isValid(d)) formattedSalaryEffectiveDate = format(d, 'yyyy-MM-dd'); } catch { /* ignore */ }
           }
 
           const employeeData: EmployeeDetail = {
@@ -415,18 +417,18 @@ export default function EmployeeMasterPage() {
 
         let message = "";
         if (newUploadedEmployees.length > 0) {
-            const combinedEmployees = [...employees, ...newUploadedEmployees];
-            setEmployees(combinedEmployees);
-            saveEmployeesToLocalStorage(combinedEmployees);
-            message += `${addedCount} new employee(s) processed. `;
-            addActivityLog(`Employee Master CSV uploaded: ${file.name} (${addedCount} added).`);
+          const combinedEmployees = [...employees, ...newUploadedEmployees];
+          setEmployees(combinedEmployees);
+          saveEmployeesToLocalStorage(combinedEmployees);
+          message += `${addedCount} new employee(s) processed. `;
+          addActivityLog(`Employee Master CSV uploaded: ${file.name} (${addedCount} added).`);
         } else {
-            message += `No new employees were added from ${file.name}. `;
+          message += `No new employees were added from ${file.name}. `;
         }
-        
-        if (skippedForExistingInMaster > 0) message += `${skippedForExistingInMaster} row(s) skipped as employee code already exists in master. `;
-        if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} row(s) skipped due to duplicate codes within the CSV. `;
-        if (malformedRows > 0) message += `${malformedRows} row(s) skipped due to invalid/missing data. `;
+
+        if (skippedForExistingInMaster > 0) message += `${skippedForExistingInMaster} skipped (exists). `;
+        if (skippedForDuplicateInCsv > 0) message += `${skippedForDuplicateInCsv} skipped (duplicate in CSV). `;
+        if (malformedRows > 0) message += `${malformedRows} skipped (invalid data). `;
 
         toast({
           title: "Employee Upload Processed",
@@ -468,24 +470,24 @@ export default function EmployeeMasterPage() {
   const filteredEmployees = React.useMemo(() => {
     if (isLoadingData) return [];
     return employees.filter(employee => {
-        const matchesSearchTerm = (
-          employee.code.toLowerCase().includes(filterTerm.toLowerCase()) ||
-          employee.name.toLowerCase().includes(filterTerm.toLowerCase()) ||
-          (employee.designation && employee.designation.toLowerCase().includes(filterTerm.toLowerCase())) ||
-          (employee.division && employee.division.toLowerCase().includes(filterTerm.toLowerCase())) ||
-          (employee.hq && employee.hq.toLowerCase().includes(filterTerm.toLowerCase()))
-        );
-        const matchesStatusFilter = (
-            statusFilter === "all" ||
-            (statusFilter === "Active" && employee.status === "Active") ||
-            (statusFilter === "Left" && employee.status === "Left")
-        );
-        return matchesSearchTerm && matchesStatusFilter;
-      });
+      const matchesSearchTerm = (
+        employee.code.toLowerCase().includes(filterTerm.toLowerCase()) ||
+        employee.name.toLowerCase().includes(filterTerm.toLowerCase()) ||
+        (employee.designation && employee.designation.toLowerCase().includes(filterTerm.toLowerCase())) ||
+        (employee.division && employee.division.toLowerCase().includes(filterTerm.toLowerCase())) ||
+        (employee.hq && employee.hq.toLowerCase().includes(filterTerm.toLowerCase()))
+      );
+      const matchesStatusFilter = (
+        statusFilter === "all" ||
+        (statusFilter === "Active" && employee.status === "Active") ||
+        (statusFilter === "Left" && employee.status === "Left")
+      );
+      return matchesSearchTerm && matchesStatusFilter;
+    });
   }, [employees, filterTerm, statusFilter, isLoadingData]);
 
   const employeeCounts = React.useMemo(() => {
-    if (isLoadingData) return { activeCount: 0, leftCount: 0, totalCount:0 };
+    if (isLoadingData) return { activeCount: 0, leftCount: 0, totalCount: 0 };
     const activeCount = employees.filter(emp => emp.status === "Active").length;
     const leftCount = employees.filter(emp => emp.status === "Left").length;
     return { activeCount, leftCount, totalCount: employees.length };
@@ -514,7 +516,7 @@ export default function EmployeeMasterPage() {
 
   const handleDeleteSelectedEmployees = () => {
     if (selectedEmployeeIds.size === 0) {
-      toast({ title: "No Selection", description: "Please select employees to delete.", variant: "destructive"});
+      toast({ title: "No Selection", description: "Please select employees to delete.", variant: "destructive" });
       return;
     }
     setIsDeleteSelectedDialogOpen(true);
@@ -533,143 +535,186 @@ export default function EmployeeMasterPage() {
   const isAllSelected = filteredEmployees.length > 0 && selectedEmployeeIds.size === filteredEmployees.length;
   const isIndeterminate = selectedEmployeeIds.size > 0 && selectedEmployeeIds.size < filteredEmployees.length;
 
+  if (isLoadingData) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+          <p className="mt-4 text-gray-600 font-medium">Loading Employee Data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <>
-      <PageHeader
-        title="Employee Master"
-        description={`Manage all employee data. Total: ${employeeCounts.totalCount} | Active: ${employeeCounts.activeCount} | Left: ${employeeCounts.leftCount}. (Data saved in browser's local storage).`}
-      >
-        <Button variant="destructive" onClick={handleDeleteSelectedEmployees} disabled={selectedEmployeeIds.size === 0}>
-            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedEmployeeIds.size})
-        </Button>
-        <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
-            setIsEmployeeFormOpen(isOpen);
-            if (!isOpen) {
-                setEditingEmployeeId(null);
-                form.reset();
-            }
-        }}>
-          <DialogTrigger asChild>
-            <Button variant="outline" onClick={handleAddNewEmployee}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[625px]">
-            <DialogHeader>
-              <DialogTitle>{editingEmployeeId ? "Edit Employee" : "Add New Employee"}</DialogTitle>
-              <DialogDescription>
-                {editingEmployeeId ? "Update the details for this employee." : "Fill in the details for the new employee."}
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                 <fieldset>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="code" render={({ field }) => (
-                      <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="designation" render={({ field }) => (
-                      <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="status" render={({ field }) => (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-800 p-6 text-white shadow-xl">
+        <div className="absolute top-0 right-0 -mt-16 -mr-16 h-64 w-64 rounded-full bg-white/10" />
+        <div className="absolute bottom-0 left-0 -mb-16 -ml-16 h-48 w-48 rounded-full bg-white/5" />
+        <div className="relative">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
+                <Users className="h-7 w-7" />
+                Employee Master
+              </h1>
+              <p className="text-indigo-100 text-sm">Manage all employee records and salary information</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Dialog open={isEmployeeFormOpen} onOpenChange={(isOpen) => {
+                setIsEmployeeFormOpen(isOpen);
+                if (!isOpen) {
+                  setEditingEmployeeId(null);
+                  form.reset();
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleAddNewEmployee} className="bg-white text-indigo-700 hover:bg-indigo-50">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Employee
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <div className="p-2 bg-indigo-100 rounded-lg">
+                        <Users className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      {editingEmployeeId ? "Edit Employee" : "Add New Employee"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {editingEmployeeId ? "Update the details for this employee." : "Fill in the details for the new employee."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="code" render={({ field }) => (
+                          <FormItem><FormLabel>Employee Code</FormLabel><FormControl><Input {...field} disabled={!!editingEmployeeId} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="name" render={({ field }) => (
+                          <FormItem><FormLabel>Employee Name</FormLabel><FormControl><Input {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="designation" render={({ field }) => (
+                          <FormItem><FormLabel>Designation</FormLabel><FormControl><Input {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="status" render={({ field }) => (
                           <FormItem>
-                          <FormLabel>Status</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormLabel>Status</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                              <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                                <SelectTrigger className="border-gray-300"><SelectValue placeholder="Select status" /></SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                              <SelectItem value="Active">Active</SelectItem>
-                              <SelectItem value="Left">Left</SelectItem>
+                                <SelectItem value="Active">Active</SelectItem>
+                                <SelectItem value="Left">Left</SelectItem>
                               </SelectContent>
-                          </Select>
-                          <FormMessage />
+                            </Select>
+                            <FormMessage />
                           </FormItem>
-                      )} />
-                      <FormField control={form.control} name="division" render={({ field }) => (
-                      <FormItem><FormLabel>Division</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select Division" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="FMCG">FMCG</SelectItem>
-                            <SelectItem value="Wellness">Wellness</SelectItem>
-                            <SelectItem value="Office-Staff">Office-Staff</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      <FormMessage /></FormItem>
-                      )} />
-                       <FormField control={form.control} name="hq" render={({ field }) => (
-                      <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="doj" render={({ field }) => (
-                      <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                       <FormField control={form.control} name="dor" render={({ field }) => (
+                        )} />
+                        <FormField control={form.control} name="division" render={({ field }) => (
+                          <FormItem><FormLabel>Division</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl><SelectTrigger className="border-gray-300"><SelectValue placeholder="Select Division" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="FMCG">FMCG</SelectItem>
+                                <SelectItem value="Wellness">Wellness</SelectItem>
+                                <SelectItem value="Office-Staff">Office-Staff</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="hq" render={({ field }) => (
+                          <FormItem><FormLabel>HQ</FormLabel><FormControl><Input {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="doj" render={({ field }) => (
+                          <FormItem><FormLabel>Date of Joining</FormLabel><FormControl><Input type="date" {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="dor" render={({ field }) => (
                           <FormItem>
-                              <FormLabel>Date of Resignation</FormLabel>
-                              <FormControl><Input type="date" {...field} disabled={statusInForm === "Active"} /></FormControl>
-                              <FormMessage />
+                            <FormLabel>Date of Resignation</FormLabel>
+                            <FormControl><Input type="date" {...field} disabled={statusInForm === "Active"} className="border-gray-300" /></FormControl>
+                            <FormMessage />
                           </FormItem>
-                      )} />
-                      <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
-                      <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                       <FormField control={form.control} name="revisedGrossMonthlySalary" render={({ field }) => (
-                      <FormItem><FormLabel>Revised Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" placeholder="Optional" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                       <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
-                      <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                    </div>
-                 </fieldset>
-                <DialogFooter>
-                  <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit">{editingEmployeeId ? "Update Employee" : "Save Employee"}</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                        )} />
+                        <FormField control={form.control} name="grossMonthlySalary" render={({ field }) => (
+                          <FormItem><FormLabel>Gross Monthly Salary (₹)</FormLabel><FormControl><Input type="number" {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="revisedGrossMonthlySalary" render={({ field }) => (
+                          <FormItem><FormLabel>Revised Gross Salary (₹)</FormLabel><FormControl><Input type="number" placeholder="Optional" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
+                          <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </div>
+                      <DialogFooter className="pt-4">
+                        <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                        <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">{editingEmployeeId ? "Update Employee" : "Save Employee"}</Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
 
-        <FileUploadButton
-            onFileUpload={handleUploadEmployees}
-            buttonText="Upload Employees (CSV)"
-            acceptedFileTypes=".csv"
-        />
-        <Button variant="link" onClick={handleDownloadSampleTemplate} className="p-0 h-auto">
-          <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
-        </Button>
-      </PageHeader>
+              <FileUploadButton
+                onFileUpload={handleUploadEmployees}
+                buttonText="Upload CSV"
+                acceptedFileTypes=".csv"
+                variant="secondary"
+                className="bg-white/20 text-white border-white/30 hover:bg-white/30"
+              />
+              <Button variant="ghost" onClick={handleDownloadSampleTemplate} className="text-white hover:bg-white/20">
+                <Download className="mr-2 h-4 w-4" /> Template
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <Card className="shadow-md hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Total Employees" value={employeeCounts.totalCount} icon={Users} color="blue" />
+        <StatCard title="Active Employees" value={employeeCounts.activeCount} icon={UserCheck} color="green" />
+        <StatCard title="Left Employees" value={employeeCounts.leftCount} icon={UserX} color="red" />
+        <StatCard title="Divisions" value="3" icon={Building2} color="purple" subtitle="FMCG, Wellness, Office" />
+      </div>
+
+      {/* Employee Table Card */}
+      <Card className="shadow-lg border-0">
+        <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg border-b">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
-              <CardTitle>Employee List</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="h-5 w-5 text-indigo-600" />
+                Employee List
+              </CardTitle>
               <CardDescription>
-                {`Displaying ${filteredEmployees.length} of ${employees.length} employees.`}
+                Showing {filteredEmployees.length} of {employees.length} employees
               </CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+              {selectedEmployeeIds.size > 0 && (
+                <Button variant="destructive" onClick={handleDeleteSelectedEmployees} size="sm">
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete ({selectedEmployeeIds.size})
+                </Button>
+              )}
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "Active" | "Left")}>
-                  <SelectTrigger className="w-full sm:w-[150px]">
-                      <SelectValue placeholder="Filter by Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="Active">Active Only</SelectItem>
-                      <SelectItem value="Left">Left Only</SelectItem>
-                  </SelectContent>
+                <SelectTrigger className="w-full sm:w-[140px] bg-white">
+                  <SelectValue placeholder="Filter Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Active">Active Only</SelectItem>
+                  <SelectItem value="Left">Left Only</SelectItem>
+                </SelectContent>
               </Select>
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Filter by Code, Name, Division, HQ..."
-                  className="pl-8"
+                  placeholder="Search employees..."
+                  className="pl-8 bg-white"
                   value={filterTerm}
                   onChange={(e) => setFilterTerm(e.target.value)}
                 />
@@ -677,145 +722,145 @@ export default function EmployeeMasterPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">
-                   <Checkbox
-                    checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
-                    onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
-                    aria-label="Select all visible rows"
-                    disabled={filteredEmployees.length === 0}
-                  />
-                </TableHead>
-                <TableHead className="min-w-[100px]">Status</TableHead>
-                <TableHead className="min-w-[120px]">Division</TableHead>
-                <TableHead className="min-w-[80px]">Code</TableHead>
-                <TableHead className="min-w-[150px]">Name</TableHead>
-                <TableHead className="min-w-[150px]">Designation</TableHead>
-                <TableHead className="min-w-[120px]">HQ</TableHead>
-                <TableHead className="min-w-[100px]">DOJ</TableHead>
-                <TableHead className="min-w-[100px]">DOR</TableHead>
-                <TableHead className="min-w-[150px] text-right">Gross Salary (₹)</TableHead>
-                <TableHead className="min-w-[150px] text-right">Revised Salary (₹)</TableHead>
-                <TableHead className="min-w-[120px]">Effective Date</TableHead>
-                <TableHead className="text-center min-w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoadingData ? (
-                 <TableRow><TableCell colSpan={13} className="text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-              ) : filteredEmployees.length > 0 ? (
-                filteredEmployees.map((employee) => (
-                <TableRow key={employee.id} data-state={selectedEmployeeIds.has(employee.id) ? "selected" : ""}>
-                  <TableCell>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50 hover:bg-gray-50">
+                  <TableHead className="w-[50px]">
                     <Checkbox
-                      checked={selectedEmployeeIds.has(employee.id)}
-                      onCheckedChange={(checked) => handleSelectEmployee(employee.id, !!checked)}
-                      aria-label={`Select row for ${employee.name}`}
+                      checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
+                      onCheckedChange={(checkedState) => handleSelectAll(checkedState as boolean)}
+                      aria-label="Select all visible rows"
+                      disabled={filteredEmployees.length === 0}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={employee.status === "Active" ? "default" : "secondary"}>
-                      {employee.status || "N/A"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{employee.division || "N/A"}</TableCell>
-                  <TableCell>{employee.code}</TableCell>
-                  <TableCell>{employee.name}</TableCell>
-                  <TableCell>{employee.designation}</TableCell>
-                  <TableCell>{employee.hq || "N/A"}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      if (employee.doj && typeof employee.doj === 'string' && employee.doj.trim() !== '') {
-                        try {
-                          const parsedDate = parseISO(employee.doj);
-                          return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) { return employee.doj; }
-                      }
-                      return 'N/A';
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                     {(() => {
-                      if (employee.dor && typeof employee.dor === 'string' && employee.dor.trim() !== '') {
-                        try {
-                          const parsedDate = parseISO(employee.dor);
-                          return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) { return employee.dor; }
-                      }
-                      return 'N/A';
-                    })()}
-                  </TableCell>
-                  <TableCell className="text-right">{employee.grossMonthlySalary ? employee.grossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
-                  <TableCell className="text-right">{employee.revisedGrossMonthlySalary ? employee.revisedGrossMonthlySalary.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      if (employee.salaryEffectiveDate && typeof employee.salaryEffectiveDate === 'string' && employee.salaryEffectiveDate.trim() !== '') {
-                        try {
-                          const parsedDate = parseISO(employee.salaryEffectiveDate);
-                          return format(parsedDate, "dd-MMM-yy");
-                        } catch (e) { return employee.salaryEffectiveDate; }
-                      }
-                      return 'N/A';
-                    })()}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployeeClick(employee)} className="text-destructive hover:text-destructive/80">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                  </TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold">Division</TableHead>
+                  <TableHead className="font-semibold">Code</TableHead>
+                  <TableHead className="font-semibold">Name</TableHead>
+                  <TableHead className="font-semibold">Designation</TableHead>
+                  <TableHead className="font-semibold">HQ</TableHead>
+                  <TableHead className="font-semibold">DOJ</TableHead>
+                  <TableHead className="font-semibold">DOR</TableHead>
+                  <TableHead className="font-semibold text-right">Gross Salary</TableHead>
+                  <TableHead className="font-semibold text-right">Revised Salary</TableHead>
+                  <TableHead className="font-semibold">Effective Date</TableHead>
+                  <TableHead className="text-center font-semibold">Actions</TableHead>
                 </TableRow>
-              ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={13} className="text-center text-muted-foreground">
-                    {employees.length === 0 ? "No employees found. Please add an employee to begin." : "No employees match your filters."}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredEmployees.length > 0 ? (
+                  filteredEmployees.map((employee) => (
+                    <TableRow key={employee.id} className="hover:bg-indigo-50/50" data-state={selectedEmployeeIds.has(employee.id) ? "selected" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedEmployeeIds.has(employee.id)}
+                          onCheckedChange={(checked) => handleSelectEmployee(employee.id, !!checked)}
+                          aria-label={`Select row for ${employee.name}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={employee.status === "Active" ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-red-100 text-red-700 hover:bg-red-100"}>
+                          {employee.status || "N/A"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-normal">{employee.division || "N/A"}</Badge>
+                      </TableCell>
+                      <TableCell className="font-medium text-indigo-600">{employee.code}</TableCell>
+                      <TableCell className="font-medium">{employee.name}</TableCell>
+                      <TableCell>{employee.designation}</TableCell>
+                      <TableCell>{employee.hq || "N/A"}</TableCell>
+                      <TableCell>
+                        {employee.doj && isValid(parseISO(employee.doj)) ? format(parseISO(employee.doj), "dd-MMM-yy") : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {employee.dor && isValid(parseISO(employee.dor)) ? format(parseISO(employee.dor), "dd-MMM-yy") : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        ₹{employee.grossMonthlySalary?.toLocaleString('en-IN') || 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-green-600">
+                        {employee.revisedGrossMonthlySalary ? `₹${employee.revisedGrossMonthlySalary.toLocaleString('en-IN')}` : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {employee.salaryEffectiveDate && isValid(parseISO(employee.salaryEffectiveDate)) ? format(parseISO(employee.salaryEffectiveDate), "dd-MMM-yy") : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee.id)} className="h-8 w-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteEmployeeClick(employee)} className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={13} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <Users className="h-12 w-12 text-gray-300" />
+                        <p className="text-gray-500 font-medium">
+                          {employees.length === 0 ? "No employees found" : "No employees match your filters"}
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          {employees.length === 0 ? "Click 'Add Employee' to get started" : "Try adjusting your search or filter"}
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
+      {/* Delete Selected Dialog */}
       <AlertDialog open={isDeleteSelectedDialogOpen} onOpenChange={setIsDeleteSelectedDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Confirm Deletion
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedEmployeeIds.size} selected employee(s)? This action cannot be undone.
+              Are you sure you want to delete <span className="font-semibold">{selectedEmployeeIds.size}</span> selected employee(s)? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteSelectedEmployees} variant="destructive">
+            <AlertDialogAction onClick={confirmDeleteSelectedEmployees} className="bg-red-600 hover:bg-red-700">
               Delete Selected
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!employeeToDelete} onOpenChange={(isOpen) => { if(!isOpen) setEmployeeToDelete(null); }}>
+      {/* Delete Single Employee Dialog */}
+      <AlertDialog open={!!employeeToDelete} onOpenChange={(isOpen) => { if (!isOpen) setEmployeeToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Confirm Deletion
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete employee {employeeToDelete?.name} (Code: {employeeToDelete?.code})? This action cannot be undone.
+              Are you sure you want to delete employee <span className="font-semibold">{employeeToDelete?.name}</span> (Code: {employeeToDelete?.code})? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setEmployeeToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteSingleEmployee} variant="destructive">
+            <AlertDialogAction onClick={confirmDeleteSingleEmployee} className="bg-red-600 hover:bg-red-700">
               Delete Employee
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }

@@ -2,15 +2,18 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Upload } from "lucide-react";
 import * as React from "react";
 
 interface FileUploadButtonProps {
   onFileUpload: (file: File) => void;
-  acceptedFileTypes?: string; // e.g., ".xlsx, .xls"
+  acceptedFileTypes?: string;
   buttonText?: string;
   icon?: React.ReactNode;
+  disabled?: boolean;
+  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+  className?: string;
+  title?: string;
 }
 
 export function FileUploadButton({
@@ -18,6 +21,10 @@ export function FileUploadButton({
   acceptedFileTypes = ".xlsx, .xls, .csv",
   buttonText = "Upload File",
   icon = <Upload className="mr-2 h-4 w-4" />,
+  disabled = false,
+  variant = "outline",
+  className = "",
+  title,
 }: FileUploadButtonProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -25,7 +32,6 @@ export function FileUploadButton({
     const file = event.target.files?.[0];
     if (file) {
       onFileUpload(file);
-      // Reset file input to allow uploading the same file again
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -33,7 +39,9 @@ export function FileUploadButton({
   };
 
   const handleButtonClick = () => {
-    fileInputRef.current?.click();
+    if (!disabled) {
+      fileInputRef.current?.click();
+    }
   };
 
   return (
@@ -45,8 +53,15 @@ export function FileUploadButton({
         accept={acceptedFileTypes}
         onChange={handleFileChange}
         id="file-upload-input"
+        disabled={disabled}
       />
-      <Button onClick={handleButtonClick} variant="outline">
+      <Button 
+        onClick={handleButtonClick} 
+        variant={variant}
+        disabled={disabled}
+        className={className}
+        title={title}
+      >
         {icon}
         {buttonText}
       </Button>

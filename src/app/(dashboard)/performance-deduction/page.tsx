@@ -4,7 +4,6 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,9 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PlusCircle, Upload, Trash2, Download, Edit } from "lucide-react";
+import { Loader2, PlusCircle, Upload, Trash2, Download, TrendingDown, Users, IndianRupee, Calendar, AlertTriangle, FileText } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
-import { format, parseISO, isValid } from "date-fns";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
 const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
@@ -26,7 +24,7 @@ const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 interface PerformanceDeductionEntry {
-  id: string; 
+  id: string;
   employeeCode: string;
   employeeName: string;
   designation: string;
@@ -55,7 +53,6 @@ const addActivityLog = (message: string) => {
     const storedActivities = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
     let activities: ActivityLogEntry[] = storedActivities ? JSON.parse(storedActivities) : [];
     if (!Array.isArray(activities)) activities = [];
-
     activities.unshift({ timestamp: new Date().toISOString(), message });
     activities = activities.slice(0, 10);
     localStorage.setItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY, JSON.stringify(activities));
@@ -63,6 +60,40 @@ const addActivityLog = (message: string) => {
     console.error("Error adding to activity log:", error);
   }
 };
+
+// Stat Card Component
+function StatCard({ title, value, icon: Icon, color, subtitle }: {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  color: string;
+  subtitle?: string;
+}) {
+  const colorClasses: Record<string, { bg: string; icon: string; text: string }> = {
+    blue: { bg: 'bg-blue-50 border-blue-200', icon: 'text-blue-600 bg-blue-100', text: 'text-blue-700' },
+    green: { bg: 'bg-green-50 border-green-200', icon: 'text-green-600 bg-green-100', text: 'text-green-700' },
+    red: { bg: 'bg-red-50 border-red-200', icon: 'text-red-600 bg-red-100', text: 'text-red-700' },
+    purple: { bg: 'bg-purple-50 border-purple-200', icon: 'text-purple-600 bg-purple-100', text: 'text-purple-700' },
+    orange: { bg: 'bg-orange-50 border-orange-200', icon: 'text-orange-600 bg-orange-100', text: 'text-orange-700' },
+    pink: { bg: 'bg-pink-50 border-pink-200', icon: 'text-pink-600 bg-pink-100', text: 'text-pink-700' },
+  };
+  const colors = colorClasses[color] || colorClasses.blue;
+
+  return (
+    <div className={`rounded-xl border-2 ${colors.bg} p-4 transition-all hover:shadow-md`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className={`text-2xl font-bold ${colors.text}`}>{value}</p>
+          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+        </div>
+        <div className={`rounded-lg p-2.5 ${colors.icon}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PerformanceDeductionPage() {
   const { toast } = useToast();
@@ -73,9 +104,6 @@ export default function PerformanceDeductionPage() {
   const [deductionToDelete, setDeductionToDelete] = React.useState<PerformanceDeductionEntry | null>(null);
   const [selectedDeductionIds, setSelectedDeductionIds] = React.useState<Set<string>>(new Set());
   const [isDeleteSelectedDialogOpen, setIsDeleteSelectedDialogOpen] = React.useState(false);
-  
-  const [currentActionYear, setCurrentActionYear] = React.useState<number>(new Date().getFullYear());
-
 
   const form = useForm<DeductionFormValues>({
     resolver: zodResolver(deductionFormSchema),
@@ -86,7 +114,8 @@ export default function PerformanceDeductionPage() {
       amount: 0,
     },
   });
-  
+
+  // Load data from localStorage
   React.useEffect(() => {
     setIsLoadingData(true);
     if (typeof window !== 'undefined') {
@@ -105,6 +134,25 @@ export default function PerformanceDeductionPage() {
     }
     setIsLoadingData(false);
   }, []);
+
+  // Calculate stats
+  const deductionStats = React.useMemo(() => {
+    const totalAmount = performanceDeductions.reduce((sum, d) => sum + d.amount, 0);
+    const uniqueEmployees = new Set(performanceDeductions.map(d => d.employeeCode)).size;
+    const currentMonth = months[new Date().getMonth()];
+    const currentYear = new Date().getFullYear();
+    const thisMonthDeductions = performanceDeductions.filter(
+      d => d.month === currentMonth && d.year === currentYear
+    );
+    const thisMonthTotal = thisMonthDeductions.reduce((sum, d) => sum + d.amount, 0);
+
+    return {
+      totalRecords: performanceDeductions.length,
+      totalAmount,
+      uniqueEmployees,
+      thisMonthTotal,
+    };
+  }, [performanceDeductions]);
 
   const saveDeductionsToLocalStorage = (deductions: PerformanceDeductionEntry[]) => {
     if (typeof window !== 'undefined') {
@@ -126,10 +174,10 @@ export default function PerformanceDeductionPage() {
       return;
     }
 
-    const uniqueId = `${values.employeeCode}-${values.month}-${values.year}`; 
+    const uniqueId = `${values.employeeCode}-${values.month}-${values.year}`;
 
     const newDeduction: PerformanceDeductionEntry = {
-      id: uniqueId, 
+      id: uniqueId,
       employeeCode: values.employeeCode,
       employeeName: selectedEmployee.name,
       designation: selectedEmployee.designation,
@@ -147,10 +195,10 @@ export default function PerformanceDeductionPage() {
       updatedDeductions = [...performanceDeductions, newDeduction];
       addActivityLog(`Performance deduction of ${values.amount} for ${selectedEmployee.name} (${values.month} ${values.year}) added.`);
     }
-    
+
     setPerformanceDeductions(updatedDeductions);
     saveDeductionsToLocalStorage(updatedDeductions);
-    toast({ title: "Deduction Saved", description: `Performance deduction for ${selectedEmployee.name} for ${values.month} ${values.year} saved.` });
+    toast({ title: "✅ Deduction Saved", description: `Performance deduction for ${selectedEmployee.name} saved.` });
     form.reset({ employeeCode: "", month: months[new Date().getMonth()], year: new Date().getFullYear(), amount: 0 });
     setIsSaving(false);
   };
@@ -191,7 +239,7 @@ export default function PerformanceDeductionPage() {
           return;
         }
         const headersFromFile = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/\s+/g, ''));
-        const expectedHeaders = ["code", "name", "designation", "amount", "month", "year"]; 
+        const expectedHeaders = ["code", "name", "designation", "amount", "month", "year"];
         const missingHeaders = expectedHeaders.filter(eh => !headersFromFile.includes(eh));
         if (missingHeaders.length > 0) {
           toast({ title: "File Header Error", description: `Missing headers: ${missingHeaders.join(', ')}.`, variant: "destructive", duration: 7000 });
@@ -214,52 +262,52 @@ export default function PerformanceDeductionPage() {
           const amount = parseFloat(amountStr);
           const year = parseInt(yearStr);
 
-          if (!code || !monthStr || isNaN(year) || year < 1900 || year > 2200 || isNaN(amount) || amount <= 0 || !months.some(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0,3)))) {
-            console.warn(`Skipping row ${rowIndex + 1} in CSV: invalid or missing data (Code: ${code}, Amount: ${amountStr}, Month: ${monthStr}, Year: ${yearStr}).`);
-            skippedCount++;
-            return;
-          }
-          
-          const matchedMonth = months.find(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0,3))) || monthStr;
-          const employeeDetails = employeeMasterList.find(emp => emp.code === code);
-          if (!employeeDetails) {
-            console.warn(`Skipping row ${rowIndex + 1}: Employee code '${code}' not found in master list.`);
+          if (!code || !monthStr || isNaN(year) || year < 1900 || year > 2200 || isNaN(amount) || amount <= 0 || !months.some(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0, 3)))) {
+            console.warn(`Skipping row ${rowIndex + 1} in CSV: invalid or missing data.`);
             skippedCount++;
             return;
           }
 
-          const deductionId = `${code}-${matchedMonth}-${year}`; 
+          const matchedMonth = months.find(m => m.toLowerCase().startsWith(monthStr.toLowerCase().substring(0, 3))) || monthStr;
+          const employeeDetails = employeeMasterList.find(emp => emp.code === code);
+          if (!employeeDetails) {
+            console.warn(`Skipping row ${rowIndex + 1}: Employee code '${code}' not found.`);
+            skippedCount++;
+            return;
+          }
+
+          const deductionId = `${code}-${matchedMonth}-${year}`;
           const deductionEntry: PerformanceDeductionEntry = {
-            id: deductionId, 
+            id: deductionId,
             employeeCode: code,
-            employeeName: employeeDetails.name, 
+            employeeName: employeeDetails.name,
             designation: employeeDetails.designation,
             month: matchedMonth,
             year: year,
             amount: amount,
           };
-          
+
           const existingIndex = performanceDeductions.findIndex(d => d.id === deductionEntry.id);
           if (existingIndex > -1) {
             updatedCount++;
           } else {
             addedCount++;
           }
-          newUploadedDeductions.push(deductionEntry); 
+          newUploadedDeductions.push(deductionEntry);
         });
 
         if (newUploadedDeductions.length > 0) {
           const updatedDeductionsMap = new Map(performanceDeductions.map(d => [d.id, d]));
           newUploadedDeductions.forEach(nd => {
-            updatedDeductionsMap.set(nd.id, nd); 
+            updatedDeductionsMap.set(nd.id, nd);
           });
           const finalDeductions = Array.from(updatedDeductionsMap.values());
           setPerformanceDeductions(finalDeductions);
           saveDeductionsToLocalStorage(finalDeductions);
           addActivityLog(`Performance deductions CSV uploaded: ${file.name} (${addedCount} added, ${updatedCount} updated).`);
-          toast({ title: "Deductions Uploaded", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''} Data saved to local storage.` });
+          toast({ title: "✅ Deductions Uploaded", description: `${addedCount} added, ${updatedCount} updated. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}` });
         } else {
-          toast({ title: "No Valid Data", description: `No valid deduction records found in the uploaded CSV. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
+          toast({ title: "No Valid Data", description: `No valid deduction records found. ${skippedCount > 0 ? `${skippedCount} rows skipped.` : ''}`, variant: "destructive" });
         }
 
       } catch (error) {
@@ -280,7 +328,7 @@ export default function PerformanceDeductionPage() {
     setPerformanceDeductions(updatedDeductions);
     saveDeductionsToLocalStorage(updatedDeductions);
     addActivityLog(`Performance deduction for ${deductionToDelete.employeeName} (${deductionToDelete.month} ${deductionToDelete.year}) deleted.`);
-    toast({ title: "Deduction Deleted", description: `Deduction for ${deductionToDelete.employeeName} for ${deductionToDelete.month} ${deductionToDelete.year} deleted.`, variant: "destructive" });
+    toast({ title: "Deduction Deleted", description: `Deduction for ${deductionToDelete.employeeName} deleted.`, variant: "destructive" });
     setDeductionToDelete(null);
   };
 
@@ -304,7 +352,7 @@ export default function PerformanceDeductionPage() {
       setSelectedDeductionIds(new Set());
     }
   };
-  
+
   const handleDeleteSelectedDeductions = () => {
     if (selectedDeductionIds.size === 0) {
       toast({ title: "No Deductions Selected", description: "Please select deductions to delete.", variant: "destructive" });
@@ -322,7 +370,7 @@ export default function PerformanceDeductionPage() {
     setSelectedDeductionIds(new Set());
     setIsDeleteSelectedDialogOpen(false);
   };
-  
+
   const availableYears = React.useMemo(() => {
     const currentYr = new Date().getFullYear();
     return Array.from({ length: 5 }, (_, i) => currentYr - i);
@@ -331,30 +379,98 @@ export default function PerformanceDeductionPage() {
   const isAllSelected = performanceDeductions.length > 0 && selectedDeductionIds.size === performanceDeductions.length;
   const isIndeterminate = selectedDeductionIds.size > 0 && selectedDeductionIds.size < performanceDeductions.length;
 
-
+  // Loading State
   if (isLoadingData) {
-    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-pink-600 mx-auto" />
+          <p className="mt-4 text-gray-600 font-medium">Loading Performance Deductions...</p>
+        </div>
+      </div>
+    );
   }
 
+  // ==================== MAIN JSX RETURN ====================
   return (
-    <>
-      <PageHeader title="Performance Deductions Management" description="Manage employee performance-related salary deductions. (Data saved in browser's local storage).">
-        <Button
-          variant="destructive"
-          onClick={handleDeleteSelectedDeductions}
-          disabled={selectedDeductionIds.size === 0}
-        >
-          <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedDeductionIds.size})
-        </Button>
-      </PageHeader>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-pink-600 via-rose-600 to-pink-800 p-6 text-white shadow-xl">
+        <div className="absolute top-0 right-0 -mt-16 -mr-16 h-64 w-64 rounded-full bg-white/10" />
+        <div className="absolute bottom-0 left-0 -mb-16 -ml-16 h-48 w-48 rounded-full bg-white/5" />
+        <div className="relative">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
+                <TrendingDown className="h-7 w-7" />
+                Performance Deductions
+              </h1>
+              <p className="text-pink-100 text-sm">Manage employee performance-related salary deductions</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="destructive"
+                onClick={handleDeleteSelectedDeductions}
+                disabled={selectedDeductionIds.size === 0}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedDeductionIds.size})
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Deductions"
+          value={deductionStats.totalRecords}
+          icon={FileText}
+          color="blue"
+          subtitle="All records"
+        />
+        <StatCard
+          title="Total Amount"
+          value={`₹${deductionStats.totalAmount.toLocaleString('en-IN')}`}
+          icon={IndianRupee}
+          color="red"
+          subtitle="All time"
+        />
+        <StatCard
+          title="Employees Affected"
+          value={deductionStats.uniqueEmployees}
+          icon={Users}
+          color="purple"
+          subtitle="Unique employees"
+        />
+        <StatCard
+          title="This Month"
+          value={`₹${deductionStats.thisMonthTotal.toLocaleString('en-IN')}`}
+          icon={Calendar}
+          color="pink"
+          subtitle={months[new Date().getMonth()]}
+        />
+      </div>
+
+      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Side - Add Form & Upload */}
         <div className="lg:col-span-1 space-y-6">
-          <Card className="shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle>Add Performance Deduction</CardTitle>
-              <CardDescription>Enter details for a new performance deduction.</CardDescription>
+          {/* Add Deduction Form */}
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-t-lg border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-pink-100 rounded-lg">
+                  <PlusCircle className="h-5 w-5 text-pink-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Add Deduction</CardTitle>
+                  <CardDescription>Enter new performance deduction</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleSaveDeduction)} className="space-y-4">
                   <FormField
@@ -365,17 +481,17 @@ export default function PerformanceDeductionPage() {
                         <FormLabel>Employee</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="border-gray-300">
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {employeeMasterList.filter(emp => emp.status === "Active").map(emp => (
                               <SelectItem key={emp.code} value={emp.code}>
-                                {emp.code} - {emp.name} ({emp.designation})
+                                {emp.code} - {emp.name}
                               </SelectItem>
                             ))}
-                             {employeeMasterList.length === 0 && <SelectItem value="" disabled>No employees loaded</SelectItem>}
+                            {employeeMasterList.length === 0 && <SelectItem value="" disabled>No employees loaded</SelectItem>}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -391,7 +507,7 @@ export default function PerformanceDeductionPage() {
                           <FormLabel>Month</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger><SelectValue placeholder="Select Month" /></SelectTrigger>
+                              <SelectTrigger className="border-gray-300"><SelectValue placeholder="Month" /></SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
@@ -407,9 +523,9 @@ export default function PerformanceDeductionPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Year</FormLabel>
-                           <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
+                          <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString()}>
                             <FormControl>
-                              <SelectTrigger><SelectValue placeholder="Select Year" /></SelectTrigger>
+                              <SelectTrigger className="border-gray-300"><SelectValue placeholder="Year" /></SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {availableYears.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
@@ -427,13 +543,13 @@ export default function PerformanceDeductionPage() {
                       <FormItem>
                         <FormLabel>Deduction Amount (₹)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="Enter amount" {...field} />
+                          <Input type="number" placeholder="Enter amount" {...field} className="border-gray-300" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" disabled={isSaving} className="w-full">
+                  <Button type="submit" disabled={isSaving} className="w-full bg-pink-600 hover:bg-pink-700">
                     {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
                     Save Deduction
                   </Button>
@@ -442,121 +558,170 @@ export default function PerformanceDeductionPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle>Upload Deductions via CSV</CardTitle>
-              <CardDescription>Columns: Code, Name, Designation, Amount, Month (e.g., Jan), Year (YYYY).</CardDescription>
+          {/* Upload CSV Card */}
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gray-200 rounded-lg">
+                  <Upload className="h-5 w-5 text-gray-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Upload via CSV</CardTitle>
+                  <CardDescription>Bulk upload deductions</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-6 space-y-4">
               <FileUploadButton
                 onFileUpload={handleUploadDeductionsCSV}
                 buttonText="Upload Deductions CSV"
                 acceptedFileTypes=".csv"
                 icon={<Upload className="mr-2 h-4 w-4" />}
+                variant="outline"
+                className="w-full"
               />
-              <Button variant="link" onClick={handleDownloadTemplate} className="p-0 h-auto">
-                <Download className="mr-2 h-4 w-4" /> Download Sample Template (CSV)
+              <Button variant="ghost" onClick={handleDownloadTemplate} className="w-full text-pink-600 hover:text-pink-700 hover:bg-pink-50">
+                <Download className="mr-2 h-4 w-4" /> Download Template
               </Button>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+                <p className="font-medium mb-1">📋 CSV Format:</p>
+                <p>Code, Name, Designation, Amount, Month, Year</p>
+              </div>
             </CardContent>
           </Card>
         </div>
 
+        {/* Right Side - Deductions Table */}
         <div className="lg:col-span-2">
-          <Card className="shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle>Saved Performance Deductions</CardTitle>
-              <CardDescription>List of all recorded performance deductions.</CardDescription>
+          <Card className="shadow-lg border-0">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingDown className="h-5 w-5 text-pink-600" />
+                Saved Performance Deductions
+              </CardTitle>
+              <CardDescription>
+                {performanceDeductions.length} deduction records stored locally
+              </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">
-                      <Checkbox
-                        checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
-                        onCheckedChange={(checkedState) => handleSelectAllDeductions(checkedState as boolean)}
-                        aria-label="Select all visible deductions"
-                        disabled={performanceDeductions.length === 0}
-                      />
-                    </TableHead>
-                    <TableHead className="min-w-[80px]">Code</TableHead>
-                    <TableHead className="min-w-[150px]">Name</TableHead>
-                    <TableHead className="min-w-[150px]">Designation</TableHead>
-                    <TableHead className="min-w-[100px]">Period</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Amount (₹)</TableHead>
-                    <TableHead className="text-center min-w-[80px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {performanceDeductions.length > 0 ? (
-                    performanceDeductions.sort((a,b) => b.year - a.year || months.indexOf(b.month) - months.indexOf(a.month)).map((deduction) => (
-                      <TableRow key={deduction.id} data-state={selectedDeductionIds.has(deduction.id) ? "selected" : ""}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedDeductionIds.has(deduction.id)}
-                            onCheckedChange={(checked) => handleSelectDeduction(deduction.id, !!checked)}
-                            aria-label={`Select deduction for ${deduction.employeeName}`}
-                          />
-                        </TableCell>
-                        <TableCell>{deduction.employeeCode}</TableCell>
-                        <TableCell>{deduction.employeeName}</TableCell>
-                        <TableCell>{deduction.designation}</TableCell>
-                        <TableCell>{deduction.month} {deduction.year}</TableCell>
-                        <TableCell className="text-right">{deduction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-center">
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteDeductionClick(deduction)} className="text-destructive hover:text-destructive/80">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 hover:bg-gray-50">
+                      <TableHead className="w-[50px]">
+                        <Checkbox
+                          checked={isAllSelected ? true : (isIndeterminate ? 'indeterminate' : false)}
+                          onCheckedChange={(checkedState) => handleSelectAllDeductions(checkedState as boolean)}
+                          aria-label="Select all deductions"
+                          disabled={performanceDeductions.length === 0}
+                        />
+                      </TableHead>
+                      <TableHead className="font-semibold">Code</TableHead>
+                      <TableHead className="font-semibold">Name</TableHead>
+                      <TableHead className="font-semibold">Designation</TableHead>
+                      <TableHead className="font-semibold">Period</TableHead>
+                      <TableHead className="text-right font-semibold">Amount (₹)</TableHead>
+                      <TableHead className="text-center font-semibold w-[80px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {performanceDeductions.length > 0 ? (
+                      performanceDeductions
+                        .sort((a, b) => b.year - a.year || months.indexOf(b.month) - months.indexOf(a.month))
+                        .map((deduction) => (
+                          <TableRow key={deduction.id} className="hover:bg-pink-50/50" data-state={selectedDeductionIds.has(deduction.id) ? "selected" : ""}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedDeductionIds.has(deduction.id)}
+                                onCheckedChange={(checked) => handleSelectDeduction(deduction.id, !!checked)}
+                                aria-label={`Select deduction for ${deduction.employeeName}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium text-pink-600">{deduction.employeeCode}</TableCell>
+                            <TableCell className="font-medium">{deduction.employeeName}</TableCell>
+                            <TableCell>{deduction.designation}</TableCell>
+                            <TableCell>
+                              <span className="bg-gray-100 px-2 py-1 rounded text-sm">
+                                {deduction.month.substring(0, 3)} {deduction.year}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-red-600">
+                              ₹{deduction.amount.toLocaleString('en-IN')}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteDeductionClick(deduction)}
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <AlertTriangle className="h-12 w-12 text-gray-300" />
+                            <p className="text-gray-500 font-medium">No performance deductions recorded</p>
+                            <p className="text-gray-400 text-sm">Add deductions using the form or upload CSV</p>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        No performance deductions recorded yet. (Data saved in browser's local storage).
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      <AlertDialog open={!!deductionToDelete} onOpenChange={(isOpen) => { if(!isOpen) setDeductionToDelete(null); }}>
+      {/* ==================== DIALOGS ==================== */}
+
+      {/* Delete Single Deduction Dialog */}
+      <AlertDialog open={!!deductionToDelete} onOpenChange={(isOpen) => { if (!isOpen) setDeductionToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Confirm Deletion
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the performance deduction of ₹{deductionToDelete?.amount.toLocaleString()} for {deductionToDelete?.employeeName} for {deductionToDelete?.month} {deductionToDelete?.year}? This action cannot be undone.
+              Are you sure you want to delete the performance deduction of <span className="font-semibold">₹{deductionToDelete?.amount.toLocaleString()}</span> for <span className="font-semibold">{deductionToDelete?.employeeName}</span> ({deductionToDelete?.month} {deductionToDelete?.year})?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeductionToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteDeduction} variant="destructive">
+            <AlertDialogAction onClick={confirmDeleteDeduction} className="bg-red-600 hover:bg-red-700">
               Delete Deduction
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Delete Multiple Deductions Dialog */}
       <AlertDialog open={isDeleteSelectedDialogOpen} onOpenChange={setIsDeleteSelectedDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Confirm Deletion
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedDeductionIds.size} selected performance deduction(s)? This action cannot be undone.
+              Are you sure you want to delete <span className="font-semibold">{selectedDeductionIds.size}</span> selected performance deduction(s)? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteSelectedDeductions} variant="destructive">
+            <AlertDialogAction onClick={confirmDeleteSelectedDeductions} className="bg-red-600 hover:bg-red-700">
               Delete Selected
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }

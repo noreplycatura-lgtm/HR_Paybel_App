@@ -1,12 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Download, Eye, Loader2, Printer, XCircle, Send, CheckCircle, AlertCircle, CloudUpload } from "lucide-react";
+import { Download, Eye, Loader2, Printer, XCircle, Send, CheckCircle, AlertCircle, CloudUpload, FileText } from "lucide-react";
 import { getDaysInMonth, parseISO, isValid, format, getMonth, getYear, addMonths, startOfMonth, endOfMonth, isBefore, isEqual, isAfter } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import html2canvas from 'html2canvas';
@@ -1453,33 +1452,59 @@ export default function SalarySlipPage() {
   // ==================== MAIN RENDER ====================
   return (
     <>
-      <PageHeader title="Salary Slip Generator" description="Generate and download monthly salary slips.">
-        <Button onClick={handleDownloadAllSummaries} disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} variant="outline">
+      {/* Header */}
+<div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600 via-teal-600 to-cyan-800 p-6 text-white shadow-xl mb-6">
+  <div className="absolute top-0 right-0 -mt-16 -mr-16 h-64 w-64 rounded-full bg-white/10" />
+  <div className="absolute bottom-0 left-0 -mb-16 -ml-16 h-48 w-48 rounded-full bg-white/5" />
+  <div className="relative">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
+          <FileText className="h-7 w-7" />
+          Salary Slip Generator
+        </h1>
+        <p className="text-cyan-100 text-sm">Generate and download monthly salary slips</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button 
+          onClick={handleDownloadAllSummaries} 
+          disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} 
+          variant="secondary" 
+          className="bg-white/20 text-white border-white/30 hover:bg-white/30"
+        >
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-          Download Summaries (CSV)
+          Summaries (CSV)
         </Button>
-        <Button onClick={handlePrintAllSlips} disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} variant="outline">
+        <Button 
+          onClick={handlePrintAllSlips} 
+          disabled={!selectedMonth || !selectedYear || !selectedDivision || isLoading} 
+          variant="secondary" 
+          className="bg-white/20 text-white border-white/30 hover:bg-white/30"
+        >
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-          Print All Slips
+          Print All
         </Button>
         <Button
           onClick={handleSendAllToDrive}
           disabled={!selectedMonth || !selectedYear || !selectedDivision || isSendingToDrive}
-          className="bg-green-600 hover:bg-green-700 text-white"
+          className="bg-white text-cyan-700 hover:bg-cyan-50"
         >
           {isSendingToDrive ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Sending {sendProgress.current}/{sendProgress.total}
+              {sendProgress.current}/{sendProgress.total}
             </>
           ) : (
             <>
               <Send className="mr-2 h-4 w-4" />
-              Send All to Drive
+              Send to Drive
             </>
           )}
         </Button>
-      </PageHeader>
+      </div>
+    </div>
+  </div>
+</div>
 
       {/* Progress indicator when sending to drive */}
       {isSendingToDrive && sendProgress.currentEmployee && (
