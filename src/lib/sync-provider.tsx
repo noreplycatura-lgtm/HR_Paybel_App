@@ -1,0 +1,230 @@
+"use client";
+
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { getAllLocalData, uploadToCloud } from './sync-helper';
+
+interface SyncContextType {
+  isSyncing: boolean;
+  lastSyncTime: Date | null;
+  syncStatus: 'idle' | 'syncing' | 'success' | 'error';
+  syncError: string | null;
+  manualSync: () => Promise<void>;
+  autoSyncEnabled: boolean;
+  setAutoSyncEnabled: (enabled: boolean) => void;
+  pendingChanges: boolean;
+}
+
+const SyncContext = createContext<SyncContextType | undefined>(undefined);
+
+export function useSyncContext() {
+  const context = useContext(SyncContext);
+  if (!context) {
+    throw new Error('useSyncContext must be used within SyncProvider');
+  }
+  return context;
+}
+
+interface SyncProviderProps {
+  children: React.ReactNode;
+  syncInterval?: number;
+}
+
+// Generate hash of data to detect changes
+function generateDataHash(data: any): string {
+  const str = JSON.stringify(data);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString();
+}
+
+export function SyncProvider({ 
+  children, 
+  syncInterval = 60000  // ✅ Changed to 60 seconds (1 minute)
+}: SyncProviderProps) {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [pendingChanges, setPendingChanges] = useState(false);
+  
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedHashRef = useRef<string>('');
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Check if data has changed
+  const hasDataChanged = useCallback((): boolean => {
+    if (typeof window === 'undefined') return false;
+    
+    try {
+      const currentData = getAllLocalData();
+      const currentHash = generateDataHash(currentData);
+      
+      if (currentHash !== lastSyncedHashRef.current) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Main sync function - Only syncs if data changed
+  const performSync = useCallback(async (force: boolean = false) => {
+    if (isSyncing) return;
+    if (typeof window === 'undefined') return;
+
+    // Check if data actually changed (unless forced)
+    if (!force && !hasDataChanged()) {
+      console.log('⏭️ No changes, skipping sync');
+      setPendingChanges(false);
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus('syncing');
+    setSyncError(null);
+
+    try {
+      const success = await uploadToCloud();
+      
+      if (success && isMountedRef.current) {
+        // Update the hash after successful sync
+        const currentData = getAllLocalData();
+        lastSyncedHashRef.current = generateDataHash(currentData);
+        
+        setLastSyncTime(new Date());
+        setSyncStatus('success');
+        setPendingChanges(false);
+        console.log('✅ Synced:', new Date().toLocaleTimeString());
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      console.error('❌ Sync error:', error);
+      if (isMountedRef.current) {
+        setSyncStatus('error');
+        setSyncError(error instanceof Error ? error.message : 'Sync failed');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsSyncing(false);
+      }
+    }
+  }, [isSyncing, hasDataChanged]);
+
+  // Manual sync - Always forces sync
+  const manualSync = useCallback(async () => {
+    await performSync(true);
+  }, [performSync]);
+
+  // Debounced change detection
+  const checkForChanges = useCallback(() => {
+    if (hasDataChanged()) {
+      setPendingChanges(true);
+    }
+  }, [hasDataChanged]);
+
+  // Set up auto-sync interval
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    if (typeof window === 'undefined') return;
+
+    if (!autoSyncEnabled) {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+      console.log('🔴 Auto-sync disabled');
+      return;
+    }
+
+    // Initial sync after 5 seconds
+    const initialSyncTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        performSync(false);
+      }
+    }, 5000);
+
+    // Set up interval - Check and sync every 60 seconds
+    syncIntervalRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        performSync(false);
+      }
+    }, syncInterval);
+
+    console.log(`🟢 Auto-sync: Every ${syncInterval / 1000}s`);
+
+    return () => {
+      isMountedRef.current = false;
+      clearTimeout(initialSyncTimeout);
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [autoSyncEnabled, syncInterval, performSync]);
+
+  // Listen for localStorage changes (detect when user makes changes)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleStorageChange = () => {
+      // Debounce the change detection
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      
+      debounceTimerRef.current = setTimeout(() => {
+        checkForChanges();
+      }, 1000); // Wait 1 second after last change
+    };
+
+    // Listen for storage events from other tabs
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also listen for custom event that we can trigger
+    window.addEventListener('localDataChanged', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localDataChanged', handleStorageChange);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [checkForChanges]);
+
+  // Check for changes periodically (every 10 seconds) but don't sync
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const changeCheckInterval = setInterval(() => {
+      checkForChanges();
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(changeCheckInterval);
+  }, [checkForChanges]);
+
+  const value: SyncContextType = {
+    isSyncing,
+    lastSyncTime,
+    syncStatus,
+    syncError,
+    manualSync,
+    autoSyncEnabled,
+    setAutoSyncEnabled,
+    pendingChanges,
+  };
+
+  return (
+    <SyncContext.Provider value={value}>
+      {children}
+    </SyncContext.Provider>
+  );
+}

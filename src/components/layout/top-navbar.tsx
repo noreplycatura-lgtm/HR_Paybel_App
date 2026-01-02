@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { UserCircle, LogOut, CloudUpload, CloudDownload, Loader2, Bell, PanelLeftClose, PanelLeft } from "lucide-react";
+import { UserCircle, LogOut, CloudUpload, CloudDownload, Loader2, Bell, PanelLeftClose, PanelLeft, Cloud, CloudOff, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
@@ -14,11 +14,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { APP_NAME } from "@/lib/constants";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { uploadToCloud, downloadFromCloud } from "@/lib/sync-helper";
 import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
+import { useSyncContext } from "@/lib/sync-provider";
 
 const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
@@ -41,6 +48,124 @@ const addActivityLog = (message: string) => {
     console.error("Error adding to activity log:", error);
   }
 };
+
+// Auto Sync Status Component (Inline)
+function AutoSyncStatus() {
+  const { 
+    isSyncing, 
+    lastSyncTime, 
+    syncStatus, 
+    manualSync,
+    autoSyncEnabled,
+    setAutoSyncEnabled,
+    pendingChanges
+  } = useSyncContext();
+
+  const getStatusIcon = () => {
+    if (isSyncing) {
+      return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />;
+    }
+    if (pendingChanges) {
+      return <Cloud className="h-3.5 w-3.5 text-yellow-500" />;
+    }
+    switch (syncStatus) {
+      case 'success':
+        return <CheckCircle className="h-3.5 w-3.5 text-green-500" />;
+      case 'error':
+        return <AlertCircle className="h-3.5 w-3.5 text-red-500" />;
+      default:
+        return <Cloud className="h-3.5 w-3.5 text-gray-400" />;
+    }
+  };
+
+  const getStatusText = () => {
+    if (isSyncing) return 'Syncing...';
+    if (pendingChanges) return 'Pending...';
+    if (lastSyncTime) {
+      return `${lastSyncTime.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false
+      })}`;
+    }
+    return 'Not synced';
+  };
+
+  const getTooltipText = () => {
+    if (pendingChanges) return 'Changes detected, will sync soon';
+    if (lastSyncTime) return `Last sync: ${lastSyncTime.toLocaleString()}`;
+    return 'Not synced yet';
+  };
+
+  return (
+    <TooltipProvider>
+      <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 border ${
+        pendingChanges 
+          ? 'bg-yellow-50 border-yellow-200' 
+          : 'bg-gray-50 border-gray-200'
+      }`}>
+        {/* Auto-sync toggle */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAutoSyncEnabled(!autoSyncEnabled)}
+              className={`h-7 w-7 p-0 ${autoSyncEnabled ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : 'text-gray-400 hover:text-gray-500 hover:bg-gray-100'}`}
+            >
+              {autoSyncEnabled ? (
+                <Cloud className="h-4 w-4" />
+              ) : (
+                <CloudOff className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="font-medium">{autoSyncEnabled ? '🟢 Auto-sync ON' : '🔴 Auto-sync OFF'}</p>
+            <p className="text-xs text-muted-foreground">
+              {autoSyncEnabled ? 'Syncs every 1 minute (if changed)' : 'Click to enable'}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Status indicator */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1 px-1.5 py-1 text-xs text-gray-600 cursor-default min-w-[60px]">
+              {getStatusIcon()}
+              <span className="hidden sm:inline font-mono text-[11px]">{getStatusText()}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{getTooltipText()}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Manual sync button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={manualSync}
+              disabled={isSyncing}
+              className={`h-7 w-7 p-0 ${
+                pendingChanges 
+                  ? 'hover:bg-yellow-100 text-yellow-600' 
+                  : 'hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{pendingChanges ? 'Sync Now (changes pending)' : 'Sync Now'}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
+  );
+}
 
 export function TopNavbar() {
   const { toggleSidebar, state } = useSidebar();
@@ -134,40 +259,59 @@ export function TopNavbar() {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
-        {/* Upload */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleUpload}
-          disabled={isUploading}
-          className="hidden sm:flex gap-2 border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
-        >
-          {isUploading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CloudUpload className="h-4 w-4" />
-          )}
-          <span className="hidden lg:inline">Upload</span>
-        </Button>
-
-        {/* Download */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDownload}
-          disabled={isDownloading}
-          className="hidden sm:flex gap-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-        >
-          {isDownloading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CloudDownload className="h-4 w-4" />
-          )}
-          <span className="hidden lg:inline">Download</span>
-        </Button>
+        
+        {/* ✅ NEW: Auto Sync Status */}
+        <AutoSyncStatus />
 
         {/* Divider */}
-        <div className="hidden sm:block h-6 w-px bg-gray-200 mx-2" />
+        <div className="hidden sm:block h-6 w-px bg-gray-200 mx-1" />
+
+        {/* Upload (Manual) */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUpload}
+              disabled={isUploading}
+              className="hidden sm:flex h-9 w-9 p-0 border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
+            >
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CloudUpload className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Upload to Cloud</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Download (Manual) */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="hidden sm:flex h-9 w-9 p-0 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CloudDownload className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Download from Cloud</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Divider */}
+        <div className="hidden sm:block h-6 w-px bg-gray-200 mx-1" />
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-lg">
