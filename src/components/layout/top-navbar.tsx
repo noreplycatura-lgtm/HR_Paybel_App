@@ -78,19 +78,6 @@ function AutoSyncStatus() {
     }
   };
 
-  const getStatusText = () => {
-    if (isSyncing) return 'Syncing...';
-    if (pendingChanges) return 'Pending...';
-    if (lastSyncTime) {
-      return `${lastSyncTime.toLocaleTimeString('en-IN', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false
-      })}`;
-    }
-    return 'Ready';
-  };
-
   const getTooltipText = () => {
     if (pendingChanges) return 'Changes detected, will sync soon';
     if (lastSyncTime) return `Last sync: ${lastSyncTime.toLocaleString()}`;
@@ -100,6 +87,19 @@ function AutoSyncStatus() {
   const getBgColor = () => {
     if (pendingChanges) return 'bg-yellow-50 border-yellow-200';
     return 'bg-gray-50 border-gray-200';
+  };
+
+  // Format time for display
+  const getTimeDisplay = () => {
+    if (lastSyncTime) {
+      return lastSyncTime.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    }
+    return null;
   };
 
   return (
@@ -124,17 +124,33 @@ function AutoSyncStatus() {
           <TooltipContent side="bottom">
             <p className="font-medium">{autoSyncEnabled ? '🟢 Auto-sync ON' : '🔴 Auto-sync OFF'}</p>
             <p className="text-xs text-muted-foreground">
-              {autoSyncEnabled ? 'Syncs every 1 minute (if changed)' : 'Click to enable'}
+              {autoSyncEnabled ? 'Syncs every 30 seconds (if changed)' : 'Click to enable'}
             </p>
           </TooltipContent>
         </Tooltip>
 
-        {/* Status indicator */}
+        {/* Status indicator - Updated with Red Bold Time */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 px-1.5 py-1 text-xs text-gray-600 cursor-default min-w-[60px]">
+            <div className="flex items-center gap-1.5 px-1.5 py-1 cursor-default">
               {getStatusIcon()}
-              <span className="hidden sm:inline font-mono text-[11px]">{getStatusText()}</span>
+              <div className="hidden sm:flex items-center gap-1">
+                {isSyncing ? (
+                  <span className="text-[11px] text-blue-600 font-medium">Syncing...</span>
+                ) : pendingChanges ? (
+                  <span className="text-[11px] text-yellow-600 font-medium">Pending...</span>
+                ) : (
+                  <>
+                    <span className="text-[11px] text-green-600 font-medium">Ready</span>
+                    {getTimeDisplay() && (
+                      <>
+                        <span className="text-gray-300">|</span>
+                        <span className="text-[11px] text-red-600 font-bold">{getTimeDisplay()}</span>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom">

@@ -9,6 +9,7 @@ interface SyncContextType {
   syncStatus: 'idle' | 'syncing' | 'success' | 'error';
   syncError: string | null;
   manualSync: () => Promise<void>;
+  triggerSync: () => void; // New: For action-based sync
   autoSyncEnabled: boolean;
   setAutoSyncEnabled: (enabled: boolean) => void;
   pendingChanges: boolean;
@@ -42,7 +43,7 @@ function generateDataHash(data: any): string {
 
 export function SyncProvider({ 
   children, 
-  syncInterval = 60000
+  syncInterval = 30000  // 30 seconds
 }: SyncProviderProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
@@ -54,7 +55,9 @@ export function SyncProvider({
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedHashRef = useRef<string>('');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const actionSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const isSyncingRef = useRef(false); // To prevent race conditions
 
   const hasDataChanged = useCallback((): boolean => {
     if (typeof window === 'undefined') return false;
@@ -72,16 +75,17 @@ export function SyncProvider({
     }
   }, []);
 
-  const performSync = useCallback(async (force: boolean = false) => {
-    if (isSyncing) return;
-    if (typeof window === 'undefined') return;
+  // Core sync function
+  const performSync = useCallback(async (force: boolean = false): Promise<boolean> => {
+    if (isSyncingRef.current) return false;
+    if (typeof window === 'undefined') return false;
 
     if (!force && !hasDataChanged()) {
-      console.log('⏭️ No changes, skipping sync');
       setPendingChanges(false);
-      return;
+      return false;
     }
 
+    isSyncingRef.current = true;
     setIsSyncing(true);
     setSyncStatus('syncing');
     setSyncError(null);
@@ -97,6 +101,7 @@ export function SyncProvider({
         setSyncStatus('success');
         setPendingChanges(false);
         console.log('✅ Synced:', new Date().toLocaleTimeString());
+        return true;
       } else {
         throw new Error('Upload failed');
       }
@@ -106,17 +111,38 @@ export function SyncProvider({
         setSyncStatus('error');
         setSyncError(error instanceof Error ? error.message : 'Sync failed');
       }
+      return false;
     } finally {
+      isSyncingRef.current = false;
       if (isMountedRef.current) {
         setIsSyncing(false);
       }
     }
-  }, [isSyncing, hasDataChanged]);
+  }, [hasDataChanged]);
 
+  // Manual sync - Always forces sync
   const manualSync = useCallback(async () => {
     await performSync(true);
   }, [performSync]);
 
+  // Trigger sync after actions (debounced 3 seconds)
+  const triggerSync = useCallback(() => {
+    setPendingChanges(true);
+    
+    // Clear existing timer
+    if (actionSyncTimerRef.current) {
+      clearTimeout(actionSyncTimerRef.current);
+    }
+    
+    // Sync after 3 seconds of no activity
+    actionSyncTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        performSync(false);
+      }
+    }, 3000);
+  }, [performSync]);
+
+  // Check for changes
   const checkForChanges = useCallback(() => {
     if (hasDataChanged()) {
       setPendingChanges(true);
@@ -138,7 +164,7 @@ export function SyncProvider({
     };
   }, []);
 
-  // Set up auto-sync interval
+  // Set up auto-sync interval (30 seconds)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -151,7 +177,7 @@ export function SyncProvider({
       return;
     }
 
-    // First sync after 10 seconds (give time for login sync to complete)
+    // First sync after 10 seconds
     const initialSyncTimeout = setTimeout(() => {
       if (isMountedRef.current) {
         performSync(false);
@@ -174,6 +200,56 @@ export function SyncProvider({
       }
     };
   }, [autoSyncEnabled, syncInterval, performSync]);
+
+  // 🆕 Sync on Tab/Window Close (beforeunload)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Check if there are pending changes
+      if (hasDataChanged() || pendingChanges) {
+        // Attempt sync using sendBeacon for reliability
+        try {
+          const data = getAllLocalData();
+          const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+          
+          // Use sendBeacon for reliable delivery on page close
+          const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec';
+          navigator.sendBeacon(WEBAPP_URL, blob);
+          
+          console.log('📤 Beacon sync on close');
+        } catch (error) {
+          console.error('Beacon sync failed:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasDataChanged, pendingChanges]);
+
+  // 🆕 Sync on Tab Visibility Change (when user switches tabs)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // User switched away from tab - sync if needed
+        if (hasDataChanged() || pendingChanges) {
+          performSync(false);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [performSync, hasDataChanged, pendingChanges]);
 
   // Listen for localStorage changes
   useEffect(() => {
@@ -212,12 +288,22 @@ export function SyncProvider({
     return () => clearInterval(changeCheckInterval);
   }, [checkForChanges]);
 
+  // Cleanup action sync timer
+  useEffect(() => {
+    return () => {
+      if (actionSyncTimerRef.current) {
+        clearTimeout(actionSyncTimerRef.current);
+      }
+    };
+  }, []);
+
   const value: SyncContextType = {
     isSyncing,
     lastSyncTime,
     syncStatus,
     syncError,
     manualSync,
+    triggerSync,
     autoSyncEnabled,
     setAutoSyncEnabled,
     pendingChanges,
