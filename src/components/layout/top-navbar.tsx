@@ -58,19 +58,12 @@ function AutoSyncStatus() {
     manualSync,
     autoSyncEnabled,
     setAutoSyncEnabled,
-    pendingChanges,
-    isInitialized
+    pendingChanges
   } = useSyncContext();
 
   const getStatusIcon = () => {
-    if (syncStatus === 'downloading') {
-      return <CloudDownload className="h-3.5 w-3.5 animate-pulse text-blue-500" />;
-    }
     if (isSyncing) {
       return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />;
-    }
-    if (!isInitialized) {
-      return <Cloud className="h-3.5 w-3.5 text-orange-400" />;
     }
     if (pendingChanges) {
       return <Cloud className="h-3.5 w-3.5 text-yellow-500" />;
@@ -86,8 +79,6 @@ function AutoSyncStatus() {
   };
 
   const getStatusText = () => {
-    if (syncStatus === 'downloading') return 'Loading...';
-    if (!isInitialized) return 'Initializing...';
     if (isSyncing) return 'Syncing...';
     if (pendingChanges) return 'Pending...';
     if (lastSyncTime) {
@@ -101,15 +92,12 @@ function AutoSyncStatus() {
   };
 
   const getTooltipText = () => {
-    if (syncStatus === 'downloading') return 'Downloading data from server...';
-    if (!isInitialized) return 'Initializing app...';
     if (pendingChanges) return 'Changes detected, will sync soon';
     if (lastSyncTime) return `Last sync: ${lastSyncTime.toLocaleString()}`;
     return 'Ready to sync';
   };
 
   const getBgColor = () => {
-    if (syncStatus === 'downloading' || !isInitialized) return 'bg-blue-50 border-blue-200';
     if (pendingChanges) return 'bg-yellow-50 border-yellow-200';
     return 'bg-gray-50 border-gray-200';
   };
@@ -124,7 +112,6 @@ function AutoSyncStatus() {
               variant="ghost"
               size="sm"
               onClick={() => setAutoSyncEnabled(!autoSyncEnabled)}
-              disabled={!isInitialized}
               className={`h-7 w-7 p-0 ${autoSyncEnabled ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : 'text-gray-400 hover:text-gray-500 hover:bg-gray-100'}`}
             >
               {autoSyncEnabled ? (
@@ -162,18 +149,18 @@ function AutoSyncStatus() {
               variant="ghost"
               size="sm"
               onClick={manualSync}
-              disabled={isSyncing || syncStatus === 'downloading'}
+              disabled={isSyncing}
               className={`h-7 w-7 p-0 ${
                 pendingChanges 
                   ? 'hover:bg-yellow-100 text-yellow-600' 
                   : 'hover:bg-blue-50 hover:text-blue-600'
               }`}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing || syncStatus === 'downloading' ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p>{!isInitialized ? 'Loading data...' : pendingChanges ? 'Sync Now (changes pending)' : 'Sync Now'}</p>
+            <p>{pendingChanges ? 'Sync Now (changes pending)' : 'Sync Now'}</p>
           </TooltipContent>
         </Tooltip>
       </div>
