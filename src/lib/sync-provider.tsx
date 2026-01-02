@@ -1,21 +1,17 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { getAllLocalData, uploadToCloud, downloadFromCloud } from './sync-helper';
-
-// Key to track if this device has been initialized
-const DEVICE_INITIALIZED_KEY = 'novita_device_initialized_v1';
+import { getAllLocalData, uploadToCloud } from './sync-helper';
 
 interface SyncContextType {
   isSyncing: boolean;
   lastSyncTime: Date | null;
-  syncStatus: 'idle' | 'syncing' | 'success' | 'error' | 'downloading';
+  syncStatus: 'idle' | 'syncing' | 'success' | 'error';
   syncError: string | null;
   manualSync: () => Promise<void>;
   autoSyncEnabled: boolean;
   setAutoSyncEnabled: (enabled: boolean) => void;
   pendingChanges: boolean;
-  isInitialized: boolean;
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
@@ -33,7 +29,6 @@ interface SyncProviderProps {
   syncInterval?: number;
 }
 
-// Generate hash of data to detect changes
 function generateDataHash(data: any): string {
   const str = JSON.stringify(data);
   let hash = 0;
@@ -47,34 +42,20 @@ function generateDataHash(data: any): string {
 
 export function SyncProvider({ 
   children, 
-  syncInterval = 60000  // 60 seconds
+  syncInterval = 60000
 }: SyncProviderProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error' | 'downloading'>('idle');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [pendingChanges, setPendingChanges] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
   
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedHashRef = useRef<string>('');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
-  // Check if this device has been initialized before
-  const checkDeviceInitialized = useCallback((): boolean => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(DEVICE_INITIALIZED_KEY) === 'true';
-  }, []);
-
-  // Mark device as initialized
-  const markDeviceInitialized = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(DEVICE_INITIALIZED_KEY, 'true');
-  }, []);
-
-  // Check if data has changed
   const hasDataChanged = useCallback((): boolean => {
     if (typeof window === 'undefined') return false;
     
@@ -91,60 +72,10 @@ export function SyncProvider({
     }
   }, []);
 
-  // Initial download for new device
-  const performInitialDownload = useCallback(async (): Promise<boolean> => {
-    if (typeof window === 'undefined') return false;
-
-    console.log('📥 New device detected, downloading data from server...');
-    setSyncStatus('downloading');
-
-    try {
-      const success = await downloadFromCloud();
-      
-      if (success && isMountedRef.current) {
-        // Mark device as initialized
-        markDeviceInitialized();
-        
-        // Update hash after download
-        const currentData = getAllLocalData();
-        lastSyncedHashRef.current = generateDataHash(currentData);
-        
-        setIsInitialized(true);
-        setSyncStatus('success');
-        setLastSyncTime(new Date());
-        console.log('✅ Initial download complete');
-        return true;
-      } else {
-        // Even if download fails (empty server), mark as initialized
-        // This means it's a brand new setup
-        markDeviceInitialized();
-        setIsInitialized(true);
-        setSyncStatus('idle');
-        console.log('ℹ️ No data on server, starting fresh');
-        return true;
-      }
-    } catch (error) {
-      console.error('❌ Initial download error:', error);
-      if (isMountedRef.current) {
-        setSyncStatus('error');
-        setSyncError('Failed to download initial data');
-      }
-      return false;
-    }
-  }, [markDeviceInitialized]);
-
-  // Main sync function - Only syncs if data changed
   const performSync = useCallback(async (force: boolean = false) => {
-    // Don't sync if not initialized yet
-    if (!isInitialized) {
-      console.log('⏭️ Not initialized yet, skipping sync');
-      return;
-    }
-
     if (isSyncing) return;
     if (typeof window === 'undefined') return;
 
-    // Check if data actually changed (unless forced)
     if (!force && !hasDataChanged()) {
       console.log('⏭️ No changes, skipping sync');
       setPendingChanges(false);
@@ -159,7 +90,6 @@ export function SyncProvider({
       const success = await uploadToCloud();
       
       if (success && isMountedRef.current) {
-        // Update the hash after successful sync
         const currentData = getAllLocalData();
         lastSyncedHashRef.current = generateDataHash(currentData);
         
@@ -181,62 +111,36 @@ export function SyncProvider({
         setIsSyncing(false);
       }
     }
-  }, [isSyncing, hasDataChanged, isInitialized]);
+  }, [isSyncing, hasDataChanged]);
 
-  // Manual sync - Always forces sync
   const manualSync = useCallback(async () => {
-    if (!isInitialized) {
-      await performInitialDownload();
-      return;
-    }
     await performSync(true);
-  }, [performSync, isInitialized, performInitialDownload]);
+  }, [performSync]);
 
-  // Debounced change detection
   const checkForChanges = useCallback(() => {
-    if (!isInitialized) return;
     if (hasDataChanged()) {
       setPendingChanges(true);
     }
-  }, [hasDataChanged, isInitialized]);
+  }, [hasDataChanged]);
 
-  // FIRST: Check if device is initialized, if not, download data
+  // Initialize hash on mount
   useEffect(() => {
     isMountedRef.current = true;
 
     if (typeof window === 'undefined') return;
 
-    const initializeDevice = async () => {
-      const alreadyInitialized = checkDeviceInitialized();
-      
-      if (alreadyInitialized) {
-        console.log('✅ Device already initialized');
-        setIsInitialized(true);
-        
-        // Set initial hash
-        const currentData = getAllLocalData();
-        lastSyncedHashRef.current = generateDataHash(currentData);
-      } else {
-        // New device - download data first
-        await performInitialDownload();
-      }
-    };
-
-    // Small delay to ensure app is ready
-    const initTimeout = setTimeout(() => {
-      initializeDevice();
-    }, 1000);
+    // Set initial hash
+    const currentData = getAllLocalData();
+    lastSyncedHashRef.current = generateDataHash(currentData);
 
     return () => {
       isMountedRef.current = false;
-      clearTimeout(initTimeout);
     };
-  }, [checkDeviceInitialized, performInitialDownload]);
+  }, []);
 
-  // Set up auto-sync interval (only after initialization)
+  // Set up auto-sync interval
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!isInitialized) return; // Don't start auto-sync until initialized
 
     if (!autoSyncEnabled) {
       if (syncIntervalRef.current) {
@@ -247,7 +151,14 @@ export function SyncProvider({
       return;
     }
 
-    // Set up interval - Check and sync every 60 seconds
+    // First sync after 10 seconds (give time for login sync to complete)
+    const initialSyncTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        performSync(false);
+      }
+    }, 10000);
+
+    // Set up interval
     syncIntervalRef.current = setInterval(() => {
       if (isMountedRef.current) {
         performSync(false);
@@ -257,16 +168,16 @@ export function SyncProvider({
     console.log(`🟢 Auto-sync: Every ${syncInterval / 1000}s`);
 
     return () => {
+      clearTimeout(initialSyncTimeout);
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [autoSyncEnabled, syncInterval, performSync, isInitialized]);
+  }, [autoSyncEnabled, syncInterval, performSync]);
 
   // Listen for localStorage changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!isInitialized) return;
 
     const handleStorageChange = () => {
       if (debounceTimerRef.current) {
@@ -288,19 +199,18 @@ export function SyncProvider({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [checkForChanges, isInitialized]);
+  }, [checkForChanges]);
 
-  // Check for changes periodically
+  // Check for changes every 10 seconds
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!isInitialized) return;
 
     const changeCheckInterval = setInterval(() => {
       checkForChanges();
     }, 10000);
 
     return () => clearInterval(changeCheckInterval);
-  }, [checkForChanges, isInitialized]);
+  }, [checkForChanges]);
 
   const value: SyncContextType = {
     isSyncing,
@@ -311,7 +221,6 @@ export function SyncProvider({
     autoSyncEnabled,
     setAutoSyncEnabled,
     pendingChanges,
-    isInitialized,
   };
 
   return (
