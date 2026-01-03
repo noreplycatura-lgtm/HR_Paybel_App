@@ -1,6 +1,6 @@
 import { loadFromGoogleSheet, saveToGoogleSheet, AppData } from './google-sheets';
 
-const LOCAL_STORAGE_KEY = 'Novita_Payroll_Data';
+const LOCAL_STORAGE_KEY = 'SalaryAppData';
 
 // Local storage se data lo
 export function getLocalData(): AppData {

@@ -17,9 +17,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, PlusCircle, Upload, Trash2, Download, TrendingDown, Users, IndianRupee, Calendar, AlertTriangle, FileText } from "lucide-react";
 import type { EmployeeDetail } from "@/lib/hr-data";
 
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "catura_performance_deductions_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 

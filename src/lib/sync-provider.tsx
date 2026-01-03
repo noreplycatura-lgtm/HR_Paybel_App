@@ -214,7 +214,7 @@ export function SyncProvider({
           const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
           
           // Use sendBeacon for reliable delivery on page close
-          const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec';
+          const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxw-u0CqbhNDyhUlQUN1s8Mdh21-o3VeqWLI9IW_6XXCUhz2jNefyyXlmsqy1g7PUw1/exec';
           navigator.sendBeacon(WEBAPP_URL, blob);
           
           console.log('📤 Beacon sync on close');

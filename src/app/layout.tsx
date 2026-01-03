@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Novita Payroll',
+  title: 'Catura Payroll',
   description: 'Human Resource Management System',
 };
 

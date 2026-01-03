@@ -1,7 +1,7 @@
 // src/lib/google-sheets.ts
 
 // ⚠️ IMPORTANT: New Deployment URL paste karo yahan
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxT7kkD_oqfznYz1Atiai4uK4xxJa7S2InO-DzWQm9cDz3zXDST4C_yeibZalcies53Q/exec'; 
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxw-u0CqbhNDyhUlQUN1s8Mdh21-o3VeqWLI9IW_6XXCUhz2jNefyyXlmsqy1g7PUw1/exec'; 
 
 export interface AppData {
   employees?: any[];
@@ -57,11 +57,11 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
     const data = await response.json();
     return {
       company_logo: data.company_logo || '',
-      company_name: data.company_name || 'Novita Payroll'
+      company_name: data.company_name || 'Catura Payroll'
     };
   } catch (error) {
     console.error('Config fetch error:', error);
-    return { company_logo: '', company_name: 'Novita Payroll' };
+    return { company_logo: '', company_name: 'Catura Payroll' };
   }
 }
 

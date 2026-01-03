@@ -23,11 +23,11 @@ import { Download, Trash2, Loader2, Edit, Search, Calendar, Users, Upload, FileT
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { startOfDay, parseISO, isBefore, isEqual, format, endOfMonth, getDaysInMonth, isAfter, isValid } from "date-fns";
 
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
-const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
-const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "catura_attendance_raw_data_v4_";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "catura_attendance_filename_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "catura_last_upload_context_v4";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
 
 interface ActivityLogEntry {
   timestamp: string;

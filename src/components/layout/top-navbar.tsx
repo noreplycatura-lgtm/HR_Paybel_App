@@ -27,8 +27,8 @@ import { uploadToCloud, downloadFromCloud } from "@/lib/sync-helper";
 import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 import { useSyncContext } from "@/lib/sync-provider";
 
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOGGED_IN_STATUS_KEY = "catura_logged_in_status_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
 
 interface ActivityLogEntry {
   timestamp: string;
@@ -350,7 +350,7 @@ export function TopNavbar() {
           <DropdownMenuContent align="end" className="w-56 bg-white border shadow-lg rounded-xl">
             <DropdownMenuLabel className="p-3">
               <p className="text-sm font-semibold text-gray-800">Admin User</p>
-              <p className="text-xs text-gray-500">admin@novita.com</p>
+              <p className="text-xs text-gray-500">admin@catura.com</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             

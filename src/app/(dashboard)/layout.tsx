@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { getCompanyConfig, type CompanyConfig } from "@/lib/google-sheets";
 
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const LOGGED_IN_STATUS_KEY = "catura_logged_in_status_v1";
 
 export default function DashboardLayout({
   children,
@@ -120,7 +120,7 @@ export default function DashboardLayout({
           {/* Footer */}
           <SidebarFooter className="p-4 border-t border-slate-700">
             <p className="text-[10px] text-slate-500 text-center group-data-[collapsible=icon]:hidden">
-              © 2024 Novita Healthcare
+              © 2024 Catura Healthcare
             </p>
           </SidebarFooter>
         </div>

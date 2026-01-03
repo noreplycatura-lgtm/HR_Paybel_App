@@ -35,11 +35,11 @@ interface SimulatedUser {
   isLocked: boolean;
 }
 
-const SIMULATED_USERS_STORAGE_KEY = "novita_simulated_users_v1";
+const SIMULATED_USERS_STORAGE_KEY = "catura_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 const MAIN_ADMIN_PASSWORD = "123456";
 const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh";
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
+const LOGGED_IN_STATUS_KEY = "catura_logged_in_status_v1";
 
 // Circular Progress Component
 function CircularProgress({ progress, size = 120 }: { progress: number; size?: number }) {
@@ -249,7 +249,7 @@ export function LoginForm() {
   const [syncStatusText, setSyncStatusText] = React.useState('Initializing...');
   const [companyConfig, setCompanyConfig] = React.useState<CompanyConfig>({
     company_logo: '',
-    company_name: 'Novita Payroll'
+    company_name: 'catura Payroll'
   });
   const [isConfigLoading, setIsConfigLoading] = React.useState(true);
 
@@ -260,7 +260,7 @@ export function LoginForm() {
         if (config) {
           setCompanyConfig({
             company_logo: config.company_logo || '',
-            company_name: config.company_name || 'Novita Payroll'
+            company_name: config.company_name || 'Catura Payroll'
           });
         }
       } catch (error) {
@@ -398,7 +398,7 @@ export function LoginForm() {
       <SyncingOverlay 
         progress={syncProgress} 
         statusText={syncStatusText}
-        companyName={companyConfig.company_name || 'Novita Payroll'}
+        companyName={companyConfig.company_name || 'Catura Payroll'}
       />
     );
   }
@@ -499,7 +499,7 @@ export function LoginForm() {
               marginBottom: '8px',
             }}
           >
-            {companyConfig.company_name || 'Novita Payroll'}
+            {companyConfig.company_name || 'Catura Payroll'}
           </CardTitle>
           
           <CardDescription style={{ fontSize: '14px', color: '#64748b' }}>
@@ -630,7 +630,7 @@ export function LoginForm() {
           {/* Footer */}
           <div style={{ marginTop: '24px', textAlign: 'center' }}>
             <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-              © 2024 Novita Healthcare Pvt. Ltd.
+              © 2024 Catura Healthcare Pvt. Ltd.
             </p>
           </div>
         </CardContent>

@@ -73,11 +73,11 @@ interface SimulatedUser {
   isLocked: boolean;
 }
 
-const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
+const LOCAL_STORAGE_SIMULATED_USERS_KEY = "catura_simulated_users_v1";
 const MAIN_ADMIN_USERNAME = "asingh0402";
 const MAIN_ADMIN_DISPLAY_NAME = "Ajay Singh";
-const LOGGED_IN_STATUS_KEY = "novita_logged_in_status_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOGGED_IN_STATUS_KEY = "catura_logged_in_status_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
 
 interface ActivityLogEntry {
   timestamp: string;
