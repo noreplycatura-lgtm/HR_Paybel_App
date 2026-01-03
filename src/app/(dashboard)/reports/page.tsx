@@ -337,7 +337,7 @@ export default function ReportsPage() {
 
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
 
-        const esic = monthlySalaryComps.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
+        const esic = 0;
 
         const totalDeductionValue = esic + professionalTax + providentFund + tds + loan + salaryAdvance + totalOtherDeduction;
         const netPaid = totalAllowance - totalDeductionValue;
@@ -642,7 +642,7 @@ export default function ReportsPage() {
         const totalOtherDeductionValLedger = manualOtherDeductionValLedger + performanceDeductionValLedger;
 
         const totalAllowanceValue = actualBasicLedger + actualHRALedger + actualCALedger + actualMedicalLedger + actualOtherAllowanceLedger + arrearsValue;
-        const esicValue = monthlyComps.totalGross <= 21010 ? totalAllowanceValue * 0.0075 : 0;
+        const esicValue = 0;
         const totalDeductionVal = esicValue + professionalTaxValue + providentFundValue + tdsValue + loanValue + salaryAdvanceValue + totalOtherDeductionValLedger;
         const netPaidValue = totalAllowanceValue - totalDeductionVal;
 

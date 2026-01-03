@@ -307,7 +307,7 @@ export default function SalarySheetPage() {
 
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
 
-        const esic = monthlyComponents.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
+        const esic = 0;
 
         const totalDeduction = esic + professionalTax + providentFund +
           tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
@@ -383,7 +383,7 @@ export default function SalarySheetPage() {
 
           const newTotalAllowance = updatedEmp.actualBasic + updatedEmp.actualHRA + updatedEmp.actualCA + updatedEmp.actualMedical + updatedEmp.actualOtherAllowance + updatedEmp.arrears;
 
-          const newEsic = updatedEmp.calculatedGross <= 21010 ? newTotalAllowance * 0.0075 : 0;
+          const newEsic = 0;
           updatedEmp.esic = newEsic;
 
           const newTotalDeduction = newEsic + updatedEmp.professionalTax + updatedEmp.providentFund +
@@ -533,7 +533,7 @@ export default function SalarySheetPage() {
         const performanceDeductionAmount = performanceDeductionEntry?.amount || 0;
 
         const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-        const esic = monthlyComponents.totalGross <= 21010 ? totalAllowance * 0.0075 : 0;
+        const esic = 0;
 
         const totalDeduction = esic + professionalTax + providentFund + tds + loan + salaryAdvance + manualOtherDeductionVal + performanceDeductionAmount;
         const netPaid = totalAllowance - totalDeduction;
