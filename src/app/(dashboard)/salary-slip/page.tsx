@@ -31,9 +31,9 @@ const COMPANY_LOGO_BASE64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/
 
 // Company Address Lines
 const COMPANY_ADDRESS_LINES = [
-  "37 B, Mangal Compound,",
-  "Pipliya Kumar Dewas Naka,",
-  "Indore - 452010, Madhya Pradesh"
+  "FF 7, B T Mall-2, Deep Estate,",
+  "and Compound, Kalol,",
+  "Gujarat - 382721"
 ];
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
