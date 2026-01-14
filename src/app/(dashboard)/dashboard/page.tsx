@@ -284,8 +284,9 @@ export default function DashboardPage() {
                                 const totalDaysInMonth = getDaysInMonth(targetDate);
                                 let daysPaid = 0;
                                 empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
-                                    if (['P', 'W', 'PH', 'CL', 'SL', 'PL', 'HCL', 'HPL', 'HSL'].includes(status.toUpperCase())) daysPaid++;
-                                    else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
+                                    const s = status.toUpperCase();
+                                    if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(s)) daysPaid++;
+                                    else if (['HCL', 'HSL', 'HPL', 'HD'].includes(s)) daysPaid += 0.5;
                                 });
                                 daysPaid = Math.min(daysPaid, totalDaysInMonth);
 
