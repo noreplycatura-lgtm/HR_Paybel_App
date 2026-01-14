@@ -25,7 +25,7 @@ const breakupRuleSchema = z.object({
   message: "'To Gross' must be greater than 'From Gross'",
   path: ["to_gross"],
 }).refine(data => {
-  const total = data.basic_percentage + data.hra_percentage + data.ca_percentage + data.medical_percentage;
+  const total = (data.basic_percentage || 0) + (data.hra_percentage || 0) + (data.ca_percentage || 0) + (data.medical_percentage || 0);
   return total <= 100;
 }, {
   message: "Total of Basic, HRA, CA, and Medical percentages cannot exceed 100%.",
