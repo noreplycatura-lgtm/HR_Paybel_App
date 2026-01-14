@@ -33,7 +33,10 @@ import {
   Zap,
   Target,
   PieChart,
-  Layers
+  Layers,
+  Search,
+  UserCheck,
+  UserX
 } from 'lucide-react';
 import type { SalaryBreakupRule } from '@/lib/hr-types';
 
@@ -41,6 +44,20 @@ import type { SalaryBreakupRule } from '@/lib/hr-types';
 const RULES_STORAGE_KEY = 'novita_salary_breakup_rules_v1';
 const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
 const EMPLOYEE_STORAGE_KEY = 'novita_employee_master_data_v1';
+
+// Employee Interface
+interface Employee {
+  id?: string;
+  code: string;
+  name: string;
+  grossMonthlySalary?: number;
+  grossSalary?: number;
+  monthlySalary?: number;
+  salary?: number;
+  department?: string;
+  designation?: string;
+  status?: string;
+}
 
 // Default Rule Template
 const DEFAULT_RULE: Omit<SalaryBreakupRule, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -62,8 +79,9 @@ export default function SalaryBreakupPage() {
   // States
   const [rules, setRules] = useState<SalaryBreakupRule[]>([]);
   const [employeeMappings, setEmployeeMappings] = useState<Record<string, string>>({});
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -81,24 +99,74 @@ export default function SalaryBreakupPage() {
     loadAllData();
   }, []);
 
+  // ============================================
+  // FIXED: Employee Data Loading Function
+  // ============================================
   const loadAllData = () => {
     setIsLoading(true);
     try {
+      // Load Rules
       const savedRules = localStorage.getItem(RULES_STORAGE_KEY);
       if (savedRules) {
         setRules(JSON.parse(savedRules));
       }
 
+      // Load Mappings
       const savedMappings = localStorage.getItem(MAPPING_STORAGE_KEY);
       if (savedMappings) {
         setEmployeeMappings(JSON.parse(savedMappings));
       }
 
+      // ============================================
+      // FIXED: Load Employees with Multiple Fallbacks
+      // ============================================
+      let employeeList: Employee[] = [];
+      
       const savedEmployees = localStorage.getItem(EMPLOYEE_STORAGE_KEY);
+      
       if (savedEmployees) {
-        const empData = JSON.parse(savedEmployees);
-        setEmployees(empData.employees || []);
+        try {
+          const empData = JSON.parse(savedEmployees);
+          
+          // Check different possible structures
+          if (Array.isArray(empData)) {
+            // Direct array format
+            employeeList = empData;
+          } else if (empData && Array.isArray(empData.employees)) {
+            // { employees: [...] } format
+            employeeList = empData.employees;
+          } else if (empData && Array.isArray(empData.data)) {
+            // { data: [...] } format
+            employeeList = empData.data;
+          } else if (empData && typeof empData === 'object') {
+            // Check if it's an object with employee entries
+            const possibleArrays = Object.values(empData).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              employeeList = possibleArrays[0] as Employee[];
+            }
+          }
+          
+          // Normalize employee data
+          employeeList = employeeList
+            .filter(emp => emp && (emp.code || emp.id))
+            .map(emp => ({
+              ...emp,
+              code: emp.code || emp.id || '',
+              name: emp.name || 'Unknown',
+              grossMonthlySalary: emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0
+            }))
+            .filter(emp => emp.status !== 'Inactive' && emp.status !== 'Resigned');
+            
+        } catch (parseError) {
+          console.error('Error parsing employee data:', parseError);
+        }
       }
+      
+      setEmployees(employeeList);
+      
+      // Debug log
+      console.log('Loaded employees:', employeeList.length);
+      
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -109,6 +177,11 @@ export default function SalaryBreakupPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Get Employee Gross Salary (handles multiple field names)
+  const getEmployeeGross = (emp: Employee): number => {
+    return emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0;
   };
 
   const saveRules = (newRules: SalaryBreakupRule[]) => {
@@ -200,7 +273,7 @@ export default function SalaryBreakupPage() {
     if (mappedEmployees.length > 0) {
       toast({
         title: "Cannot Delete",
-        description: `${mappedEmployees.length} employees mapped hain`,
+        description: `${mappedEmployees.length} employees mapped hain. Pehle unki mapping hatao.`,
         variant: "destructive"
       });
       return;
@@ -211,19 +284,63 @@ export default function SalaryBreakupPage() {
     toast({ title: "Deleted", description: "Rule delete ho gaya" });
   };
 
+  // ============================================
+  // FORCE MAPPING: Employee ko specific rule assign karo
+  // ============================================
   const handleMappingChange = (employeeCode: string, ruleId: string) => {
     const newMappings = { ...employeeMappings };
+    
     if (ruleId === 'auto') {
+      // Auto mode: Remove custom mapping, use range-based rule
       delete newMappings[employeeCode];
+      toast({ 
+        title: "Auto Mode ✅", 
+        description: `${employeeCode} ab range ke hisab se rule lagega` 
+      });
     } else {
+      // Force specific rule
       newMappings[employeeCode] = ruleId;
+      const ruleName = rules.find(r => r.id === ruleId)?.ruleName || 'Unknown';
+      toast({ 
+        title: "Force Applied ✅", 
+        description: `${employeeCode} par "${ruleName}" force apply kiya` 
+      });
     }
+    
     saveMappings(newMappings);
-    toast({ title: "Mapping Updated ✅", description: `${employeeCode} updated` });
   };
 
+  // Clear all force mappings for an employee
+  const handleClearMapping = (employeeCode: string) => {
+    const newMappings = { ...employeeMappings };
+    delete newMappings[employeeCode];
+    saveMappings(newMappings);
+    toast({ 
+      title: "Mapping Cleared ✅", 
+      description: `${employeeCode} ab auto mode mein hai` 
+    });
+  };
+
+  // Find Applicable Rule (Range based)
   const findApplicableRule = (grossSalary: number): SalaryBreakupRule | null => {
     return rules.find(r => r.isActive && grossSalary >= r.grossFrom && grossSalary <= r.grossTo) || null;
+  };
+
+  // Get Applied Rule for Employee (considering force mapping)
+  const getAppliedRule = (emp: Employee): { rule: SalaryBreakupRule | null; isForced: boolean } => {
+    const mappedRuleId = employeeMappings[emp.code];
+    
+    if (mappedRuleId && mappedRuleId !== 'auto') {
+      // Force mapped rule
+      const forcedRule = rules.find(r => r.id === mappedRuleId);
+      if (forcedRule) {
+        return { rule: forcedRule, isForced: true };
+      }
+    }
+    
+    // Auto: Range based rule
+    const autoRule = findApplicableRule(getEmployeeGross(emp));
+    return { rule: autoRule, isForced: false };
   };
 
   const calculateBreakup = (grossSalary: number, rule: SalaryBreakupRule | null) => {
@@ -250,6 +367,17 @@ export default function SalaryBreakupPage() {
     };
   };
 
+  // Filter employees based on search
+  const filteredEmployees = employees.filter(emp => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      emp.code?.toLowerCase().includes(searchLower) ||
+      emp.name?.toLowerCase().includes(searchLower) ||
+      emp.department?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Stats
   const activeRulesCount = rules.filter(r => r.isActive).length;
   const mappedEmployeesCount = Object.keys(employeeMappings).length;
   const testRule = findApplicableRule(testGross);
@@ -303,10 +431,9 @@ export default function SalaryBreakupPage() {
         </div>
 
         {/* ============ STATS CARDS ============ */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* Total Rules */}
           <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
             <CardContent className="p-3 relative">
               <div className="flex items-center justify-between">
                 <div>
@@ -322,7 +449,6 @@ export default function SalaryBreakupPage() {
 
           {/* Active Rules */}
           <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
             <CardContent className="p-3 relative">
               <div className="flex items-center justify-between">
                 <div>
@@ -336,17 +462,31 @@ export default function SalaryBreakupPage() {
             </CardContent>
           </Card>
 
-          {/* Custom Mapped */}
-          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-orange-500 to-amber-600 text-white">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
+          {/* Total Employees */}
+          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-cyan-500 to-teal-600 text-white">
             <CardContent className="p-3 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-100 text-[10px] font-medium">Mapped</p>
-                  <p className="text-2xl font-bold">{mappedEmployeesCount}</p>
+                  <p className="text-cyan-100 text-[10px] font-medium">Employees</p>
+                  <p className="text-2xl font-bold">{employees.length}</p>
                 </div>
                 <div className="p-2 bg-white/20 rounded-lg">
                   <Users className="h-5 w-5" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Force Mapped */}
+          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-orange-500 to-amber-600 text-white">
+            <CardContent className="p-3 relative">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-100 text-[10px] font-medium">Force Mapped</p>
+                  <p className="text-2xl font-bold">{mappedEmployeesCount}</p>
+                </div>
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Target className="h-5 w-5" />
                 </div>
               </div>
             </CardContent>
@@ -517,100 +657,173 @@ export default function SalaryBreakupPage() {
               )}
             </TabsContent>
 
-            {/* ========== MAPPING TAB ========== */}
+            {/* ========== MAPPING TAB (FIXED) ========== */}
             <TabsContent value="mapping" className="p-3 space-y-3">
-              <Alert className="py-2 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 dark:from-amber-900/20 dark:to-orange-900/20">
+              {/* Info Alert */}
+              <Alert className="py-2 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
                 <AlertCircle className="h-3 w-3 text-amber-600" />
-                <AlertDescription className="text-[11px] text-amber-800 dark:text-amber-200">
-                  <strong>Auto</strong> = Range se automatic. <strong>Custom</strong> = Force apply.
+                <AlertDescription className="text-[11px] text-amber-800">
+                  <strong>Auto</strong> = Gross range se automatic rule lagega | 
+                  <strong> Force</strong> = Range ignore karke specific rule lagega
                 </AlertDescription>
               </Alert>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by code, name, department..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9 text-sm border-2 focus:border-orange-400"
+                />
+              </div>
               
               {employees.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="p-4 bg-gradient-to-br from-orange-100 to-amber-100 rounded-full inline-block">
                     <Users className="h-8 w-8 text-orange-500" />
                   </div>
-                  <h3 className="text-sm font-bold mt-3">Koi Employee Nahi</h3>
-                  <p className="text-gray-500 text-xs">Employee Master mein add karo</p>
+                  <h3 className="text-sm font-bold mt-3">Koi Employee Nahi Mila</h3>
+                  <p className="text-gray-500 text-xs mt-1">Employee Master mein employees add karo</p>
+                  <Button 
+                    onClick={loadAllData} 
+                    size="sm" 
+                    variant="outline" 
+                    className="mt-3 text-xs"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh Data
+                  </Button>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gradient-to-r from-orange-100 to-amber-50 dark:from-orange-900/30">
-                        <TableHead className="text-xs font-bold py-2">Code</TableHead>
-                        <TableHead className="text-xs font-bold py-2">Name</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-right">Gross</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">Auto Rule</TableHead>
-                        <TableHead className="text-xs font-bold py-2">Applied Rule</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {employees.map((emp, index) => {
-                        const autoRule = findApplicableRule(emp.grossMonthlySalary || 0);
-                        const mappedRuleId = employeeMappings[emp.code];
-                        
-                        return (
-                          <TableRow 
-                            key={emp.code}
-                            className={`
-                              hover:bg-orange-50 dark:hover:bg-orange-900/10
-                              ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50'}
-                            `}
-                          >
-                            <TableCell className="py-2">
-                              <span className="font-mono text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
-                                {emp.code}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-xs font-medium py-2">{emp.name}</TableCell>
-                            <TableCell className="text-right py-2">
-                              <span className="text-xs font-semibold text-emerald-600">
-                                ₹{(emp.grossMonthlySalary || 0).toLocaleString()}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center py-2">
-                              {autoRule ? (
-                                <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600 bg-blue-50">
-                                  {autoRule.ruleName}
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-[10px]">No Match</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="py-2">
-                              <Select
-                                value={mappedRuleId || 'auto'}
-                                onValueChange={(value) => handleMappingChange(emp.code, value)}
-                              >
-                                <SelectTrigger className="w-[160px] h-7 text-xs border-2 hover:border-purple-400">
-                                  <SelectValue placeholder="Select" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="auto" className="text-xs">
-                                    <span className="flex items-center gap-1">
-                                      <RefreshCw className="h-3 w-3 text-blue-500" />
-                                      Auto (Range)
-                                    </span>
-                                  </SelectItem>
-                                  {rules.filter(r => r.isActive).map((rule) => (
-                                    <SelectItem key={rule.id} value={rule.id} className="text-xs">
+                <>
+                  {/* Employee Count */}
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Showing {filteredEmployees.length} of {employees.length} employees</span>
+                    <span className="text-orange-600 font-medium">
+                      {mappedEmployeesCount} force mapped
+                    </span>
+                  </div>
+
+                  <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 max-h-[400px] overflow-y-auto">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10">
+                        <TableRow className="bg-gradient-to-r from-orange-100 to-amber-50 dark:from-orange-900/30">
+                          <TableHead className="text-xs font-bold py-2">Code</TableHead>
+                          <TableHead className="text-xs font-bold py-2">Name</TableHead>
+                          <TableHead className="text-xs font-bold py-2 text-right">Gross</TableHead>
+                          <TableHead className="text-xs font-bold py-2 text-center">Auto Rule</TableHead>
+                          <TableHead className="text-xs font-bold py-2">Select Rule</TableHead>
+                          <TableHead className="text-xs font-bold py-2 text-center">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredEmployees.map((emp, index) => {
+                          const grossSalary = getEmployeeGross(emp);
+                          const autoRule = findApplicableRule(grossSalary);
+                          const mappedRuleId = employeeMappings[emp.code];
+                          const { rule: appliedRule, isForced } = getAppliedRule(emp);
+                          
+                          return (
+                            <TableRow 
+                              key={emp.code}
+                              className={`
+                                hover:bg-orange-50 dark:hover:bg-orange-900/10
+                                ${isForced ? 'bg-orange-50/50' : ''}
+                                ${index % 2 === 0 && !isForced ? 'bg-white dark:bg-gray-800' : ''}
+                                ${index % 2 !== 0 && !isForced ? 'bg-gray-50/50' : ''}
+                              `}
+                            >
+                              <TableCell className="py-2">
+                                <span className="font-mono text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                                  {emp.code}
+                                </span>
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <div>
+                                  <p className="text-xs font-medium">{emp.name}</p>
+                                  {emp.department && (
+                                    <p className="text-[10px] text-gray-500">{emp.department}</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right py-2">
+                                <span className="text-xs font-semibold text-emerald-600">
+                                  ₹{grossSalary.toLocaleString()}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center py-2">
+                                {autoRule ? (
+                                  <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600 bg-blue-50">
+                                    {autoRule.ruleName}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-600">
+                                    No Match
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <Select
+                                  value={mappedRuleId || 'auto'}
+                                  onValueChange={(value) => handleMappingChange(emp.code, value)}
+                                >
+                                  <SelectTrigger className={`
+                                    w-[160px] h-7 text-xs border-2 
+                                    ${isForced ? 'border-orange-400 bg-orange-50' : 'hover:border-purple-400'}
+                                  `}>
+                                    <SelectValue placeholder="Select" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="auto" className="text-xs">
                                       <span className="flex items-center gap-1">
-                                        <Shield className="h-3 w-3 text-purple-500" />
-                                        {rule.ruleName}
+                                        <RefreshCw className="h-3 w-3 text-blue-500" />
+                                        Auto (Range Based)
                                       </span>
                                     </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+                                    {rules.filter(r => r.isActive).map((rule) => (
+                                      <SelectItem key={rule.id} value={rule.id} className="text-xs">
+                                        <span className="flex items-center gap-1">
+                                          <Target className="h-3 w-3 text-orange-500" />
+                                          {rule.ruleName} (₹{rule.grossFrom.toLocaleString()}-{rule.grossTo.toLocaleString()})
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="text-center py-2">
+                                {isForced ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Badge className="text-[10px] bg-gradient-to-r from-orange-500 to-amber-500 text-white border-0">
+                                      <Target className="h-2 w-2 mr-1" />
+                                      Forced
+                                    </Badge>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleClearMapping(emp.code)}
+                                      className="h-5 w-5 hover:bg-red-100 hover:text-red-600"
+                                      title="Clear force mapping"
+                                    >
+                                      <UserX className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] border-green-300 text-green-600">
+                                    <UserCheck className="h-2 w-2 mr-1" />
+                                    Auto
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </TabsContent>
 
@@ -661,7 +874,7 @@ export default function SalaryBreakupPage() {
                           <div className="p-1 bg-red-500 rounded-full">
                             <AlertCircle className="h-3 w-3 text-white" />
                           </div>
-                          <p className="text-xs text-red-800">No rule found</p>
+                          <p className="text-xs text-red-800">No rule found for this range</p>
                         </div>
                       </div>
                     )}
@@ -766,7 +979,7 @@ export default function SalaryBreakupPage() {
                     {editingRule ? 'Edit Rule' : 'Add New Rule'}
                   </DialogTitle>
                   <DialogDescription className="text-xs">
-                    Gross range aur breakup define karo
+                    Gross range aur breakup percentages define karo
                   </DialogDescription>
                 </div>
               </div>
@@ -779,7 +992,7 @@ export default function SalaryBreakupPage() {
                 <Input
                   value={formData.ruleName}
                   onChange={(e) => setFormData({ ...formData, ruleName: e.target.value })}
-                  placeholder="e.g., Entry Level, Senior"
+                  placeholder="e.g., Entry Level, Mid Level, Senior"
                   className="h-8 text-sm border-2"
                 />
               </div>
@@ -808,7 +1021,7 @@ export default function SalaryBreakupPage() {
 
               {/* Basic Type */}
               <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-200">
-                <Label className="text-xs font-bold text-purple-700 mb-2 block">Basic Salary</Label>
+                <Label className="text-xs font-bold text-purple-700 mb-2 block">Basic Salary Configuration</Label>
                 
                 <div className="flex items-center gap-4 mb-2">
                   <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-white">
@@ -823,7 +1036,7 @@ export default function SalaryBreakupPage() {
                       <div className="p-0.5 bg-blue-500 rounded">
                         <IndianRupee className="h-3 w-3 text-white" />
                       </div>
-                      <span className="text-xs font-medium">Fixed</span>
+                      <span className="text-xs font-medium">Fixed Amount</span>
                     </div>
                   </label>
                   
@@ -887,7 +1100,7 @@ export default function SalaryBreakupPage() {
               <Alert className="py-2 bg-violet-50 border-violet-200">
                 <Sparkles className="h-3 w-3 text-violet-600" />
                 <AlertDescription className="text-[10px] text-violet-700">
-                  <strong>Other Allowance</strong> = Gross - Basic - HRA - CA - Medical (Auto)
+                  <strong>Other Allowance</strong> = Gross - Basic - HRA - CA - Medical (Auto Calculate)
                 </AlertDescription>
               </Alert>
 
@@ -895,7 +1108,7 @@ export default function SalaryBreakupPage() {
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
                 <div>
                   <Label className="text-xs font-bold">Rule Active</Label>
-                  <p className="text-[10px] text-gray-500">Inactive = Apply nahi hoga</p>
+                  <p className="text-[10px] text-gray-500">Inactive rules apply nahi honge</p>
                 </div>
                 <Switch
                   checked={formData.isActive}
@@ -915,7 +1128,7 @@ export default function SalaryBreakupPage() {
                 className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs"
               >
                 <Save className="h-3 w-3 mr-1" />
-                {editingRule ? 'Update' : 'Save'}
+                {editingRule ? 'Update Rule' : 'Save Rule'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -930,7 +1143,7 @@ export default function SalaryBreakupPage() {
               </div>
               <DialogTitle className="text-center text-base">Delete Rule?</DialogTitle>
               <DialogDescription className="text-center text-xs">
-                Yeh action undo nahi ho sakta.
+                Yeh action undo nahi ho sakta. Rule permanently delete ho jayega.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:justify-center">
