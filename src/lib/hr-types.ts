@@ -1,3 +1,8 @@
+// src/lib/hr-types.ts
+
+// ============================================
+// LEAVE MANAGEMENT TYPES (EXISTING - NO CHANGE)
+// ============================================
 
 export type LeaveType = 'CL' | 'SL' | 'PL';
 
@@ -6,23 +11,47 @@ export interface LeaveBalanceItem {
   accrued: number;
   used: number;
   balance: number;
-  eligible?: boolean; // For PL
+  eligible?: boolean;
 }
 
 export interface LeaveApplication {
   id: string;
-  employeeId: string; // Should match EmployeeDetail.id / EmployeeDetail.code
+  employeeId: string;
   leaveType: LeaveType; 
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
+  startDate: string;
+  endDate: string;
   days: number;
 }
 
 export interface OpeningLeaveBalance {
-  employeeCode: string; // Should match EmployeeDetail.code
+  employeeCode: string;
   openingCL: number;
   openingSL: number;
   openingPL: number;
-  financialYearStart: number; // e.g., 2024 for FY Apr 2024 - Mar 2025
-  monthIndex?: number; // Optional: 0-11 for manual monthly override
+  financialYearStart: number;
+  monthIndex?: number;
+}
+
+// ============================================
+// SALARY BREAKUP TYPES (NEW ADDED)
+// ============================================
+
+export interface SalaryBreakupRule {
+  id: string;
+  ruleName: string;
+  grossFrom: number;
+  grossTo: number;
+  basicType: 'fixed' | 'percentage';
+  basicValue: number;
+  hraPercentage: number;
+  caPercentage: number;
+  medicalPercentage: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeRuleMapping {
+  employeeCode: string;
+  ruleId: string;
 }

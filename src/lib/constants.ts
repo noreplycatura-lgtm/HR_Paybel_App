@@ -1,8 +1,23 @@
-import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarChart3, UserCog, TrendingDownIcon, Settings } from 'lucide-react';
+// src/lib/constants.ts
 
-export const APP_NAME = 'Catura_Payroll';
-export const COMPANY_NAME = 'Catura Healthcare Pvt. Ltd.';
+import type { LucideIcon } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  CalendarCheck, 
+  Briefcase, 
+  Users, 
+  Sheet, 
+  FileText, 
+  BarChart3, 
+  UserCog, 
+  TrendingDownIcon, 
+  Settings, 
+  LifeBuoy,
+  PieChart  // ← NEW IMPORT
+} from 'lucide-react';
+
+export const APP_NAME = 'Novita_Payroll';
+export const COMPANY_NAME = 'Novita Healthcare Pvt. Ltd.';
 
 export interface NavItem {
   title: string;
@@ -33,14 +48,15 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Briefcase,
   },
   {
-    title: 'Salary Breakup',
-    href: '/salary-breakup',
-    icon: Settings,
-  },
-  {
     title: 'Salary Sheet',
     href: '/salary-sheet',
     icon: Sheet,
+  },
+  // ✅ NEW TAB ADDED
+  {
+    title: 'Salary Breakup',
+    href: '/salary-breakup',
+    icon: PieChart,
   },
   {
     title: 'Performance Deduction',
@@ -58,23 +74,33 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
   },
   {
+    title: 'Settings',
+    href: '/settings',
+    icon: Settings,
+  },
+  {
     title: 'User Management',
     href: '/user-management',
     icon: UserCog,
   },
+  {
+    title: 'Help',
+    href: '/help',
+    icon: LifeBuoy,
+  },
 ];
 
 export const ATTENDANCE_STATUS_COLORS: Record<string, string> = {
-  P: 'bg-green-100 text-green-700', // Present
-  A: 'bg-red-100 text-red-700',     // Absent
-  HD: 'bg-yellow-100 text-yellow-700', // Half Day
-  W: 'bg-gray-100 text-gray-700',    // Week Off
-  PH: 'bg-blue-100 text-blue-700',   // Public Holiday
-  CL: 'bg-purple-100 text-purple-700', // Casual Leave
-  SL: 'bg-orange-100 text-orange-700', // Sick Leave
-  PL: 'bg-amber-100 text-amber-700',  // Paid Leave
-  HCL: 'bg-purple-100 text-purple-700', // Half Casual Leave
-  HSL: 'bg-orange-100 text-orange-700', // Half Sick Leave
-  HPL: 'bg-amber-100 text-amber-700',  // Half Paid Leave
-  '-': 'bg-slate-100 text-slate-600', // Not Joined / Not Applicable
+  P: 'bg-green-100 text-green-700',
+  A: 'bg-red-100 text-red-700',
+  HD: 'bg-yellow-100 text-yellow-700',
+  W: 'bg-gray-100 text-gray-700',
+  PH: 'bg-blue-100 text-blue-700',
+  CL: 'bg-purple-100 text-purple-700',
+  SL: 'bg-orange-100 text-orange-700',
+  PL: 'bg-amber-100 text-amber-700',
+  HCL: 'bg-purple-100 text-purple-700',
+  HSL: 'bg-orange-100 text-orange-700',
+  HPL: 'bg-amber-100 text-amber-700',
+  '-': 'bg-slate-100 text-slate-600',
 };

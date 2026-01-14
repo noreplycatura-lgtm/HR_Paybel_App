@@ -14,16 +14,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import Link from "next/link";
 
 // LocalStorage Keys
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
-const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "catura_attendance_raw_data_v4_";
-const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "catura_attendance_filename_v4_";
-const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "catura_last_upload_context_v4";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "catura_leave_applications_v1";
-const LOCAL_STORAGE_OPENING_BALANCES_KEY = "catura_opening_leave_balances_v1";
-const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "catura_salary_sheet_edits_v1_";
-const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "catura_performance_deductions_v1";
-const LOCAL_STORAGE_SIMULATED_USERS_KEY = "catura_simulated_users_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
+const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
+const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -38,8 +38,6 @@ interface SalarySheetEdits {
   loan?: number;
   salaryAdvance?: number;
   manualOtherDeduction?: number;
-  professionalTax?: number;
-  providentFund?: number;
 }
 
 interface PerformanceDeductionEntry {
@@ -151,12 +149,96 @@ export default function DashboardPage() {
   const [recentActivities, setRecentActivities] = React.useState<ActivityLogEntry[]>([]);
 
   React.useEffect(() => {
-    
-    async function calculateSalaries(employeeMasterList: EmployeeDetail[], allPerfDeductions: PerformanceDeductionEntry[]) {
+    setIsLoading(true);
+    setIsLoadingSalaries(true);
+
+    let employeeMasterList: EmployeeDetail[] = [];
+    let allPerfDeductions: PerformanceDeductionEntry[] = [];
+
+    if (typeof window !== 'undefined') {
       try {
+        // Load Employee Data
+        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+        if (storedEmployeesStr) {
+          const parsed = JSON.parse(storedEmployeesStr);
+          if (Array.isArray(parsed)) {
+            employeeMasterList = parsed;
+          }
+        }
+
+        const totalEmployees = employeeMasterList.length;
+        const activeEmployees = employeeMasterList.filter(emp => emp.status === "Active").length;
+        const leftEmployees = employeeMasterList.filter(emp => emp.status === "Left").length;
+
+        // Load Leave Records
+        let totalLeaveRecords = 0;
+        const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
+        if (storedLeaveAppsStr) {
+          try {
+            const parsedApps: LeaveApplication[] = JSON.parse(storedLeaveAppsStr);
+            totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
+          } catch (e) {
+            console.error("Error parsing leave applications:", e);
+          }
+        }
+
+        // Load Performance Deductions
+        const storedPerfDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
+        if (storedPerfDeductionsStr) {
+          const parsedPerfDeductions = JSON.parse(storedPerfDeductionsStr);
+          if (Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
+        }
+
+        // Calculate Storage
+        let totalAppSpecificBytes = 0;
+        const knownFixedKeys = [
+          LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
+          LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
+          LOCAL_STORAGE_OPENING_BALANCES_KEY,
+          LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
+          LOCAL_STORAGE_SIMULATED_USERS_KEY,
+          LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
+          LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
+        ];
+
+        knownFixedKeys.forEach(key => {
+          const item = localStorage.getItem(key);
+          if (item) {
+            totalAppSpecificBytes += new TextEncoder().encode(item).length;
+          }
+        });
+
+        const knownPrefixes = [
+          LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
+          LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
+          LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
+        ];
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && knownPrefixes.some(prefix => key.startsWith(prefix))) {
+            const item = localStorage.getItem(key);
+            if (item) {
+              totalAppSpecificBytes += new TextEncoder().encode(item).length;
+            }
+          }
+        }
+
+        let storageUsed = "0 Bytes";
+        if (totalAppSpecificBytes > 0) {
+          if (totalAppSpecificBytes < 1024) {
+            storageUsed = `${totalAppSpecificBytes.toFixed(0)} Bytes`;
+          } else if (totalAppSpecificBytes < 1024 * 1024) {
+            storageUsed = `${(totalAppSpecificBytes / 1024).toFixed(2)} KB`;
+          } else {
+            storageUsed = `${(totalAppSpecificBytes / (1024 * 1024)).toFixed(2)} MB`;
+          }
+        }
+
+        // Calculate Last 5 Months Salary
         const monthlyTotals: MonthlySalaryTotal[] = [];
         let fiveMonthGrandTotal = 0;
-    
+
         for (let i = 1; i <= 5; i++) {
           const targetDate = subMonths(new Date(), i);
           const monthName = months[getMonth(targetDate)];
@@ -165,7 +247,7 @@ export default function DashboardPage() {
           let monthEmployeeCount = 0;
           const monthStatusCounts = { Active: 0, Left: 0 };
           const monthDesignationCounts: Record<string, number> = {};
-    
+
           const employeeMasterForPeriod = employeeMasterList.filter(emp => {
             const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
             const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
@@ -175,231 +257,111 @@ export default function DashboardPage() {
             if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) return false;
             return true;
           });
-    
+
           if (employeeMasterForPeriod.length > 0) {
             const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
             const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
-    
+
             const storedAttendanceStr = localStorage.getItem(attendanceKey);
             const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
-    
+
             const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
             const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
             const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
-    
+
             if (attendanceForMonth.length > 0) {
-              for (const emp of employeeMasterForPeriod) {
-                try {
-                  const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-                  if (empAttendanceRecord) {
-                    const totalDaysInMonth = getDaysInMonth(targetDate);
-                    let daysPaid = 0;
-                    empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
-                      const s = status.toUpperCase();
-                      if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(s)) daysPaid++;
-                      else if (['HCL', 'HSL', 'HPL', 'HD'].includes(s)) daysPaid += 0.5;
-                    });
-                    daysPaid = Math.min(daysPaid, totalDaysInMonth);
-    
-                    let monthlyComps;
-                    try {
-                      monthlyComps = await calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
-                    } catch (calcError) {
-                      console.error(`Error calculating salary for ${emp.code}:`, calcError);
-                      monthlyComps = { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, totalGross: 0 };
-                    }
-                    
-                    const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
-    
-                    const actualBasic = (monthlyComps.basic || 0) * payFactor;
-                    const actualHRA = (monthlyComps.hra || 0) * payFactor;
-                    const actualCA = (monthlyComps.ca || 0) * payFactor;
-                    const actualMedical = (monthlyComps.medical || 0) * payFactor;
-                    const actualOtherAllowance = (monthlyComps.otherAllowance || 0) * payFactor;
-                    
-                    const empEdits = salaryEditsForMonth[emp.id] || {};
-                    const arrears = empEdits.arrears ?? 0;
-                    const tds = empEdits.tds ?? 0;
-                    const loan = empEdits.loan ?? 0;
-                    const salaryAdvance = empEdits.salaryAdvance ?? 0;
-                    const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
-                    const professionalTax = empEdits.professionalTax ?? 0;
-                    const providentFund = empEdits.providentFund ?? 0;
-    
-                    const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
-                    const performanceDeduction = perfDeductionEntry?.amount || 0;
-                    const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
-    
-                    const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-                    const totalDeductionValue = tds + loan + salaryAdvance + totalOtherDeduction + (professionalTax || 0) + (providentFund || 0);
-                    const netPayForMonth = totalAllowance - totalDeductionValue;
-                    monthTotal += netPayForMonth;
-    
-                    monthEmployeeCount++;
-                    const status = emp.status as 'Active' | 'Left';
-                    if (status === 'Active' || status === 'Left') {
-                      monthStatusCounts[status] = (monthStatusCounts[status] || 0) + 1;
-                    }
-                    const desig = emp.designation || "N/A";
-                    monthDesignationCounts[desig] = (monthDesignationCounts[desig] || 0) + 1;
-                  }
-                } catch (empError) {
-                  console.error(`Error processing employee ${emp.code}:`, empError);
+              employeeMasterForPeriod.forEach(emp => {
+                const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+                if (empAttendanceRecord) {
+                  const totalDaysInMonth = getDaysInMonth(targetDate);
+                  let daysPaid = 0;
+                  empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
+                    if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(status.toUpperCase())) daysPaid++;
+                    else if (status.toUpperCase() === 'HD') daysPaid += 0.5;
+                  });
+                  daysPaid = Math.min(daysPaid, totalDaysInMonth);
+
+                  const monthlyComps = calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
+                  const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+
+                  const actualBasic = monthlyComps.basic * payFactor;
+                  const actualHRA = monthlyComps.hra * payFactor;
+                  const actualCA = monthlyComps.ca * payFactor;
+                  const actualMedical = monthlyComps.medical * payFactor;
+                  const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
+
+                  const empEdits = salaryEditsForMonth[emp.id] || {};
+                  const arrears = empEdits.arrears ?? 0;
+                  const tds = empEdits.tds ?? 0;
+                  const loan = empEdits.loan ?? 0;
+                  const salaryAdvance = empEdits.salaryAdvance ?? 0;
+                  const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
+
+                  const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
+                  const performanceDeduction = perfDeductionEntry?.amount || 0;
+                  const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
+
+                  const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+                  const totalDeductionValue = tds + loan + salaryAdvance + totalOtherDeduction;
+                  const netPayForMonth = totalAllowance - totalDeductionValue;
+                  monthTotal += netPayForMonth;
+
+                  monthEmployeeCount++;
+                  monthStatusCounts[emp.status] = (monthStatusCounts[emp.status] || 0) + 1;
+                  const desig = emp.designation || "N/A";
+                  monthDesignationCounts[desig] = (monthDesignationCounts[desig] || 0) + 1;
                 }
-              }
+              });
             }
           }
-          monthlyTotals.push({ 
-            monthYear: `${monthName} ${year}`, 
-            total: monthTotal, 
-            employeeCount: monthEmployeeCount, 
-            statusCounts: monthStatusCounts, 
-            designationCounts: monthDesignationCounts 
-          });
+          monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthTotal, employeeCount: monthEmployeeCount, statusCounts: monthStatusCounts, designationCounts: monthDesignationCounts });
           fiveMonthGrandTotal += monthTotal;
         }
-        
         setLastFiveMonthsSalaryData(monthlyTotals.reverse());
         setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
-        
-      } catch (error) {
-        console.error("Error in calculateSalaries:", error);
-        setLastFiveMonthsSalaryData([]);
-        setGrandTotalLastFiveMonths(0);
-      } finally {
         setIsLoadingSalaries(false);
+
+        // Payroll Status
+        const lastMonthDate = subMonths(new Date(), 1);
+        const prevMonthName = months[getMonth(lastMonthDate)];
+        const prevMonthYear = getYear(lastMonthDate);
+        const attendanceKeyForLastMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
+
+        let payrollStatus = "Pending";
+        let payrollDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
+        if (localStorage.getItem(attendanceKeyForLastMonth)) {
+          payrollStatus = "Processed";
+          payrollDescription = `${prevMonthName} ${prevMonthYear} completed`;
+        }
+
+        // Recent Activities
+        const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
+        if (storedActivitiesStr) {
+          try {
+            const parsedActivities: ActivityLogEntry[] = JSON.parse(storedActivitiesStr);
+            setRecentActivities(Array.isArray(parsedActivities) ? parsedActivities.slice(0, 5) : []);
+          } catch (e) {
+            setRecentActivities([]);
+          }
+        }
+
+        // Set Stats
+        setStats({
+          totalEmployees,
+          activeEmployees,
+          leftEmployees,
+          totalLeaveRecords,
+          payrollStatus,
+          payrollDescription,
+          storageUsed,
+        });
+
+      } catch (error) {
+        console.error("Dashboard: Error fetching data:", error);
+        toast({ title: "Dashboard Error", description: "Could not load some data.", variant: "destructive" });
       }
     }
-
-    function loadDashboardData() {
-        setIsLoading(true);
-        setIsLoadingSalaries(true);
-
-        let employeeMasterList: EmployeeDetail[] = [];
-        let allPerfDeductions: PerformanceDeductionEntry[] = [];
-
-        if (typeof window === 'undefined') {
-            setIsLoading(false);
-            setIsLoadingSalaries(false);
-            return;
-        }
-
-        try {
-            const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-            if (storedEmployeesStr) {
-                const parsed = JSON.parse(storedEmployeesStr);
-                if (Array.isArray(parsed)) {
-                    employeeMasterList = parsed;
-                }
-            }
-
-            const totalEmployees = employeeMasterList.length;
-            const activeEmployees = employeeMasterList.filter(emp => emp.status === "Active").length;
-            const leftEmployees = employeeMasterList.filter(emp => emp.status === "Left").length;
-
-            let totalLeaveRecords = 0;
-            const storedLeaveAppsStr = localStorage.getItem(LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY);
-            if (storedLeaveAppsStr) {
-                try {
-                    const parsedApps: LeaveApplication[] = JSON.parse(storedLeaveAppsStr);
-                    totalLeaveRecords = Array.isArray(parsedApps) ? parsedApps.length : 0;
-                } catch (e) {
-                    console.error("Error parsing leave applications:", e);
-                }
-            }
-
-            const storedPerfDeductionsStr = localStorage.getItem(LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY);
-            if (storedPerfDeductionsStr) {
-                const parsedPerfDeductions = JSON.parse(storedPerfDeductionsStr);
-                if (Array.isArray(parsedPerfDeductions)) allPerfDeductions = parsedPerfDeductions;
-            }
-
-            let totalAppSpecificBytes = 0;
-            const knownFixedKeys = [
-                LOCAL_STORAGE_EMPLOYEE_MASTER_KEY,
-                LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY,
-                LOCAL_STORAGE_OPENING_BALANCES_KEY,
-                LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY,
-                LOCAL_STORAGE_SIMULATED_USERS_KEY,
-                LOCAL_STORAGE_RECENT_ACTIVITIES_KEY,
-                LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY,
-            ];
-
-            knownFixedKeys.forEach(key => {
-                const item = localStorage.getItem(key);
-                if (item) {
-                    totalAppSpecificBytes += new TextEncoder().encode(item).length;
-                }
-            });
-
-            const knownPrefixes = [
-                LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX,
-                LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX,
-                LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX
-            ];
-
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && knownPrefixes.some(prefix => key.startsWith(prefix))) {
-                    const item = localStorage.getItem(key);
-                    if (item) {
-                        totalAppSpecificBytes += new TextEncoder().encode(item).length;
-                    }
-                }
-            }
-
-            let storageUsed = "0 Bytes";
-            if (totalAppSpecificBytes > 0) {
-                if (totalAppSpecificBytes < 1024) {
-                    storageUsed = `${totalAppSpecificBytes.toFixed(0)} Bytes`;
-                } else if (totalAppSpecificBytes < 1024 * 1024) {
-                    storageUsed = `${(totalAppSpecificBytes / 1024).toFixed(2)} KB`;
-                } else {
-                    storageUsed = `${(totalAppSpecificBytes / (1024 * 1024)).toFixed(2)} MB`;
-                }
-            }
-            
-            const lastMonthDate = subMonths(new Date(), 1);
-            const prevMonthName = months[getMonth(lastMonthDate)];
-            const prevMonthYear = getYear(lastMonthDate);
-            const attendanceKeyForLastMonth = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${prevMonthName}_${prevMonthYear}`;
-
-            let payrollStatus = "Pending";
-            let payrollDescription = `Awaiting ${prevMonthName} ${prevMonthYear} attendance`;
-            if (localStorage.getItem(attendanceKeyForLastMonth)) {
-                payrollStatus = "Processed";
-                payrollDescription = `${prevMonthName} ${prevMonthYear} completed`;
-            }
-
-            const storedActivitiesStr = localStorage.getItem(LOCAL_STORAGE_RECENT_ACTIVITIES_KEY);
-            if (storedActivitiesStr) {
-                try {
-                    const parsedActivities: ActivityLogEntry[] = JSON.parse(storedActivitiesStr);
-                    setRecentActivities(Array.isArray(parsedActivities) ? parsedActivities.slice(0, 5) : []);
-                } catch (e) {
-                    setRecentActivities([]);
-                }
-            }
-
-            setStats({
-                totalEmployees,
-                activeEmployees,
-                leftEmployees,
-                totalLeaveRecords,
-                payrollStatus,
-                payrollDescription,
-                storageUsed,
-            });
-
-            calculateSalaries(employeeMasterList, allPerfDeductions);
-
-        } catch (error) {
-            console.error("Dashboard: Error fetching data:", error);
-            toast({ title: "Dashboard Error", description: "Could not load some data.", variant: "destructive" });
-        }
-        setIsLoading(false);
-    }
-    loadDashboardData();
+    setIsLoading(false);
   }, [toast]);
 
   if (isLoading) {

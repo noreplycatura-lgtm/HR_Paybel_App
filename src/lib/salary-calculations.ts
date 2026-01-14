@@ -1,6 +1,12 @@
+// src/lib/salary-calculation.ts
+
 import type { EmployeeDetail } from './hr-data';
-import { parseISO, isValid, isBefore, startOfMonth, endOfMonth, getDaysInMonth, getDate } from 'date-fns';
-import { getSalaryBreakupRules, type SalaryBreakupRule } from './google-sheets';
+import { parseISO, isValid, startOfMonth, endOfMonth, getDaysInMonth, getDate, isAfter } from 'date-fns';
+import type { SalaryBreakupRule } from './hr-types';
+
+// Storage Keys
+const RULES_STORAGE_KEY = 'novita_salary_breakup_rules_v1';
+const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
 
 export interface MonthlySalaryComponents {
   basic: number;
@@ -8,178 +14,254 @@ export interface MonthlySalaryComponents {
   ca: number;
   medical: number;
   otherAllowance: number;
-  totalGross: number; // The gross salary amount used for this period's calculation
+  totalGross: number;
 }
 
-let breakupRules: SalaryBreakupRule[] | null = null;
-let rulesPromise: Promise<void> | null = null;
-
-async function fetchAndCacheRules() {
-  if (breakupRules) return;
-  if (rulesPromise) return rulesPromise;
-
-  rulesPromise = (async () => {
-    breakupRules = await getSalaryBreakupRules();
-  })();
-  await rulesPromise;
-  rulesPromise = null;
+// ============================================
+// HELPER: Load Rules from LocalStorage
+// ============================================
+function loadBreakupRules(): SalaryBreakupRule[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = localStorage.getItem(RULES_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
 }
 
-function getComponentsForGross(gross: number, rules: SalaryBreakupRule[] | null, overrideRuleId?: string): Omit<MonthlySalaryComponents, 'totalGross'> {
-  if (gross <= 0) {
+// ============================================
+// HELPER: Load Employee Mappings from LocalStorage
+// ============================================
+function loadEmployeeMappings(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const saved = localStorage.getItem(MAPPING_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
+
+// ============================================
+// HELPER: Find Rule for Employee
+// ============================================
+function findRuleForEmployee(
+  employeeCode: string,
+  grossSalary: number,
+  rules: SalaryBreakupRule[],
+  mappings: Record<string, string>
+): SalaryBreakupRule | undefined {
+  
+  // 1. Check if employee has custom mapping
+  const customRuleId = mappings[employeeCode];
+  if (customRuleId && customRuleId !== 'auto') {
+    const customRule = rules.find(r => r.id === customRuleId && r.isActive);
+    if (customRule) return customRule;
+  }
+  
+  // 2. Find rule by gross salary range (Auto mode)
+  return rules.find(r => 
+    r.isActive && 
+    grossSalary >= r.grossFrom && 
+    grossSalary <= r.grossTo
+  );
+}
+
+// ============================================
+// HELPER: Calculate Components for Gross
+// ============================================
+function getComponentsForGross(
+  grossSalary: number, 
+  rule: SalaryBreakupRule | undefined
+): Omit<MonthlySalaryComponents, 'totalGross'> {
+  
+  if (grossSalary <= 0) {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0 };
   }
 
-  let rule: SalaryBreakupRule | undefined;
-
-  if (rules) {
-    if (overrideRuleId) {
-      rule = rules.find(r => r.id === overrideRuleId);
-    } else {
-      rule = rules.find(r => gross >= r.from_gross && gross <= r.to_gross);
-    }
-  }
-
-  if (rule) {
-    let basic: number;
-    if (rule.basic_calculation_method === 'fixed' && rule.basic_fixed_amount) {
-      basic = rule.basic_fixed_amount;
-    } else if (rule.basic_calculation_method === 'percentage' && rule.basic_percentage) {
-      basic = gross * (rule.basic_percentage / 100);
-    } else {
-      basic = 0; // Fallback
-    }
-
-    if (basic > gross) {
-      basic = gross;
-    }
-
-    const remainingForPercentages = gross - basic;
-
-    const hra = remainingForPercentages * (rule.hra_percentage / 100);
-    const ca = remainingForPercentages * (rule.ca_percentage / 100);
-    const medical = remainingForPercentages * (rule.medical_percentage / 100);
-    const otherAllowance = Math.max(0, remainingForPercentages - hra - ca - medical);
+  // ============================================
+  // DEFAULT FALLBACK RULE (Jab koi rule nahi mile)
+  // ============================================
+  if (!rule) {
+    const fixedBasicAmount = 15010;
+    let basic, hra, ca, medical, otherAllowance;
     
-    const calculatedSum = basic + hra + ca + medical + otherAllowance;
-    const finalOtherAllowance = otherAllowance + (gross - calculatedSum);
-
-    return { basic, hra, ca, medical, otherAllowance: finalOtherAllowance };
+    if (grossSalary <= 15010) {
+      basic = grossSalary;
+      hra = ca = medical = otherAllowance = 0;
+    } else if (grossSalary > 15010 && grossSalary <= 18000) {
+      basic = grossSalary * 0.80;
+      hra = grossSalary - basic;
+      ca = medical = otherAllowance = 0;
+    } else {
+      basic = fixedBasicAmount;
+      const remainingAmount = grossSalary - basic;
+      hra = remainingAmount * 0.50;
+      ca = remainingAmount * 0.20;
+      medical = remainingAmount * 0.15;
+      otherAllowance = Math.max(0, remainingAmount - hra - ca - medical);
+    }
+    
+    const components = { basic, hra, ca, medical, otherAllowance };
+    const calculatedSum = Object.values(components).reduce((sum, val) => sum + val, 0);
+    components.otherAllowance += (grossSalary - calculatedSum);
+    return components;
   }
 
-  // Fallback to the original fixed logic if no rule matches
-  const fixedBasicAmount = 15010;
-  let basic: number;
-  let hra: number;
-  let ca: number;
-  let medical: number;
-  let otherAllowance: number;
-
-  if (gross < fixedBasicAmount) {
-    basic = gross;
-    hra = 0;
-    ca = 0;
-    medical = 0;
-    otherAllowance = 0;
+  // ============================================
+  // CALCULATE BASED ON RULE
+  // ============================================
+  let basic = 0;
+  if (rule.basicType === 'fixed') {
+    basic = Math.min(rule.basicValue, grossSalary);
   } else {
-    basic = fixedBasicAmount;
-    const remainingAmount = gross - basic;
-    
-    hra = remainingAmount * 0.50;
-    ca = remainingAmount * 0.20;
-    medical = remainingAmount * 0.15;
-    otherAllowance = Math.max(0, remainingAmount - hra - ca - medical);
+    basic = grossSalary * (rule.basicValue / 100);
   }
 
-  const calculatedSum = basic + hra + ca + medical + otherAllowance;
-  if (Math.abs(calculatedSum - gross) > 0.01) {
-      otherAllowance = otherAllowance + (gross - calculatedSum);
+  const hra = grossSalary * (rule.hraPercentage / 100);
+  const ca = grossSalary * (rule.caPercentage / 100);
+  const medical = grossSalary * (rule.medicalPercentage / 100);
+  
+  const remainingForOther = grossSalary - basic - hra - ca - medical;
+  const otherAllowance = Math.max(0, remainingForOther);
+
+  const components = { basic, hra, ca, medical, otherAllowance };
+  
+  // Ensure total matches gross
+  const calculatedSum = Object.values(components).reduce((sum, val) => sum + val, 0);
+  if (Math.abs(calculatedSum - grossSalary) > 0.01) {
+    components.otherAllowance += (grossSalary - calculatedSum);
   }
 
-  return { basic, hra, ca, medical, otherAllowance };
+  return components;
 }
 
-
-export async function calculateMonthlySalaryComponents(
+// ============================================
+// MAIN FUNCTION: Calculate Monthly Salary
+// ============================================
+export function calculateMonthlySalaryComponents(
   employee: EmployeeDetail,
   periodYear: number,
   periodMonthIndex: number // 0-11
-): Promise<MonthlySalaryComponents> {
+): MonthlySalaryComponents {
   
-  await fetchAndCacheRules();
+  // Load rules and mappings from LocalStorage
+  const breakupRules = loadBreakupRules();
+  const employeeMappings = loadEmployeeMappings();
 
   const baseGrossSalary = (typeof employee.grossMonthlySalary === 'number' && !isNaN(employee.grossMonthlySalary))
     ? employee.grossMonthlySalary
     : 0;
-
-  const periodStartDate = startOfMonth(new Date(periodYear, periodMonthIndex, 1));
-  const periodEndDate = endOfMonth(periodStartDate);
-  const daysInMonth = getDaysInMonth(periodStartDate);
-
-  let effectiveDate: Date | null = null;
-  if (employee.salaryEffectiveDate) {
-    try {
-      const parsedDate = parseISO(employee.salaryEffectiveDate);
-      if (isValid(parsedDate)) {
-        effectiveDate = parsedDate;
-      }
-    } catch (e) {
-      console.error("Error parsing salaryEffectiveDate for employee " + employee.code, e);
-    }
-  }
-
+  
   const revisedGrossSalary = (
-      employee.revisedGrossMonthlySalary &&
-      typeof employee.revisedGrossMonthlySalary === 'number' &&
-      !isNaN(employee.revisedGrossMonthlySalary) &&
-      employee.revisedGrossMonthlySalary > 0
-  ) ? employee.revisedGrossMonthlySalary : null;
+    employee.revisedGrossMonthlySalary &&
+    typeof employee.revisedGrossMonthlySalary === 'number' &&
+    !isNaN(employee.revisedGrossMonthlySalary) &&
+    employee.revisedGrossMonthlySalary > 0
+  ) ? employee.revisedGrossMonthlySalary : 0;
 
-  // Scenario 1: Revision date is in the future, or no revision exists. Use old salary.
-  if (!effectiveDate || !revisedGrossSalary || isBefore(periodEndDate, effectiveDate)) {
-    const components = getComponentsForGross(baseGrossSalary, breakupRules, employee.breakupRuleId);
+  const effectiveDateStr = employee.salaryEffectiveDate;
+
+  // ============================================
+  // SCENARIO: No Revision - Use Base Salary Only
+  // ============================================
+  if (!revisedGrossSalary || !effectiveDateStr) {
+    const rule = findRuleForEmployee(employee.code, baseGrossSalary, breakupRules, employeeMappings);
+    const components = getComponentsForGross(baseGrossSalary, rule);
     return { ...components, totalGross: baseGrossSalary };
   }
 
-  // Scenario 2: Revision date is in the past (before this month). Use new salary.
-  if (isBefore(effectiveDate, periodStartDate)) {
-    const components = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
-    return { ...components, totalGross: revisedGrossSalary };
+  try {
+    const effectiveDate = parseISO(effectiveDateStr);
+    const periodStartDate = startOfMonth(new Date(periodYear, periodMonthIndex, 1));
+    const periodEndDate = endOfMonth(periodStartDate);
+    const daysInMonth = getDaysInMonth(periodStartDate);
+
+    if (!isValid(effectiveDate)) {
+      const rule = findRuleForEmployee(employee.code, baseGrossSalary, breakupRules, employeeMappings);
+      const components = getComponentsForGross(baseGrossSalary, rule);
+      return { ...components, totalGross: baseGrossSalary };
+    }
+
+    // ============================================
+    // SCENARIO 1: Effective date is AFTER current month
+    // Use OLD salary for entire month
+    // ============================================
+    if (isAfter(effectiveDate, periodEndDate)) {
+      const rule = findRuleForEmployee(employee.code, baseGrossSalary, breakupRules, employeeMappings);
+      const components = getComponentsForGross(baseGrossSalary, rule);
+      return { ...components, totalGross: baseGrossSalary };
+    }
+
+    // ============================================
+    // SCENARIO 2: Effective date is ON or BEFORE 1st of month
+    // Use NEW salary for entire month
+    // ============================================
+    if (!isAfter(effectiveDate, periodStartDate)) {
+      const rule = findRuleForEmployee(employee.code, revisedGrossSalary, breakupRules, employeeMappings);
+      const components = getComponentsForGross(revisedGrossSalary, rule);
+      return { ...components, totalGross: revisedGrossSalary };
+    }
+
+    // ============================================
+    // SCENARIO 3: MID-MONTH SALARY CHANGE (PRORATION)
+    // Example: 16-Dec se new salary
+    // 01-15 Dec = Old Salary (15 days)
+    // 16-31 Dec = New Salary (16 days)
+    // ============================================
+    const effectiveDayOfMonth = getDate(effectiveDate);
+    const daysWithOldSalary = effectiveDayOfMonth - 1;
+    const daysWithNewSalary = daysInMonth - daysWithOldSalary;
+
+    if (daysWithOldSalary <= 0 || daysWithNewSalary <= 0) {
+      const applicableGross = isAfter(effectiveDate, periodEndDate) ? baseGrossSalary : revisedGrossSalary;
+      const rule = findRuleForEmployee(employee.code, applicableGross, breakupRules, employeeMappings);
+      const components = getComponentsForGross(applicableGross, rule);
+      return { ...components, totalGross: applicableGross };
+    }
+
+    // Find rules for both salaries
+    const oldRule = findRuleForEmployee(employee.code, baseGrossSalary, breakupRules, employeeMappings);
+    const newRule = findRuleForEmployee(employee.code, revisedGrossSalary, breakupRules, employeeMappings);
+
+    // Get full month components for both
+    const oldComponentsFull = getComponentsForGross(baseGrossSalary, oldRule);
+    const newComponentsFull = getComponentsForGross(revisedGrossSalary, newRule);
+
+    // PRORATE each component
+    const proratedBasic = ((oldComponentsFull.basic / daysInMonth) * daysWithOldSalary) + 
+                          ((newComponentsFull.basic / daysInMonth) * daysWithNewSalary);
+    
+    const proratedHra = ((oldComponentsFull.hra / daysInMonth) * daysWithOldSalary) + 
+                        ((newComponentsFull.hra / daysInMonth) * daysWithNewSalary);
+    
+    const proratedCa = ((oldComponentsFull.ca / daysInMonth) * daysWithOldSalary) + 
+                       ((newComponentsFull.ca / daysInMonth) * daysWithNewSalary);
+    
+    const proratedMedical = ((oldComponentsFull.medical / daysInMonth) * daysWithOldSalary) + 
+                            ((newComponentsFull.medical / daysInMonth) * daysWithNewSalary);
+    
+    const proratedOtherAllowance = ((oldComponentsFull.otherAllowance / daysInMonth) * daysWithOldSalary) + 
+                                    ((newComponentsFull.otherAllowance / daysInMonth) * daysWithNewSalary);
+    
+    // Effective Total Gross
+    const effectiveTotalGross = ((baseGrossSalary / daysInMonth) * daysWithOldSalary) + 
+                                 ((revisedGrossSalary / daysInMonth) * daysWithNewSalary);
+
+    return {
+      basic: proratedBasic,
+      hra: proratedHra,
+      ca: proratedCa,
+      medical: proratedMedical,
+      otherAllowance: proratedOtherAllowance,
+      totalGross: effectiveTotalGross,
+    };
+
+  } catch (e) {
+    console.error("Error during salary calculation for " + employee.code, e);
+    const rule = findRuleForEmployee(employee.code, baseGrossSalary, breakupRules, employeeMappings);
+    const components = getComponentsForGross(baseGrossSalary, rule);
+    return { ...components, totalGross: baseGrossSalary };
   }
-
-  // Scenario 3: Revision happens this month. Pro-rata calculation needed.
-  const revisionDayOfMonth = getDate(effectiveDate);
-
-  if (revisionDayOfMonth === 1) {
-    // Revision is on the first day, so the new salary applies for the whole month.
-    const components = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
-    return { ...components, totalGross: revisedGrossSalary };
-  }
-
-  // Pro-rata calculation
-  const daysWithOldSalary = revisionDayOfMonth - 1;
-  const daysWithNewSalary = daysInMonth - daysWithOldSalary;
-
-  // Calculate salary components for both gross amounts
-  const oldComponents = getComponentsForGross(baseGrossSalary, breakupRules, employee.breakupRuleId);
-  const newComponents = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
-
-  // Calculate pro-rata components
-  const proRataBasic = (oldComponents.basic / daysInMonth * daysWithOldSalary) + (newComponents.basic / daysInMonth * daysWithNewSalary);
-  const proRataHra = (oldComponents.hra / daysInMonth * daysWithOldSalary) + (newComponents.hra / daysInMonth * daysWithNewSalary);
-  const proRataCa = (oldComponents.ca / daysInMonth * daysWithOldSalary) + (newComponents.ca / daysInMonth * daysWithNewSalary);
-  const proRataMedical = (oldComponents.medical / daysInMonth * daysWithOldSalary) + (newComponents.medical / daysInMonth * daysWithNewSalary);
-  const proRataOtherAllowance = (oldComponents.otherAllowance / daysInMonth * daysWithOldSalary) + (newComponents.otherAllowance / daysInMonth * daysWithNewSalary);
-
-  // The "total gross" for the month is the effective gross salary after pro-rata calculation
-  const effectiveTotalGross = proRataBasic + proRataHra + proRataCa + proRataMedical + proRataOtherAllowance;
-
-  return {
-    basic: proRataBasic,
-    hra: proRataHra,
-    ca: proRataCa,
-    medical: proRataMedical,
-    otherAllowance: proRataOtherAllowance,
-    totalGross: effectiveTotalGross,
-  };
 }
