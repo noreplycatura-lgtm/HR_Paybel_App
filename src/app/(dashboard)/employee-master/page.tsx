@@ -179,7 +179,7 @@ export default function EmployeeMasterPage() {
       code: "", name: "", designation: "", doj: "", status: "Active",
       division: "FMCG", hq: "", dor: "", grossMonthlySalary: 0,
       revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
-      breakupRuleId: "",
+      breakupRuleId: "default",
     },
   });
 
@@ -240,7 +240,7 @@ export default function EmployeeMasterPage() {
   const onSubmit = (values: EmployeeFormValues) => {
     const finalValues = {
       ...values,
-      breakupRuleId: values.breakupRuleId === "" ? undefined : values.breakupRuleId,
+      breakupRuleId: values.breakupRuleId === "default" ? undefined : values.breakupRuleId,
     };
     
     if (editingEmployeeId) {
@@ -282,7 +282,7 @@ export default function EmployeeMasterPage() {
       code: "", name: "", designation: "", doj: "", status: "Active",
       division: "FMCG", hq: "", dor: "", grossMonthlySalary: 0,
       revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
-      breakupRuleId: "",
+      breakupRuleId: "default",
     });
     setIsEmployeeFormOpen(true);
   };
@@ -297,7 +297,7 @@ export default function EmployeeMasterPage() {
         dor: employeeToEdit.dor && isValid(parseISO(employeeToEdit.dor)) ? format(parseISO(employeeToEdit.dor), 'yyyy-MM-dd') : '',
         salaryEffectiveDate: employeeToEdit.salaryEffectiveDate && isValid(parseISO(employeeToEdit.salaryEffectiveDate)) ? format(parseISO(employeeToEdit.salaryEffectiveDate), 'yyyy-MM-dd') : '',
         revisedGrossMonthlySalary: employeeToEdit.revisedGrossMonthlySalary || undefined,
-        breakupRuleId: employeeToEdit.breakupRuleId || "",
+        breakupRuleId: employeeToEdit.breakupRuleId || "default",
       };
       form.reset(formValues);
       setIsEmployeeFormOpen(true);
@@ -670,10 +670,10 @@ export default function EmployeeMasterPage() {
                         <FormField control={form.control} name="breakupRuleId" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Override Salary Breakup Rule</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <Select onValueChange={field.onChange} value={field.value || "default"}>
                               <FormControl><SelectTrigger className="border-gray-300"><SelectValue placeholder="Default (based on Gross)" /></SelectTrigger></FormControl>
                               <SelectContent>
-                                <SelectItem value="">Default (based on Gross)</SelectItem>
+                                <SelectItem value="default">Default (based on Gross)</SelectItem>
                                 {salaryBreakupRules.map(rule => (
                                     <SelectItem key={rule.id} value={rule.id}>
                                         Rule: {rule.from_gross} - {rule.to_gross}
