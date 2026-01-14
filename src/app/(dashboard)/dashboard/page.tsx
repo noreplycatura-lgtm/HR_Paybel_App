@@ -151,7 +151,7 @@ export default function DashboardPage() {
   const [recentActivities, setRecentActivities] = React.useState<ActivityLogEntry[]>([]);
 
   React.useEffect(() => {
-    async function loadDashboardData() {
+    function loadDashboardData() {
         setIsLoading(true);
         setIsLoadingSalaries(true);
 
@@ -243,95 +243,6 @@ export default function DashboardPage() {
                 }
             }
             
-            // Calculate Last 5 Months Salary
-            const monthlyTotals: MonthlySalaryTotal[] = [];
-            let fiveMonthGrandTotal = 0;
-
-            for (let i = 1; i <= 5; i++) {
-                const targetDate = subMonths(new Date(), i);
-                const monthName = months[getMonth(targetDate)];
-                const year = getYear(targetDate);
-                let monthTotal = 0;
-                let monthEmployeeCount = 0;
-                const monthStatusCounts = { Active: 0, Left: 0 };
-                const monthDesignationCounts: Record<string, number> = {};
-
-                const employeeMasterForPeriod = employeeMasterList.filter(emp => {
-                    const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
-                    const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
-                    const currentMonthStart = startOfMonth(targetDate);
-                    const currentMonthEnd = endOfMonth(targetDate);
-                    if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) return false;
-                    if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) return false;
-                    return true;
-                });
-
-                if (employeeMasterForPeriod.length > 0) {
-                    const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
-                    const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
-
-                    const storedAttendanceStr = localStorage.getItem(attendanceKey);
-                    const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
-
-                    const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
-                    const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
-                    const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
-
-                    if (attendanceForMonth.length > 0) {
-                        for (const emp of employeeMasterForPeriod) {
-                            const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
-                            if (empAttendanceRecord) {
-                                const totalDaysInMonth = getDaysInMonth(targetDate);
-                                let daysPaid = 0;
-                                empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
-                                    const s = status.toUpperCase();
-                                    if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(s)) daysPaid++;
-                                    else if (['HCL', 'HSL', 'HPL', 'HD'].includes(s)) daysPaid += 0.5;
-                                });
-                                daysPaid = Math.min(daysPaid, totalDaysInMonth);
-
-                                const monthlyComps = await calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
-                                const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
-
-                                const actualBasic = monthlyComps.basic * payFactor;
-                                const actualHRA = monthlyComps.hra * payFactor;
-                                const actualCA = monthlyComps.ca * payFactor;
-                                const actualMedical = monthlyComps.medical * payFactor;
-                                const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
-                                
-                                const empEdits = salaryEditsForMonth[emp.id] || {};
-                                const arrears = empEdits.arrears ?? 0;
-                                const tds = empEdits.tds ?? 0;
-                                const loan = empEdits.loan ?? 0;
-                                const salaryAdvance = empEdits.salaryAdvance ?? 0;
-                                const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
-                                const professionalTax = empEdits.professionalTax ?? 0;
-                                const providentFund = empEdits.providentFund ?? 0;
-
-                                const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
-                                const performanceDeduction = perfDeductionEntry?.amount || 0;
-                                const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
-
-                                const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
-                                const totalDeductionValue = tds + loan + salaryAdvance + totalOtherDeduction + professionalTax + providentFund;
-                                const netPayForMonth = totalAllowance - totalDeductionValue;
-                                monthTotal += netPayForMonth;
-
-                                monthEmployeeCount++;
-                                monthStatusCounts[emp.status] = (monthStatusCounts[emp.status] || 0) + 1;
-                                const desig = emp.designation || "N/A";
-                                monthDesignationCounts[desig] = (monthDesignationCounts[desig] || 0) + 1;
-                            }
-                        }
-                    }
-                }
-                monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthTotal, employeeCount: monthEmployeeCount, statusCounts: monthStatusCounts, designationCounts: monthDesignationCounts });
-                fiveMonthGrandTotal += monthTotal;
-            }
-            setLastFiveMonthsSalaryData(monthlyTotals.reverse());
-            setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
-            setIsLoadingSalaries(false);
-
             // Payroll Status
             const lastMonthDate = subMonths(new Date(), 1);
             const prevMonthName = months[getMonth(lastMonthDate)];
@@ -366,6 +277,97 @@ export default function DashboardPage() {
                 payrollDescription,
                 storageUsed,
             });
+
+            // Asynchronously calculate salaries
+            (async () => {
+                const monthlyTotals: MonthlySalaryTotal[] = [];
+                let fiveMonthGrandTotal = 0;
+
+                for (let i = 1; i <= 5; i++) {
+                    const targetDate = subMonths(new Date(), i);
+                    const monthName = months[getMonth(targetDate)];
+                    const year = getYear(targetDate);
+                    let monthTotal = 0;
+                    let monthEmployeeCount = 0;
+                    const monthStatusCounts = { Active: 0, Left: 0 };
+                    const monthDesignationCounts: Record<string, number> = {};
+
+                    const employeeMasterForPeriod = employeeMasterList.filter(emp => {
+                        const employeeDOJ = emp.doj && isValid(parseISO(emp.doj)) ? parseISO(emp.doj) : null;
+                        const employeeDOR = emp.dor && isValid(parseISO(emp.dor)) ? parseISO(emp.dor) : null;
+                        const currentMonthStart = startOfMonth(targetDate);
+                        const currentMonthEnd = endOfMonth(targetDate);
+                        if (employeeDOJ && isAfter(employeeDOJ, currentMonthEnd)) return false;
+                        if (employeeDOR && isBefore(employeeDOR, currentMonthStart)) return false;
+                        return true;
+                    });
+
+                    if (employeeMasterForPeriod.length > 0) {
+                        const attendanceKey = `${LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX}${monthName}_${year}`;
+                        const salaryEditsKey = `${LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX}${monthName}_${year}`;
+
+                        const storedAttendanceStr = localStorage.getItem(attendanceKey);
+                        const storedSalaryEditsStr = localStorage.getItem(salaryEditsKey);
+
+                        const attendanceForMonth: StoredEmployeeAttendanceData[] = storedAttendanceStr ? JSON.parse(storedAttendanceStr) : [];
+                        const salaryEditsForMonth: Record<string, SalarySheetEdits> = storedSalaryEditsStr ? JSON.parse(storedSalaryEditsStr) : {};
+                        const perfDeductionsForMonth = allPerfDeductions.filter(pd => pd.month === monthName && pd.year === year);
+
+                        if (attendanceForMonth.length > 0) {
+                            for (const emp of employeeMasterForPeriod) {
+                                const empAttendanceRecord = attendanceForMonth.find(att => att.code === emp.code);
+                                if (empAttendanceRecord) {
+                                    const totalDaysInMonth = getDaysInMonth(targetDate);
+                                    let daysPaid = 0;
+                                    empAttendanceRecord.attendance.slice(0, totalDaysInMonth).forEach(status => {
+                                        const s = status.toUpperCase();
+                                        if (['P', 'W', 'PH', 'CL', 'SL', 'PL'].includes(s)) daysPaid++;
+                                        else if (['HCL', 'HSL', 'HPL', 'HD'].includes(s)) daysPaid += 0.5;
+                                    });
+                                    daysPaid = Math.min(daysPaid, totalDaysInMonth);
+
+                                    const monthlyComps = await calculateMonthlySalaryComponents(emp, year, getMonth(targetDate));
+                                    const payFactor = totalDaysInMonth > 0 ? daysPaid / totalDaysInMonth : 0;
+
+                                    const actualBasic = monthlyComps.basic * payFactor;
+                                    const actualHRA = monthlyComps.hra * payFactor;
+                                    const actualCA = monthlyComps.ca * payFactor;
+                                    const actualMedical = monthlyComps.medical * payFactor;
+                                    const actualOtherAllowance = monthlyComps.otherAllowance * payFactor;
+                                    
+                                    const empEdits = salaryEditsForMonth[emp.id] || {};
+                                    const arrears = empEdits.arrears ?? 0;
+                                    const tds = empEdits.tds ?? 0;
+                                    const loan = empEdits.loan ?? 0;
+                                    const salaryAdvance = empEdits.salaryAdvance ?? 0;
+                                    const manualOtherDeduction = empEdits.manualOtherDeduction ?? 0;
+                                    const professionalTax = empEdits.professionalTax ?? 0;
+                                    const providentFund = empEdits.providentFund ?? 0;
+
+                                    const perfDeductionEntry = perfDeductionsForMonth.find(pd => pd.employeeCode === emp.code);
+                                    const performanceDeduction = perfDeductionEntry?.amount || 0;
+                                    const totalOtherDeduction = manualOtherDeduction + performanceDeduction;
+
+                                    const totalAllowance = actualBasic + actualHRA + actualCA + actualMedical + actualOtherAllowance + arrears;
+                                    const totalDeductionValue = tds + loan + salaryAdvance + totalOtherDeduction + (professionalTax || 0) + (providentFund || 0);
+                                    const netPayForMonth = totalAllowance - totalDeductionValue;
+                                    monthTotal += netPayForMonth;
+
+                                    monthEmployeeCount++;
+                                    monthStatusCounts[emp.status] = (monthStatusCounts[emp.status] || 0) + 1;
+                                    const desig = emp.designation || "N/A";
+                                    monthDesignationCounts[desig] = (monthDesignationCounts[desig] || 0) + 1;
+                                }
+                            }
+                        }
+                    }
+                    monthlyTotals.push({ monthYear: `${monthName} ${year}`, total: monthTotal, employeeCount: monthEmployeeCount, statusCounts: monthStatusCounts, designationCounts: monthDesignationCounts });
+                    fiveMonthGrandTotal += monthTotal;
+                }
+                setLastFiveMonthsSalaryData(monthlyTotals.reverse());
+                setGrandTotalLastFiveMonths(fiveMonthGrandTotal);
+                setIsLoadingSalaries(false);
+            })();
 
         } catch (error) {
             console.error("Dashboard: Error fetching data:", error);
