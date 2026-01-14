@@ -21,7 +21,9 @@ export interface SalaryBreakupRule {
   id: string;
   from_gross: number;
   to_gross: number;
-  basic_percentage: number;
+  basic_calculation_method: 'percentage' | 'fixed';
+  basic_percentage?: number;
+  basic_fixed_amount?: number;
   hra_percentage: number;
   ca_percentage: number;
   medical_percentage: number;

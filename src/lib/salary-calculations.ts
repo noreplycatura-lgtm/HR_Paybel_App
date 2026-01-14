@@ -34,23 +34,32 @@ function getComponentsForGross(gross: number, rules: SalaryBreakupRule[] | null,
 
   if (rules) {
     if (overrideRuleId) {
-      // Find the specific override rule
       rule = rules.find(r => r.id === overrideRuleId);
     } else {
-      // Find a matching rule based on gross salary
       rule = rules.find(r => gross >= r.from_gross && gross <= r.to_gross);
     }
   }
 
-  // Use the dynamic rule if found
   if (rule) {
-    const basic = gross * (rule.basic_percentage / 100);
-    const hra = gross * (rule.hra_percentage / 100);
-    const ca = gross * (rule.ca_percentage / 100);
-    const medical = gross * (rule.medical_percentage / 100);
-    const totalPercentage = rule.basic_percentage + rule.hra_percentage + rule.ca_percentage + rule.medical_percentage;
-    const otherPercentage = Math.max(0, 100 - totalPercentage);
-    const otherAllowance = gross * (otherPercentage / 100);
+    let basic: number;
+    if (rule.basic_calculation_method === 'fixed' && rule.basic_fixed_amount) {
+      basic = rule.basic_fixed_amount;
+    } else if (rule.basic_calculation_method === 'percentage' && rule.basic_percentage) {
+      basic = gross * (rule.basic_percentage / 100);
+    } else {
+      basic = 0; // Fallback
+    }
+
+    if (basic > gross) {
+      basic = gross;
+    }
+
+    const remainingForPercentages = gross - basic;
+
+    const hra = remainingForPercentages * (rule.hra_percentage / 100);
+    const ca = remainingForPercentages * (rule.ca_percentage / 100);
+    const medical = remainingForPercentages * (rule.medical_percentage / 100);
+    const otherAllowance = Math.max(0, remainingForPercentages - hra - ca - medical);
     
     const calculatedSum = basic + hra + ca + medical + otherAllowance;
     const finalOtherAllowance = otherAllowance + (gross - calculatedSum);

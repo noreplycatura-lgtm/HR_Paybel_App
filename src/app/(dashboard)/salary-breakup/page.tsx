@@ -13,11 +13,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Save, Loader2, PlusCircle, Trash2, Settings, AlertTriangle, IndianRupee } from "lucide-react";
 import { getSalaryBreakupRules, saveSalaryBreakupRules, type SalaryBreakupRule } from "@/lib/google-sheets";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const breakupRuleSchema = z.object({
   from_gross: z.coerce.number().min(0, "From Gross must be non-negative"),
   to_gross: z.coerce.number().positive("To Gross must be positive"),
-  basic_percentage: z.coerce.number().min(0).max(100),
+  basic_calculation_method: z.enum(['percentage', 'fixed'], {
+    required_error: "You must select a Basic calculation method."
+  }),
+  basic_percentage: z.coerce.number().optional(),
+  basic_fixed_amount: z.coerce.number().optional(),
   hra_percentage: z.coerce.number().min(0).max(100),
   ca_percentage: z.coerce.number().min(0).max(100),
   medical_percentage: z.coerce.number().min(0).max(100),
@@ -25,8 +30,27 @@ const breakupRuleSchema = z.object({
   message: "'To Gross' must be greater than 'From Gross'",
   path: ["to_gross"],
 }).refine(data => {
-  const total = (data.basic_percentage || 0) + (data.hra_percentage || 0) + (data.ca_percentage || 0) + (data.medical_percentage || 0);
-  return total <= 100;
+  if (data.basic_calculation_method === 'percentage') {
+    return data.basic_percentage !== undefined && data.basic_percentage >= 0 && data.basic_percentage <= 100;
+  }
+  return true;
+}, {
+  message: "Basic percentage must be between 0 and 100.",
+  path: ["basic_percentage"],
+}).refine(data => {
+  if (data.basic_calculation_method === 'fixed') {
+    return data.basic_fixed_amount !== undefined && data.basic_fixed_amount > 0;
+  }
+  return true;
+}, {
+  message: "Fixed amount must be positive.",
+  path: ["basic_fixed_amount"],
+}).refine(data => {
+  if (data.basic_calculation_method === 'percentage') {
+    const total = (data.basic_percentage || 0) + (data.hra_percentage || 0) + (data.ca_percentage || 0) + (data.medical_percentage || 0);
+    return total <= 100;
+  }
+  return true;
 }, {
   message: "Total of Basic, HRA, CA, and Medical percentages cannot exceed 100%.",
   path: ["basic_percentage"],
@@ -46,12 +70,14 @@ export default function SalaryBreakupPage() {
     defaultValues: {
       from_gross: 0,
       to_gross: 0,
-      basic_percentage: 0,
+      basic_calculation_method: 'percentage',
       hra_percentage: 0,
       ca_percentage: 0,
       medical_percentage: 0,
     },
   });
+
+  const basicCalcMethod = form.watch("basic_calculation_method");
 
   React.useEffect(() => {
     async function loadRules() {
@@ -69,7 +95,9 @@ export default function SalaryBreakupPage() {
     setIsSaving(true);
     const newRule: SalaryBreakupRule = {
       id: `rule_${Date.now()}`,
-      ...values
+      ...values,
+      basic_percentage: values.basic_calculation_method === 'percentage' ? values.basic_percentage : undefined,
+      basic_fixed_amount: values.basic_calculation_method === 'fixed' ? values.basic_fixed_amount : undefined,
     };
 
     const updatedRules = [...rules, newRule].sort((a, b) => a.from_gross - b.from_gross);
@@ -81,7 +109,16 @@ export default function SalaryBreakupPage() {
         title: "✅ Rule Added",
         description: "Your new salary breakup rule has been saved.",
       });
-      form.reset();
+      form.reset({
+        from_gross: 0,
+        to_gross: 0,
+        basic_calculation_method: 'percentage',
+        hra_percentage: 0,
+        ca_percentage: 0,
+        medical_percentage: 0,
+        basic_percentage: undefined,
+        basic_fixed_amount: undefined,
+      });
     } else {
       toast({
         title: "❌ Save Failed",
@@ -160,10 +197,37 @@ export default function SalaryBreakupPage() {
                         <FormItem><FormLabel>To Gross (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                       )} />
                   </div>
+
+                  <FormField control={form.control} name="basic_calculation_method" render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel>Basic Salary Calculation</FormLabel>
+                      <FormControl>
+                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4">
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl><RadioGroupItem value="percentage" id="r1" /></FormControl>
+                            <FormLabel htmlFor="r1" className="font-normal">Percentage (%)</FormLabel>
+                          </FormItem>
+                          <FormItem className="flex items-center space-x-2">
+                            <FormControl><RadioGroupItem value="fixed" id="r2" /></FormControl>
+                            <FormLabel htmlFor="r2" className="font-normal">Fixed Amount (₹)</FormLabel>
+                          </FormItem>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}/>
+
                   <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="basic_percentage" render={({ field }) => (
-                        <FormItem><FormLabel>Basic (%)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
+                    {basicCalcMethod === 'percentage' && (
+                      <FormField control={form.control} name="basic_percentage" render={({ field }) => (
+                          <FormItem><FormLabel>Basic (%)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    )}
+                    {basicCalcMethod === 'fixed' && (
+                      <FormField control={form.control} name="basic_fixed_amount" render={({ field }) => (
+                          <FormItem><FormLabel>Basic Fixed (₹)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    )}
                     <FormField control={form.control} name="hra_percentage" render={({ field }) => (
                         <FormItem><FormLabel>HRA (%)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                       )} />
@@ -175,7 +239,7 @@ export default function SalaryBreakupPage() {
                       )} />
                   </div>
 
-                  {form.formState.errors.basic_percentage && (
+                  {form.formState.errors.basic_percentage && basicCalcMethod === 'percentage' && (
                     <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
                         <AlertTriangle className="h-4 w-4"/>
                         <span>{form.formState.errors.basic_percentage.message}</span>
@@ -205,7 +269,7 @@ export default function SalaryBreakupPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Gross Range (₹)</TableHead>
-                    <TableHead>Basic %</TableHead>
+                    <TableHead>Basic</TableHead>
                     <TableHead>HRA %</TableHead>
                     <TableHead>CA %</TableHead>
                     <TableHead>Medical %</TableHead>
@@ -215,15 +279,22 @@ export default function SalaryBreakupPage() {
                 </TableHeader>
                 <TableBody>
                   {rules.length > 0 ? rules.map(rule => {
-                    const other = 100 - (rule.basic_percentage + rule.hra_percentage + rule.ca_percentage + rule.medical_percentage);
+                    const basicDisplay = rule.basic_calculation_method === 'fixed'
+                        ? `₹${rule.basic_fixed_amount?.toLocaleString()}`
+                        : `${rule.basic_percentage}%`;
+                    
+                    const other = rule.basic_calculation_method === 'percentage' 
+                        ? 100 - ((rule.basic_percentage || 0) + rule.hra_percentage + rule.ca_percentage + rule.medical_percentage)
+                        : 'N/A';
+
                     return (
                       <TableRow key={rule.id}>
                         <TableCell className="font-medium">{rule.from_gross.toLocaleString()} - {rule.to_gross.toLocaleString()}</TableCell>
-                        <TableCell>{rule.basic_percentage}%</TableCell>
+                        <TableCell>{basicDisplay}</TableCell>
                         <TableCell>{rule.hra_percentage}%</TableCell>
                         <TableCell>{rule.ca_percentage}%</TableCell>
                         <TableCell>{rule.medical_percentage}%</TableCell>
-                        <TableCell>{other.toFixed(2)}%</TableCell>
+                        <TableCell>{typeof other === 'number' ? `${other.toFixed(2)}%` : other}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" onClick={() => setRuleToDelete(rule)} className="text-destructive hover:text-destructive/80">
                             <Trash2 className="h-4 w-4" />
