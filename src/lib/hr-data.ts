@@ -13,6 +13,7 @@ export interface EmployeeDetail {
   grossMonthlySalary: number;
   revisedGrossMonthlySalary?: number;
   salaryEffectiveDate?: string; // YYYY-MM-DD
+  breakupRuleId?: string; // New field for override
 }
 
 export const sampleEmployees: EmployeeDetail[] = [

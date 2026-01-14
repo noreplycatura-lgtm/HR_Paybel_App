@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EmployeeDetail } from "@/lib/hr-data";
 import { format, parseISO, isValid, isBefore } from "date-fns";
 import { FileUploadButton } from "@/components/shared/file-upload-button";
+import { getSalaryBreakupRules, type SalaryBreakupRule } from "@/lib/google-sheets";
 
 const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
 const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
@@ -61,6 +62,7 @@ const employeeFormSchema = z.object({
         return false;
     }
   }, { message: "If provided, Salary Effective Date must be a valid date (YYYY-MM-DD)"}),
+  breakupRuleId: z.string().optional(), // New field for override
 }).refine(data => {
     if (data.status === "Active" && (data.dor && data.dor.trim() !== "")) {
         return false;
@@ -169,6 +171,7 @@ export default function EmployeeMasterPage() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = React.useState<Set<string>>(new Set());
   const [isDeleteSelectedDialogOpen, setIsDeleteSelectedDialogOpen] = React.useState(false);
   const [employeeToDelete, setEmployeeToDelete] = React.useState<EmployeeDetail | null>(null);
+  const [salaryBreakupRules, setSalaryBreakupRules] = React.useState<SalaryBreakupRule[]>([]);
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -176,6 +179,7 @@ export default function EmployeeMasterPage() {
       code: "", name: "", designation: "", doj: "", status: "Active",
       division: "FMCG", hq: "", dor: "", grossMonthlySalary: 0,
       revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
+      breakupRuleId: "",
     },
   });
 
@@ -189,28 +193,37 @@ export default function EmployeeMasterPage() {
 
   React.useEffect(() => {
     setIsLoadingData(true);
-    if (typeof window !== 'undefined') {
-      try {
-        const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
-        if (storedEmployeesStr) {
-          try {
-            const parsed = JSON.parse(storedEmployeesStr);
-            setEmployees(Array.isArray(parsed) ? parsed : []);
-          } catch (e) {
-            console.error("Error parsing employees from localStorage:", e);
-            toast({ title: "Storage Error", description: "Could not parse employee data.", variant: "destructive" });
+    async function loadInitialData() {
+      if (typeof window !== 'undefined') {
+        try {
+          const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
+          if (storedEmployeesStr) {
+            try {
+              const parsed = JSON.parse(storedEmployeesStr);
+              setEmployees(Array.isArray(parsed) ? parsed : []);
+            } catch (e) {
+              console.error("Error parsing employees from localStorage:", e);
+              toast({ title: "Storage Error", description: "Could not parse employee data.", variant: "destructive" });
+              setEmployees([]);
+            }
+          } else {
             setEmployees([]);
           }
-        } else {
+          
+          const rules = await getSalaryBreakupRules();
+          if (rules) {
+            setSalaryBreakupRules(rules);
+          }
+
+        } catch (error) {
+          console.error("Error loading data from localStorage:", error);
+          toast({ title: "Storage Error", description: "Could not load initial data.", variant: "destructive" });
           setEmployees([]);
         }
-      } catch (error) {
-        console.error("Error loading employees from localStorage:", error);
-        toast({ title: "Storage Error", description: "Could not load employee data.", variant: "destructive" });
-        setEmployees([]);
       }
+      setIsLoadingData(false);
     }
-    setIsLoadingData(false);
+    loadInitialData();
   }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
@@ -225,9 +238,14 @@ export default function EmployeeMasterPage() {
   };
 
   const onSubmit = (values: EmployeeFormValues) => {
+    const finalValues = {
+      ...values,
+      breakupRuleId: values.breakupRuleId === "" ? undefined : values.breakupRuleId,
+    };
+    
     if (editingEmployeeId) {
       const updatedEmployees = employees.map(emp =>
-        emp.id === editingEmployeeId ? { ...emp, ...values, id: editingEmployeeId } : emp
+        emp.id === editingEmployeeId ? { ...emp, ...finalValues, id: editingEmployeeId } : emp
       );
       setEmployees(updatedEmployees);
       saveEmployeesToLocalStorage(updatedEmployees);
@@ -242,7 +260,7 @@ export default function EmployeeMasterPage() {
       }
       const newEmployee: EmployeeDetail = {
         id: values.code,
-        ...values,
+        ...finalValues,
         dor: values.dor || undefined,
         revisedGrossMonthlySalary: values.revisedGrossMonthlySalary || undefined,
         salaryEffectiveDate: values.salaryEffectiveDate || "",
@@ -264,6 +282,7 @@ export default function EmployeeMasterPage() {
       code: "", name: "", designation: "", doj: "", status: "Active",
       division: "FMCG", hq: "", dor: "", grossMonthlySalary: 0,
       revisedGrossMonthlySalary: undefined, salaryEffectiveDate: "",
+      breakupRuleId: "",
     });
     setIsEmployeeFormOpen(true);
   };
@@ -278,6 +297,7 @@ export default function EmployeeMasterPage() {
         dor: employeeToEdit.dor && isValid(parseISO(employeeToEdit.dor)) ? format(parseISO(employeeToEdit.dor), 'yyyy-MM-dd') : '',
         salaryEffectiveDate: employeeToEdit.salaryEffectiveDate && isValid(parseISO(employeeToEdit.salaryEffectiveDate)) ? format(parseISO(employeeToEdit.salaryEffectiveDate), 'yyyy-MM-dd') : '',
         revisedGrossMonthlySalary: employeeToEdit.revisedGrossMonthlySalary || undefined,
+        breakupRuleId: employeeToEdit.breakupRuleId || "",
       };
       form.reset(formValues);
       setIsEmployeeFormOpen(true);
@@ -646,6 +666,23 @@ export default function EmployeeMasterPage() {
                         )} />
                         <FormField control={form.control} name="salaryEffectiveDate" render={({ field }) => (
                           <FormItem><FormLabel>Salary Effective Date</FormLabel><FormControl><Input type="date" placeholder="Optional" {...field} className="border-gray-300" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="breakupRuleId" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Override Salary Breakup Rule</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl><SelectTrigger className="border-gray-300"><SelectValue placeholder="Default (based on Gross)" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="">Default (based on Gross)</SelectItem>
+                                {salaryBreakupRules.map(rule => (
+                                    <SelectItem key={rule.id} value={rule.id}>
+                                        Rule: {rule.from_gross} - {rule.to_gross}
+                                    </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
                         )} />
                       </div>
                       <DialogFooter className="pt-4">

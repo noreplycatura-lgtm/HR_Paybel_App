@@ -25,13 +25,22 @@ async function fetchAndCacheRules() {
   rulesPromise = null;
 }
 
-function getComponentsForGross(gross: number, rules: SalaryBreakupRule[] | null): Omit<MonthlySalaryComponents, 'totalGross'> {
+function getComponentsForGross(gross: number, rules: SalaryBreakupRule[] | null, overrideRuleId?: string): Omit<MonthlySalaryComponents, 'totalGross'> {
   if (gross <= 0) {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0 };
   }
 
-  // Find a matching rule from the dynamic rules
-  const rule = rules?.find(r => gross >= r.from_gross && gross <= r.to_gross);
+  let rule: SalaryBreakupRule | undefined;
+
+  if (rules) {
+    if (overrideRuleId) {
+      // Find the specific override rule
+      rule = rules.find(r => r.id === overrideRuleId);
+    } else {
+      // Find a matching rule based on gross salary
+      rule = rules.find(r => gross >= r.from_gross && gross <= r.to_gross);
+    }
+  }
 
   // Use the dynamic rule if found
   if (rule) {
@@ -119,13 +128,13 @@ export async function calculateMonthlySalaryComponents(
 
   // Scenario 1: Revision date is in the future, or no revision exists. Use old salary.
   if (!effectiveDate || !revisedGrossSalary || isBefore(periodEndDate, effectiveDate)) {
-    const components = getComponentsForGross(baseGrossSalary, breakupRules);
+    const components = getComponentsForGross(baseGrossSalary, breakupRules, employee.breakupRuleId);
     return { ...components, totalGross: baseGrossSalary };
   }
 
   // Scenario 2: Revision date is in the past (before this month). Use new salary.
   if (isBefore(effectiveDate, periodStartDate)) {
-    const components = getComponentsForGross(revisedGrossSalary, breakupRules);
+    const components = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
     return { ...components, totalGross: revisedGrossSalary };
   }
 
@@ -134,7 +143,7 @@ export async function calculateMonthlySalaryComponents(
 
   if (revisionDayOfMonth === 1) {
     // Revision is on the first day, so the new salary applies for the whole month.
-    const components = getComponentsForGross(revisedGrossSalary, breakupRules);
+    const components = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
     return { ...components, totalGross: revisedGrossSalary };
   }
 
@@ -143,8 +152,8 @@ export async function calculateMonthlySalaryComponents(
   const daysWithNewSalary = daysInMonth - daysWithOldSalary;
 
   // Calculate salary components for both gross amounts
-  const oldComponents = getComponentsForGross(baseGrossSalary, breakupRules);
-  const newComponents = getComponentsForGross(revisedGrossSalary, breakupRules);
+  const oldComponents = getComponentsForGross(baseGrossSalary, breakupRules, employee.breakupRuleId);
+  const newComponents = getComponentsForGross(revisedGrossSalary, breakupRules, employee.breakupRuleId);
 
   // Calculate pro-rata components
   const proRataBasic = (oldComponents.basic / daysInMonth * daysWithOldSalary) + (newComponents.basic / daysInMonth * daysWithNewSalary);
