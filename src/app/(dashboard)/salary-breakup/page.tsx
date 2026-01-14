@@ -30,22 +30,24 @@ import {
   Sparkles,
   TrendingUp,
   Shield,
-  Zap,
   Target,
   PieChart,
-  Layers,
   Search,
   UserCheck,
   UserX
 } from 'lucide-react';
 import type { SalaryBreakupRule } from '@/lib/hr-types';
 
-// LocalStorage Keys
+// ============================================
+// LOCALSTORAGE KEYS
+// ============================================
 const RULES_STORAGE_KEY = 'novita_salary_breakup_rules_v1';
 const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
 const EMPLOYEE_STORAGE_KEY = 'novita_employee_master_data_v1';
 
-// Employee Interface
+// ============================================
+// EMPLOYEE INTERFACE
+// ============================================
 interface Employee {
   id?: string;
   code: string;
@@ -59,7 +61,9 @@ interface Employee {
   status?: string;
 }
 
-// Default Rule Template
+// ============================================
+// DEFAULT RULE TEMPLATE
+// ============================================
 const DEFAULT_RULE: Omit<SalaryBreakupRule, 'id' | 'createdAt' | 'updatedAt'> = {
   ruleName: '',
   grossFrom: 0,
@@ -72,11 +76,16 @@ const DEFAULT_RULE: Omit<SalaryBreakupRule, 'id' | 'createdAt' | 'updatedAt'> = 
   isActive: true,
 };
 
+// ============================================
+// MAIN COMPONENT
+// ============================================
 export default function SalaryBreakupPage() {
   const { toast } = useToast();
   const { triggerSync } = useSyncContext();
   
-  // States
+  // ============================================
+  // STATES
+  // ============================================
   const [rules, setRules] = useState<SalaryBreakupRule[]>([]);
   const [employeeMappings, setEmployeeMappings] = useState<Record<string, string>>({});
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -94,13 +103,15 @@ export default function SalaryBreakupPage() {
   // Delete Confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  // Load Data on Mount
+  // ============================================
+  // LOAD DATA ON MOUNT
+  // ============================================
   useEffect(() => {
     loadAllData();
   }, []);
 
   // ============================================
-  // FIXED: Employee Data Loading Function
+  // LOAD ALL DATA FUNCTION
   // ============================================
   const loadAllData = () => {
     setIsLoading(true);
@@ -117,11 +128,8 @@ export default function SalaryBreakupPage() {
         setEmployeeMappings(JSON.parse(savedMappings));
       }
 
-      // ============================================
-      // FIXED: Load Employees with Multiple Fallbacks
-      // ============================================
+      // Load Employees with Multiple Fallbacks
       let employeeList: Employee[] = [];
-      
       const savedEmployees = localStorage.getItem(EMPLOYEE_STORAGE_KEY);
       
       if (savedEmployees) {
@@ -130,16 +138,12 @@ export default function SalaryBreakupPage() {
           
           // Check different possible structures
           if (Array.isArray(empData)) {
-            // Direct array format
             employeeList = empData;
           } else if (empData && Array.isArray(empData.employees)) {
-            // { employees: [...] } format
             employeeList = empData.employees;
           } else if (empData && Array.isArray(empData.data)) {
-            // { data: [...] } format
             employeeList = empData.data;
           } else if (empData && typeof empData === 'object') {
-            // Check if it's an object with employee entries
             const possibleArrays = Object.values(empData).filter(val => Array.isArray(val));
             if (possibleArrays.length > 0) {
               employeeList = possibleArrays[0] as Employee[];
@@ -163,8 +167,6 @@ export default function SalaryBreakupPage() {
       }
       
       setEmployees(employeeList);
-      
-      // Debug log
       console.log('Loaded employees:', employeeList.length);
       
     } catch (error) {
@@ -179,31 +181,48 @@ export default function SalaryBreakupPage() {
     }
   };
 
-  // Get Employee Gross Salary (handles multiple field names)
+  // ============================================
+  // GET EMPLOYEE GROSS SALARY
+  // ============================================
   const getEmployeeGross = (emp: Employee): number => {
     return emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0;
   };
 
+  // ============================================
+  // SAVE RULES
+  // ============================================
   const saveRules = (newRules: SalaryBreakupRule[]) => {
     localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(newRules));
     setRules(newRules);
     triggerSync();
   };
 
+  // ============================================
+  // SAVE MAPPINGS
+  // ============================================
   const saveMappings = (newMappings: Record<string, string>) => {
     localStorage.setItem(MAPPING_STORAGE_KEY, JSON.stringify(newMappings));
     setEmployeeMappings(newMappings);
     triggerSync();
   };
 
+  // ============================================
+  // GENERATE UNIQUE ID
+  // ============================================
   const generateId = () => `rule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+  // ============================================
+  // HANDLE ADD NEW RULE
+  // ============================================
   const handleAddNew = () => {
     setEditingRule(null);
     setFormData(DEFAULT_RULE);
     setIsDialogOpen(true);
   };
 
+  // ============================================
+  // HANDLE EDIT RULE
+  // ============================================
   const handleEdit = (rule: SalaryBreakupRule) => {
     setEditingRule(rule);
     setFormData({
@@ -220,6 +239,9 @@ export default function SalaryBreakupPage() {
     setIsDialogOpen(true);
   };
 
+  // ============================================
+  // VALIDATE FORM
+  // ============================================
   const validateForm = (): string | null => {
     if (!formData.ruleName.trim()) return "Rule name required hai";
     if (formData.grossFrom < 0 || formData.grossTo < 0) return "Gross range negative nahi ho sakti";
@@ -236,6 +258,9 @@ export default function SalaryBreakupPage() {
     return null;
   };
 
+  // ============================================
+  // HANDLE SAVE RULE
+  // ============================================
   const handleSaveRule = () => {
     const error = validateForm();
     if (error) {
@@ -265,6 +290,9 @@ export default function SalaryBreakupPage() {
     setIsDialogOpen(false);
   };
 
+  // ============================================
+  // HANDLE DELETE RULE
+  // ============================================
   const handleDelete = (ruleId: string) => {
     const mappedEmployees = Object.entries(employeeMappings)
       .filter(([_, rid]) => rid === ruleId)
@@ -285,20 +313,18 @@ export default function SalaryBreakupPage() {
   };
 
   // ============================================
-  // FORCE MAPPING: Employee ko specific rule assign karo
+  // HANDLE MAPPING CHANGE
   // ============================================
   const handleMappingChange = (employeeCode: string, ruleId: string) => {
     const newMappings = { ...employeeMappings };
     
     if (ruleId === 'auto') {
-      // Auto mode: Remove custom mapping, use range-based rule
       delete newMappings[employeeCode];
       toast({ 
         title: "Auto Mode ✅", 
         description: `${employeeCode} ab range ke hisab se rule lagega` 
       });
     } else {
-      // Force specific rule
       newMappings[employeeCode] = ruleId;
       const ruleName = rules.find(r => r.id === ruleId)?.ruleName || 'Unknown';
       toast({ 
@@ -310,7 +336,9 @@ export default function SalaryBreakupPage() {
     saveMappings(newMappings);
   };
 
-  // Clear all force mappings for an employee
+  // ============================================
+  // HANDLE CLEAR MAPPING
+  // ============================================
   const handleClearMapping = (employeeCode: string) => {
     const newMappings = { ...employeeMappings };
     delete newMappings[employeeCode];
@@ -321,28 +349,33 @@ export default function SalaryBreakupPage() {
     });
   };
 
-  // Find Applicable Rule (Range based)
+  // ============================================
+  // FIND APPLICABLE RULE (RANGE BASED)
+  // ============================================
   const findApplicableRule = (grossSalary: number): SalaryBreakupRule | null => {
     return rules.find(r => r.isActive && grossSalary >= r.grossFrom && grossSalary <= r.grossTo) || null;
   };
 
-  // Get Applied Rule for Employee (considering force mapping)
+  // ============================================
+  // GET APPLIED RULE FOR EMPLOYEE
+  // ============================================
   const getAppliedRule = (emp: Employee): { rule: SalaryBreakupRule | null; isForced: boolean } => {
     const mappedRuleId = employeeMappings[emp.code];
     
     if (mappedRuleId && mappedRuleId !== 'auto') {
-      // Force mapped rule
       const forcedRule = rules.find(r => r.id === mappedRuleId);
       if (forcedRule) {
         return { rule: forcedRule, isForced: true };
       }
     }
     
-    // Auto: Range based rule
     const autoRule = findApplicableRule(getEmployeeGross(emp));
     return { rule: autoRule, isForced: false };
   };
 
+  // ============================================
+  // CALCULATE BREAKUP
+  // ============================================
   const calculateBreakup = (grossSalary: number, rule: SalaryBreakupRule | null) => {
     if (!rule || grossSalary <= 0) {
       return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, total: 0 };
@@ -367,7 +400,9 @@ export default function SalaryBreakupPage() {
     };
   };
 
-  // Filter employees based on search
+  // ============================================
+  // FILTERED EMPLOYEES
+  // ============================================
   const filteredEmployees = employees.filter(emp => {
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -377,185 +412,211 @@ export default function SalaryBreakupPage() {
     );
   });
 
-  // Stats
+  // ============================================
+  // STATS
+  // ============================================
   const activeRulesCount = rules.filter(r => r.isActive).length;
   const mappedEmployeesCount = Object.keys(employeeMappings).length;
   const testRule = findApplicableRule(testGross);
   const testBreakup = calculateBreakup(testGross, testRule);
 
+  // ============================================
+  // LOADING STATE
+  // ============================================
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[300px]">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin text-purple-500 mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Loading...</p>
+          <RefreshCw className="h-10 w-10 animate-spin text-purple-500 mx-auto mb-3" />
+          <p className="text-base text-gray-500">Loading...</p>
         </div>
       </div>
     );
   }
 
+  // ============================================
+  // MAIN RENDER
+  // ============================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="container mx-auto py-4 px-3 space-y-4">
+      <div className="container mx-auto py-6 px-4 space-y-6">
         
-        {/* ============ HEADER ============ */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 p-4 shadow-lg">
-          <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+        {/* ============================================ */}
+        {/* HEADER SECTION */}
+        {/* ============================================ */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 p-6 shadow-xl">
+          <div className="absolute -top-20 -right-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
           
-          <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 backdrop-blur-sm rounded-lg">
-                <PieChart className="h-6 w-6 text-white" />
+          <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+                <PieChart className="h-8 w-8 text-white" />
               </div>
               <div>
-                <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
                   Salary Breakup Rules
-                  <Sparkles className="h-4 w-4 text-yellow-300" />
+                  <Sparkles className="h-6 w-6 text-yellow-300 animate-pulse" />
                 </h1>
-                <p className="text-purple-100 text-xs">
-                  Gross salary range ke hisab se breakup rules
+                <p className="text-purple-100 text-base mt-1">
+                  Gross salary range ke hisab se breakup rules manage karo
                 </p>
               </div>
             </div>
             
             <Button 
               onClick={handleAddNew} 
-              size="sm"
-              className="bg-white text-purple-600 hover:bg-purple-50 shadow-md text-xs px-4"
+              size="lg"
+              className="bg-white text-purple-600 hover:bg-purple-50 shadow-lg hover:shadow-xl transition-all duration-300 font-semibold px-6"
             >
-              <Plus className="h-3 w-3 mr-1" />
-              Add Rule
+              <Plus className="h-5 w-5 mr-2" />
+              Add New Rule
             </Button>
           </div>
         </div>
 
-        {/* ============ STATS CARDS ============ */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Total Rules */}
-          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-            <CardContent className="p-3 relative">
+        {/* ============================================ */}
+        {/* STATS CARDS */}
+        {/* ============================================ */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Total Rules Card */}
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
+            <CardContent className="p-5 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-blue-100 text-[10px] font-medium">Total Rules</p>
-                  <p className="text-2xl font-bold">{rules.length}</p>
+                  <p className="text-blue-100 text-sm font-medium">Total Rules</p>
+                  <p className="text-4xl font-bold mt-1">{rules.length}</p>
                 </div>
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Settings2 className="h-5 w-5" />
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <Settings2 className="h-7 w-7" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Active Rules */}
-          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-            <CardContent className="p-3 relative">
+          {/* Active Rules Card */}
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-green-600 text-white hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
+            <CardContent className="p-5 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-green-100 text-[10px] font-medium">Active</p>
-                  <p className="text-2xl font-bold">{activeRulesCount}</p>
+                  <p className="text-green-100 text-sm font-medium">Active Rules</p>
+                  <p className="text-4xl font-bold mt-1">{activeRulesCount}</p>
                 </div>
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5" />
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <CheckCircle2 className="h-7 w-7" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Total Employees */}
-          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-cyan-500 to-teal-600 text-white">
-            <CardContent className="p-3 relative">
+          {/* Total Employees Card */}
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-cyan-500 to-teal-600 text-white hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
+            <CardContent className="p-5 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-cyan-100 text-[10px] font-medium">Employees</p>
-                  <p className="text-2xl font-bold">{employees.length}</p>
+                  <p className="text-cyan-100 text-sm font-medium">Total Employees</p>
+                  <p className="text-4xl font-bold mt-1">{employees.length}</p>
                 </div>
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Users className="h-5 w-5" />
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <Users className="h-7 w-7" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Force Mapped */}
-          <Card className="relative overflow-hidden border-0 shadow-md bg-gradient-to-br from-orange-500 to-amber-600 text-white">
-            <CardContent className="p-3 relative">
+          {/* Force Mapped Card */}
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-orange-500 to-amber-600 text-white hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
+            <CardContent className="p-5 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-100 text-[10px] font-medium">Force Mapped</p>
-                  <p className="text-2xl font-bold">{mappedEmployeesCount}</p>
+                  <p className="text-orange-100 text-sm font-medium">Force Mapped</p>
+                  <p className="text-4xl font-bold mt-1">{mappedEmployeesCount}</p>
                 </div>
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Target className="h-5 w-5" />
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <Target className="h-7 w-7" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* ============ MAIN TABS ============ */}
-        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm dark:bg-gray-800/80">
+        {/* ============================================ */}
+        {/* MAIN TABS SECTION */}
+        {/* ============================================ */}
+        <Card className="border-0 shadow-xl bg-white/90 backdrop-blur-sm dark:bg-gray-800/90">
           <Tabs defaultValue="rules" className="w-full">
-            <CardHeader className="border-b bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-t-xl py-2 px-3">
-              <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 bg-white dark:bg-gray-700 p-0.5 rounded-lg shadow-inner h-8">
+            
+            {/* Tab List Header */}
+            <CardHeader className="border-b bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-t-xl py-4 px-6">
+              <TabsList className="grid w-full max-w-xl mx-auto grid-cols-3 bg-white dark:bg-gray-700 p-1.5 rounded-xl shadow-inner h-12">
                 <TabsTrigger 
                   value="rules" 
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded text-xs h-7"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-lg text-base font-medium h-9"
                 >
-                  <Settings2 className="h-3 w-3 mr-1" />
+                  <Settings2 className="h-5 w-5 mr-2" />
                   Rules
                 </TabsTrigger>
                 <TabsTrigger 
                   value="mapping"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white rounded text-xs h-7"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white rounded-lg text-base font-medium h-9"
                 >
-                  <Users className="h-3 w-3 mr-1" />
+                  <Users className="h-5 w-5 mr-2" />
                   Mapping
                 </TabsTrigger>
                 <TabsTrigger 
                   value="calculator"
-                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-green-500 data-[state=active]:text-white rounded text-xs h-7"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-green-500 data-[state=active]:text-white rounded-lg text-base font-medium h-9"
                 >
-                  <Calculator className="h-3 w-3 mr-1" />
+                  <Calculator className="h-5 w-5 mr-2" />
                   Calculator
                 </TabsTrigger>
               </TabsList>
             </CardHeader>
 
-            {/* ========== RULES TAB ========== */}
-            <TabsContent value="rules" className="p-3">
+            {/* ============================================ */}
+            {/* RULES TAB CONTENT */}
+            {/* ============================================ */}
+            <TabsContent value="rules" className="p-6">
               {rules.length === 0 ? (
-                <div className="text-center py-8">
+                /* Empty State */
+                <div className="text-center py-16">
                   <div className="relative inline-block">
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full blur-xl opacity-30" />
-                    <div className="relative p-4 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/50 dark:to-pink-900/50 rounded-full">
-                      <Settings2 className="h-8 w-8 text-purple-500" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full blur-2xl opacity-30 animate-pulse" />
+                    <div className="relative p-6 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/50 dark:to-pink-900/50 rounded-full">
+                      <Settings2 className="h-12 w-12 text-purple-500" />
                     </div>
                   </div>
-                  <h3 className="text-base font-bold mt-3 text-gray-800 dark:text-white">Koi Rule Nahi Hai</h3>
-                  <p className="text-gray-500 text-xs mt-1 mb-3">Apna pehla rule add karo</p>
+                  <h3 className="text-xl font-bold mt-6 text-gray-800 dark:text-white">Koi Rule Nahi Hai</h3>
+                  <p className="text-gray-500 text-base mt-2 mb-6">
+                    Apna pehla salary breakup rule add karo
+                  </p>
                   <Button 
                     onClick={handleAddNew} 
-                    size="sm"
-                    className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs"
+                    size="lg"
+                    className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg"
                   >
-                    <Plus className="h-3 w-3 mr-1" />
+                    <Plus className="h-5 w-5 mr-2" />
                     Add First Rule
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                /* Rules Table */
+                <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700">
-                        <TableHead className="text-xs font-bold py-2">Rule Name</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-right">Gross Range</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">Basic</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">HRA</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">CA</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">Medical</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">Status</TableHead>
-                        <TableHead className="text-xs font-bold py-2 text-center">Actions</TableHead>
+                        <TableHead className="text-sm font-bold py-4 px-4">Rule Name</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-right">Gross Range</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">Basic</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">HRA</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">CA</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">Medical</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">Status</TableHead>
+                        <TableHead className="text-sm font-bold py-4 text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -569,33 +630,33 @@ export default function SalaryBreakupPage() {
                               ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-800/50'}
                             `}
                           >
-                            <TableCell className="py-2">
-                              <div className="flex items-center gap-2">
+                            <TableCell className="py-4 px-4">
+                              <div className="flex items-center gap-3">
                                 <div className={`
-                                  p-1.5 rounded
+                                  p-2 rounded-lg
                                   ${index % 3 === 0 ? 'bg-blue-100 text-blue-600' : ''}
                                   ${index % 3 === 1 ? 'bg-purple-100 text-purple-600' : ''}
                                   ${index % 3 === 2 ? 'bg-emerald-100 text-emerald-600' : ''}
                                 `}>
-                                  <Shield className="h-3 w-3" />
+                                  <Shield className="h-5 w-5" />
                                 </div>
-                                <span className="text-xs font-semibold text-gray-800 dark:text-white">
+                                <span className="text-base font-semibold text-gray-800 dark:text-white">
                                   {rule.ruleName}
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right py-2">
-                              <span className="font-mono text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+                            <TableCell className="text-right py-4">
+                              <span className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
                                 ₹{rule.grossFrom.toLocaleString()} - ₹{rule.grossTo.toLocaleString()}
                               </span>
                             </TableCell>
-                            <TableCell className="text-center py-2">
+                            <TableCell className="text-center py-4">
                               <Badge className={`
-                                text-[10px] px-1.5 py-0
+                                text-sm px-3 py-1
                                 ${rule.basicType === 'fixed' 
                                   ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
                                   : 'bg-gradient-to-r from-purple-500 to-purple-600'
-                                } text-white border-0
+                                } text-white border-0 shadow-sm
                               `}>
                                 {rule.basicType === 'fixed' 
                                   ? `₹${rule.basicValue.toLocaleString()}` 
@@ -603,49 +664,49 @@ export default function SalaryBreakupPage() {
                                 }
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-center py-2">
-                              <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                            <TableCell className="text-center py-4">
+                              <span className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-3 py-1.5 rounded-lg text-sm font-medium">
                                 {rule.hraPercentage}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-center py-2">
-                              <span className="bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                            <TableCell className="text-center py-4">
+                              <span className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 px-3 py-1.5 rounded-lg text-sm font-medium">
                                 {rule.caPercentage}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-center py-2">
-                              <span className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                            <TableCell className="text-center py-4">
+                              <span className="bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 px-3 py-1.5 rounded-lg text-sm font-medium">
                                 {rule.medicalPercentage}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-center py-2">
+                            <TableCell className="text-center py-4">
                               <Badge className={`
-                                text-[10px] px-1.5 py-0
+                                text-sm px-3 py-1
                                 ${rule.isActive 
                                   ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
                                   : 'bg-gray-400'
-                                } text-white border-0
+                                } text-white border-0 shadow-sm
                               `}>
                                 {rule.isActive ? '✓ Active' : 'Inactive'}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-center py-2">
-                              <div className="flex justify-center gap-0.5">
+                            <TableCell className="text-center py-4">
+                              <div className="flex justify-center gap-2">
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleEdit(rule)}
-                                  className="h-7 w-7 hover:bg-blue-100 hover:text-blue-600"
+                                  className="h-9 w-9 hover:bg-blue-100 hover:text-blue-600 transition-colors"
                                 >
-                                  <Edit2 className="h-3 w-3" />
+                                  <Edit2 className="h-5 w-5" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => setDeleteConfirm(rule.id)}
-                                  className="h-7 w-7 hover:bg-red-100 hover:text-red-600"
+                                  className="h-9 w-9 hover:bg-red-100 hover:text-red-600 transition-colors"
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  <Trash2 className="h-5 w-5" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -657,12 +718,14 @@ export default function SalaryBreakupPage() {
               )}
             </TabsContent>
 
-            {/* ========== MAPPING TAB (FIXED) ========== */}
-            <TabsContent value="mapping" className="p-3 space-y-3">
+            {/* ============================================ */}
+            {/* MAPPING TAB CONTENT */}
+            {/* ============================================ */}
+            <TabsContent value="mapping" className="p-6 space-y-5">
               {/* Info Alert */}
-              <Alert className="py-2 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
-                <AlertCircle className="h-3 w-3 text-amber-600" />
-                <AlertDescription className="text-[11px] text-amber-800">
+              <Alert className="py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-800">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <AlertDescription className="text-base text-amber-800 dark:text-amber-200 ml-2">
                   <strong>Auto</strong> = Gross range se automatic rule lagega | 
                   <strong> Force</strong> = Range ignore karke specific rule lagega
                 </AlertDescription>
@@ -670,52 +733,57 @@ export default function SalaryBreakupPage() {
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input
                   placeholder="Search by code, name, department..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-9 text-sm border-2 focus:border-orange-400"
+                  className="pl-12 h-12 text-base border-2 focus:border-orange-400 rounded-xl"
                 />
               </div>
               
               {employees.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="p-4 bg-gradient-to-br from-orange-100 to-amber-100 rounded-full inline-block">
-                    <Users className="h-8 w-8 text-orange-500" />
+                /* No Employees State */
+                <div className="text-center py-16">
+                  <div className="p-6 bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 rounded-full inline-block">
+                    <Users className="h-12 w-12 text-orange-500" />
                   </div>
-                  <h3 className="text-sm font-bold mt-3">Koi Employee Nahi Mila</h3>
-                  <p className="text-gray-500 text-xs mt-1">Employee Master mein employees add karo</p>
+                  <h3 className="text-lg font-bold mt-6 text-gray-800 dark:text-white">
+                    Koi Employee Nahi Mila
+                  </h3>
+                  <p className="text-gray-500 text-base mt-2">
+                    Employee Master mein employees add karo
+                  </p>
                   <Button 
                     onClick={loadAllData} 
-                    size="sm" 
                     variant="outline" 
-                    className="mt-3 text-xs"
+                    className="mt-4"
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" />
+                    <RefreshCw className="h-4 w-4 mr-2" />
                     Refresh Data
                   </Button>
                 </div>
               ) : (
                 <>
                   {/* Employee Count */}
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Showing {filteredEmployees.length} of {employees.length} employees</span>
-                    <span className="text-orange-600 font-medium">
+                  <div className="flex items-center justify-between text-base text-gray-600">
+                    <span>Showing <strong>{filteredEmployees.length}</strong> of <strong>{employees.length}</strong> employees</span>
+                    <span className="text-orange-600 font-semibold">
                       {mappedEmployeesCount} force mapped
                     </span>
                   </div>
 
-                  <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 max-h-[400px] overflow-y-auto">
+                  {/* Mapping Table */}
+                  <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm max-h-[500px] overflow-y-auto">
                     <Table>
                       <TableHeader className="sticky top-0 z-10">
-                        <TableRow className="bg-gradient-to-r from-orange-100 to-amber-50 dark:from-orange-900/30">
-                          <TableHead className="text-xs font-bold py-2">Code</TableHead>
-                          <TableHead className="text-xs font-bold py-2">Name</TableHead>
-                          <TableHead className="text-xs font-bold py-2 text-right">Gross</TableHead>
-                          <TableHead className="text-xs font-bold py-2 text-center">Auto Rule</TableHead>
-                          <TableHead className="text-xs font-bold py-2">Select Rule</TableHead>
-                          <TableHead className="text-xs font-bold py-2 text-center">Status</TableHead>
+                        <TableRow className="bg-gradient-to-r from-orange-100 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/20">
+                          <TableHead className="text-sm font-bold py-4 px-4">Code</TableHead>
+                          <TableHead className="text-sm font-bold py-4">Employee Name</TableHead>
+                          <TableHead className="text-sm font-bold py-4 text-right">Gross Salary</TableHead>
+                          <TableHead className="text-sm font-bold py-4 text-center">Auto Rule</TableHead>
+                          <TableHead className="text-sm font-bold py-4">Select Rule</TableHead>
+                          <TableHead className="text-sm font-bold py-4 text-center">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -729,90 +797,90 @@ export default function SalaryBreakupPage() {
                             <TableRow 
                               key={emp.code}
                               className={`
-                                hover:bg-orange-50 dark:hover:bg-orange-900/10
-                                ${isForced ? 'bg-orange-50/50' : ''}
+                                transition-all duration-200 hover:bg-orange-50 dark:hover:bg-orange-900/10
+                                ${isForced ? 'bg-orange-50/50 dark:bg-orange-900/10' : ''}
                                 ${index % 2 === 0 && !isForced ? 'bg-white dark:bg-gray-800' : ''}
-                                ${index % 2 !== 0 && !isForced ? 'bg-gray-50/50' : ''}
+                                ${index % 2 !== 0 && !isForced ? 'bg-gray-50/50 dark:bg-gray-800/50' : ''}
                               `}
                             >
-                              <TableCell className="py-2">
-                                <span className="font-mono text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                              <TableCell className="py-4 px-4">
+                                <span className="font-mono text-sm font-bold text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-3 py-1.5 rounded-lg">
                                   {emp.code}
                                 </span>
                               </TableCell>
-                              <TableCell className="py-2">
+                              <TableCell className="py-4">
                                 <div>
-                                  <p className="text-xs font-medium">{emp.name}</p>
+                                  <p className="text-base font-medium text-gray-800 dark:text-white">{emp.name}</p>
                                   {emp.department && (
-                                    <p className="text-[10px] text-gray-500">{emp.department}</p>
+                                    <p className="text-sm text-gray-500">{emp.department}</p>
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right py-2">
-                                <span className="text-xs font-semibold text-emerald-600">
+                              <TableCell className="text-right py-4">
+                                <span className="text-base font-semibold text-emerald-600 dark:text-emerald-400">
                                   ₹{grossSalary.toLocaleString()}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-center py-2">
+                              <TableCell className="text-center py-4">
                                 {autoRule ? (
-                                  <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600 bg-blue-50">
+                                  <Badge variant="outline" className="text-sm border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-3 py-1">
                                     {autoRule.ruleName}
                                   </Badge>
                                 ) : (
-                                  <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-600">
+                                  <Badge variant="secondary" className="text-sm bg-red-100 text-red-600 dark:bg-red-900/30 px-3 py-1">
                                     No Match
                                   </Badge>
                                 )}
                               </TableCell>
-                              <TableCell className="py-2">
+                              <TableCell className="py-4">
                                 <Select
                                   value={mappedRuleId || 'auto'}
                                   onValueChange={(value) => handleMappingChange(emp.code, value)}
                                 >
                                   <SelectTrigger className={`
-                                    w-[160px] h-7 text-xs border-2 
-                                    ${isForced ? 'border-orange-400 bg-orange-50' : 'hover:border-purple-400'}
+                                    w-[220px] h-10 text-sm border-2 rounded-lg
+                                    ${isForced ? 'border-orange-400 bg-orange-50 dark:bg-orange-900/20' : 'hover:border-purple-400'}
                                   `}>
-                                    <SelectValue placeholder="Select" />
+                                    <SelectValue placeholder="Select Rule" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="auto" className="text-xs">
-                                      <span className="flex items-center gap-1">
-                                        <RefreshCw className="h-3 w-3 text-blue-500" />
+                                    <SelectItem value="auto" className="text-sm py-2">
+                                      <span className="flex items-center gap-2">
+                                        <RefreshCw className="h-4 w-4 text-blue-500" />
                                         Auto (Range Based)
                                       </span>
                                     </SelectItem>
                                     {rules.filter(r => r.isActive).map((rule) => (
-                                      <SelectItem key={rule.id} value={rule.id} className="text-xs">
-                                        <span className="flex items-center gap-1">
-                                          <Target className="h-3 w-3 text-orange-500" />
-                                          {rule.ruleName} (₹{rule.grossFrom.toLocaleString()}-{rule.grossTo.toLocaleString()})
+                                      <SelectItem key={rule.id} value={rule.id} className="text-sm py-2">
+                                        <span className="flex items-center gap-2">
+                                          <Target className="h-4 w-4 text-orange-500" />
+                                          {rule.ruleName}
                                         </span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </TableCell>
-                              <TableCell className="text-center py-2">
+                              <TableCell className="text-center py-4">
                                 {isForced ? (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <Badge className="text-[10px] bg-gradient-to-r from-orange-500 to-amber-500 text-white border-0">
-                                      <Target className="h-2 w-2 mr-1" />
+                                  <div className="flex items-center justify-center gap-2">
+                                    <Badge className="text-sm bg-gradient-to-r from-orange-500 to-amber-500 text-white border-0 px-3 py-1 shadow-sm">
+                                      <Target className="h-3 w-3 mr-1.5" />
                                       Forced
                                     </Badge>
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       onClick={() => handleClearMapping(emp.code)}
-                                      className="h-5 w-5 hover:bg-red-100 hover:text-red-600"
+                                      className="h-8 w-8 hover:bg-red-100 hover:text-red-600 transition-colors"
                                       title="Clear force mapping"
                                     >
-                                      <UserX className="h-3 w-3" />
+                                      <UserX className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 ) : (
-                                  <Badge variant="outline" className="text-[10px] border-green-300 text-green-600">
-                                    <UserCheck className="h-2 w-2 mr-1" />
+                                  <Badge variant="outline" className="text-sm border-green-300 text-green-600 bg-green-50 dark:bg-green-900/20 px-3 py-1">
+                                    <UserCheck className="h-3 w-3 mr-1.5" />
                                     Auto
                                   </Badge>
                                 )}
@@ -827,54 +895,70 @@ export default function SalaryBreakupPage() {
               )}
             </TabsContent>
 
-            {/* ========== CALCULATOR TAB ========== */}
-            <TabsContent value="calculator" className="p-3">
-              <div className="grid lg:grid-cols-2 gap-4">
+            {/* ============================================ */}
+            {/* CALCULATOR TAB CONTENT */}
+            {/* ============================================ */}
+            <TabsContent value="calculator" className="p-6">
+              <div className="grid lg:grid-cols-2 gap-6">
+                
                 {/* Input Card */}
-                <Card className="border-2 border-emerald-200 dark:border-emerald-800 shadow-md overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-emerald-500 to-green-500 text-white py-2 px-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <div className="p-1 bg-white/20 rounded">
-                        <Calculator className="h-4 w-4" />
+                <Card className="border-2 border-emerald-200 dark:border-emerald-800 shadow-lg overflow-hidden">
+                  <CardHeader className="bg-gradient-to-r from-emerald-500 to-green-500 text-white py-4 px-5">
+                    <CardTitle className="flex items-center gap-3 text-lg">
+                      <div className="p-2 bg-white/20 rounded-lg">
+                        <Calculator className="h-6 w-6" />
                       </div>
                       Breakup Calculator
                     </CardTitle>
+                    <CardDescription className="text-emerald-100">
+                      Gross salary enter karo aur live breakup dekho
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-3 space-y-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Gross Monthly Salary</Label>
+                  <CardContent className="p-5 space-y-5">
+                    <div className="space-y-2">
+                      <Label className="text-base font-semibold text-gray-700 dark:text-gray-200">
+                        Gross Monthly Salary
+                      </Label>
                       <div className="relative">
-                        <div className="absolute left-2 top-1/2 -translate-y-1/2 p-1 bg-emerald-100 rounded">
-                          <IndianRupee className="h-3 w-3 text-emerald-600" />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg">
+                          <IndianRupee className="h-5 w-5 text-emerald-600" />
                         </div>
                         <Input
                           type="number"
                           value={testGross}
                           onChange={(e) => setTestGross(Number(e.target.value))}
-                          className="pl-10 h-9 text-sm font-bold border-2 border-emerald-200 focus:border-emerald-500"
+                          className="pl-16 h-14 text-xl font-bold border-2 border-emerald-200 focus:border-emerald-500 rounded-xl"
+                          placeholder="Enter amount"
                         />
                       </div>
                     </div>
 
                     {testRule ? (
-                      <div className="p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-green-500 rounded-full">
-                            <CheckCircle2 className="h-3 w-3 text-white" />
+                      <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-500 rounded-full">
+                            <CheckCircle2 className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <p className="text-[10px] text-green-600">Applicable Rule</p>
-                            <p className="text-xs font-bold text-green-800">{testRule.ruleName}</p>
+                            <p className="text-sm text-green-600 dark:text-green-400">Applicable Rule</p>
+                            <p className="font-bold text-green-800 dark:text-green-200 text-lg">
+                              {testRule.ruleName}
+                            </p>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2 bg-gradient-to-r from-red-50 to-rose-50 rounded-lg border border-red-200">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-red-500 rounded-full">
-                            <AlertCircle className="h-3 w-3 text-white" />
+                      <div className="p-4 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 rounded-xl border border-red-200 dark:border-red-800">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-red-500 rounded-full">
+                            <AlertCircle className="h-5 w-5 text-white" />
                           </div>
-                          <p className="text-xs text-red-800">No rule found for this range</p>
+                          <div>
+                            <p className="text-sm text-red-600 dark:text-red-400">No Rule Found</p>
+                            <p className="font-medium text-red-800 dark:text-red-200">
+                              Is amount ke liye koi rule match nahi hua
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -882,81 +966,93 @@ export default function SalaryBreakupPage() {
                 </Card>
 
                 {/* Result Card */}
-                <Card className="border-2 border-purple-200 dark:border-purple-800 shadow-md overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white py-2 px-3">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <div className="p-1 bg-white/20 rounded">
-                        <TrendingUp className="h-4 w-4" />
+                <Card className="border-2 border-purple-200 dark:border-purple-800 shadow-lg overflow-hidden">
+                  <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white py-4 px-5">
+                    <CardTitle className="flex items-center gap-3 text-lg">
+                      <div className="p-2 bg-white/20 rounded-lg">
+                        <TrendingUp className="h-6 w-6" />
                       </div>
                       Salary Breakup
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-3">
-                    <div className="space-y-2">
+                  <CardContent className="p-5">
+                    <div className="space-y-4">
                       {/* Basic */}
-                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-blue-500 rounded">
-                            <Shield className="h-3 w-3 text-white" />
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-500 rounded-lg">
+                            <Shield className="h-5 w-5 text-white" />
                           </div>
-                          <span className="text-xs font-medium">Basic</span>
+                          <span className="text-base font-medium text-gray-700 dark:text-gray-200">Basic Salary</span>
                         </div>
-                        <span className="text-sm font-bold text-blue-600">₹{testBreakup.basic.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                          ₹{testBreakup.basic.toLocaleString()}
+                        </span>
                       </div>
 
                       {/* HRA */}
-                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-orange-500 rounded">
-                            <span className="text-white text-[8px] font-bold">HRA</span>
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-orange-500 rounded-lg">
+                            <span className="text-white font-bold text-xs">HRA</span>
                           </div>
-                          <span className="text-xs font-medium">HRA</span>
+                          <span className="text-base font-medium text-gray-700 dark:text-gray-200">House Rent Allowance</span>
                         </div>
-                        <span className="text-sm font-bold text-orange-600">₹{testBreakup.hra.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                          ₹{testBreakup.hra.toLocaleString()}
+                        </span>
                       </div>
 
                       {/* CA */}
-                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-cyan-50 to-cyan-100 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-cyan-500 rounded">
-                            <span className="text-white text-[8px] font-bold">CA</span>
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-cyan-500 rounded-lg">
+                            <span className="text-white font-bold text-xs">CA</span>
                           </div>
-                          <span className="text-xs font-medium">Conveyance</span>
+                          <span className="text-base font-medium text-gray-700 dark:text-gray-200">Conveyance Allowance</span>
                         </div>
-                        <span className="text-sm font-bold text-cyan-600">₹{testBreakup.ca.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-cyan-600 dark:text-cyan-400">
+                          ₹{testBreakup.ca.toLocaleString()}
+                        </span>
                       </div>
 
                       {/* Medical */}
-                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-pink-50 to-pink-100 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-pink-500 rounded">
-                            <span className="text-white text-[8px] font-bold">MED</span>
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-pink-500 rounded-lg">
+                            <span className="text-white font-bold text-xs">MED</span>
                           </div>
-                          <span className="text-xs font-medium">Medical</span>
+                          <span className="text-base font-medium text-gray-700 dark:text-gray-200">Medical Allowance</span>
                         </div>
-                        <span className="text-sm font-bold text-pink-600">₹{testBreakup.medical.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-pink-600 dark:text-pink-400">
+                          ₹{testBreakup.medical.toLocaleString()}
+                        </span>
                       </div>
 
                       {/* Other */}
-                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-violet-50 to-violet-100 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-violet-500 rounded">
-                            <span className="text-white text-[8px] font-bold">OTH</span>
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-violet-50 to-violet-100 dark:from-violet-900/20 dark:to-violet-800/20 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-violet-500 rounded-lg">
+                            <span className="text-white font-bold text-xs">OTH</span>
                           </div>
-                          <span className="text-xs font-medium">Other</span>
+                          <span className="text-base font-medium text-gray-700 dark:text-gray-200">Other Allowance</span>
                         </div>
-                        <span className="text-sm font-bold text-violet-600">₹{testBreakup.otherAllowance.toLocaleString()}</span>
+                        <span className="text-xl font-bold text-violet-600 dark:text-violet-400">
+                          ₹{testBreakup.otherAllowance.toLocaleString()}
+                        </span>
                       </div>
 
                       {/* Total */}
-                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-emerald-500 to-green-500 rounded-lg mt-2 shadow">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 bg-white/20 rounded">
-                            <IndianRupee className="h-4 w-4 text-white" />
+                      <div className="flex items-center justify-between p-5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-xl mt-4 shadow-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white/20 rounded-lg">
+                            <IndianRupee className="h-6 w-6 text-white" />
                           </div>
-                          <span className="text-xs font-bold text-white">TOTAL</span>
+                          <span className="text-lg font-bold text-white">TOTAL GROSS</span>
                         </div>
-                        <span className="text-lg font-bold text-white">₹{testBreakup.total.toLocaleString()}</span>
+                        <span className="text-2xl font-bold text-white">
+                          ₹{testBreakup.total.toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   </CardContent>
@@ -966,201 +1062,233 @@ export default function SalaryBreakupPage() {
           </Tabs>
         </Card>
 
-        {/* ============ ADD/EDIT DIALOG ============ */}
+        {/* ============================================ */}
+        {/* ADD/EDIT RULE DIALOG */}
+        {/* ============================================ */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader className="pb-2 border-b">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-lg">
-                  <Settings2 className="h-4 w-4 text-white" />
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="pb-4 border-b">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl">
+                  <Settings2 className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <DialogTitle className="text-base">
+                  <DialogTitle className="text-xl">
                     {editingRule ? 'Edit Rule' : 'Add New Rule'}
                   </DialogTitle>
-                  <DialogDescription className="text-xs">
-                    Gross range aur breakup percentages define karo
+                  <DialogDescription className="text-sm">
+                    Gross salary range aur breakup percentages define karo
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="grid gap-4 py-3">
+            <div className="grid gap-6 py-5">
               {/* Rule Name */}
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold">Rule Name *</Label>
+              <div className="space-y-2">
+                <Label className="text-base font-semibold text-gray-700 dark:text-gray-200">
+                  Rule Name *
+                </Label>
                 <Input
                   value={formData.ruleName}
                   onChange={(e) => setFormData({ ...formData, ruleName: e.target.value })}
-                  placeholder="e.g., Entry Level, Mid Level, Senior"
-                  className="h-8 text-sm border-2"
+                  placeholder="e.g., Entry Level, Mid Level, Senior Level"
+                  className="h-12 text-base border-2 focus:border-purple-500 rounded-xl"
                 />
               </div>
 
               {/* Gross Range */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Gross From (₹) *</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold text-gray-700 dark:text-gray-200">
+                    Gross From (₹) *
+                  </Label>
                   <Input
                     type="number"
                     value={formData.grossFrom}
                     onChange={(e) => setFormData({ ...formData, grossFrom: Number(e.target.value) })}
-                    className="h-8 text-sm border-2"
+                    className="h-12 text-base border-2 focus:border-purple-500 rounded-xl"
+                    placeholder="0"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Gross To (₹) *</Label>
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold text-gray-700 dark:text-gray-200">
+                    Gross To (₹) *
+                  </Label>
                   <Input
                     type="number"
                     value={formData.grossTo}
                     onChange={(e) => setFormData({ ...formData, grossTo: Number(e.target.value) })}
-                    className="h-8 text-sm border-2"
+                    className="h-12 text-base border-2 focus:border-purple-500 rounded-xl"
+                    placeholder="15000"
                   />
                 </div>
               </div>
 
-              {/* Basic Type */}
-              <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-200">
-                <Label className="text-xs font-bold text-purple-700 mb-2 block">Basic Salary Configuration</Label>
+              {/* Basic Type Configuration */}
+              <div className="p-5 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl border-2 border-purple-200 dark:border-purple-800">
+                <Label className="text-lg font-bold text-purple-700 dark:text-purple-300 mb-4 block">
+                  Basic Salary Configuration
+                </Label>
                 
-                <div className="flex items-center gap-4 mb-2">
-                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-white">
+                <div className="flex items-center gap-6 mb-4">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
                     <input
                       type="radio"
                       name="basicType"
                       checked={formData.basicType === 'fixed'}
                       onChange={() => setFormData({ ...formData, basicType: 'fixed', basicValue: 15010 })}
-                      className="h-3 w-3"
+                      className="h-5 w-5 text-purple-600"
                     />
-                    <div className="flex items-center gap-1">
-                      <div className="p-0.5 bg-blue-500 rounded">
-                        <IndianRupee className="h-3 w-3 text-white" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-blue-500 rounded-lg">
+                        <IndianRupee className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-xs font-medium">Fixed Amount</span>
+                      <span className="text-base font-medium">Fixed Amount</span>
                     </div>
                   </label>
                   
-                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-white">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
                     <input
                       type="radio"
                       name="basicType"
                       checked={formData.basicType === 'percentage'}
                       onChange={() => setFormData({ ...formData, basicType: 'percentage', basicValue: 40 })}
-                      className="h-3 w-3"
+                      className="h-5 w-5 text-purple-600"
                     />
-                    <div className="flex items-center gap-1">
-                      <div className="p-0.5 bg-purple-500 rounded">
-                        <Percent className="h-3 w-3 text-white" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-purple-500 rounded-lg">
+                        <Percent className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-xs font-medium">Percentage</span>
+                      <span className="text-base font-medium">Percentage of Gross</span>
                     </div>
                   </label>
                 </div>
 
-                <Input
-                  type="number"
-                  value={formData.basicValue}
-                  onChange={(e) => setFormData({ ...formData, basicValue: Number(e.target.value) })}
-                  className="h-8 text-sm border-2 bg-white"
-                  placeholder={formData.basicType === 'fixed' ? '15010' : '40'}
-                />
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    {formData.basicType === 'fixed' ? 'Fixed Basic Amount (₹)' : 'Basic Percentage (%)'}
+                  </Label>
+                  <Input
+                    type="number"
+                    value={formData.basicValue}
+                    onChange={(e) => setFormData({ ...formData, basicValue: Number(e.target.value) })}
+                    className="h-12 text-base border-2 focus:border-purple-500 bg-white dark:bg-gray-800 rounded-xl"
+                    placeholder={formData.basicType === 'fixed' ? '15010' : '40'}
+                  />
+                </div>
               </div>
 
-              {/* Percentages */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="p-2 bg-orange-50 rounded-lg border border-orange-200">
-                  <Label className="text-[10px] font-semibold text-orange-700">HRA %</Label>
+              {/* Other Percentages */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800">
+                  <Label className="text-sm font-semibold text-orange-700 dark:text-orange-300">HRA (%)</Label>
                   <Input
                     type="number"
                     value={formData.hraPercentage}
                     onChange={(e) => setFormData({ ...formData, hraPercentage: Number(e.target.value) })}
-                    className="h-7 text-sm mt-1 border-orange-200"
+                    className="h-11 text-base mt-2 border-2 border-orange-200 focus:border-orange-500 rounded-lg"
+                    placeholder="50"
                   />
                 </div>
-                <div className="p-2 bg-cyan-50 rounded-lg border border-cyan-200">
-                  <Label className="text-[10px] font-semibold text-cyan-700">CA %</Label>
+                <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl border border-cyan-200 dark:border-cyan-800">
+                  <Label className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">CA (%)</Label>
                   <Input
                     type="number"
                     value={formData.caPercentage}
                     onChange={(e) => setFormData({ ...formData, caPercentage: Number(e.target.value) })}
-                    className="h-7 text-sm mt-1 border-cyan-200"
+                    className="h-11 text-base mt-2 border-2 border-cyan-200 focus:border-cyan-500 rounded-lg"
+                    placeholder="20"
                   />
                 </div>
-                <div className="p-2 bg-pink-50 rounded-lg border border-pink-200">
-                  <Label className="text-[10px] font-semibold text-pink-700">Medical %</Label>
+                <div className="p-4 bg-pink-50 dark:bg-pink-900/20 rounded-xl border border-pink-200 dark:border-pink-800">
+                  <Label className="text-sm font-semibold text-pink-700 dark:text-pink-300">Medical (%)</Label>
                   <Input
                     type="number"
                     value={formData.medicalPercentage}
                     onChange={(e) => setFormData({ ...formData, medicalPercentage: Number(e.target.value) })}
-                    className="h-7 text-sm mt-1 border-pink-200"
+                    className="h-11 text-base mt-2 border-2 border-pink-200 focus:border-pink-500 rounded-lg"
+                    placeholder="15"
                   />
                 </div>
               </div>
 
-              <Alert className="py-2 bg-violet-50 border-violet-200">
-                <Sparkles className="h-3 w-3 text-violet-600" />
-                <AlertDescription className="text-[10px] text-violet-700">
-                  <strong>Other Allowance</strong> = Gross - Basic - HRA - CA - Medical (Auto Calculate)
+              {/* Info Alert */}
+              <Alert className="py-3 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border-violet-200 dark:border-violet-800">
+                <Sparkles className="h-5 w-5 text-violet-600" />
+                <AlertDescription className="text-sm text-violet-700 dark:text-violet-300 ml-2">
+                  <strong>Other Allowance</strong> = Gross - Basic - HRA - CA - Medical (Auto Calculate hoga)
                 </AlertDescription>
               </Alert>
 
               {/* Active Switch */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+              <div className="flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-xl border">
                 <div>
-                  <Label className="text-xs font-bold">Rule Active</Label>
-                  <p className="text-[10px] text-gray-500">Inactive rules apply nahi honge</p>
+                  <Label className="text-lg font-bold">Rule Active</Label>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Inactive rules salary calculation mein apply nahi honge
+                  </p>
                 </div>
                 <Switch
                   checked={formData.isActive}
                   onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                  className="data-[state=checked]:bg-green-500"
+                  className="data-[state=checked]:bg-green-500 scale-125"
                 />
               </div>
             </div>
 
-            <DialogFooter className="pt-2 border-t gap-2">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} size="sm" className="text-xs">
+            <DialogFooter className="pt-4 border-t gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDialogOpen(false)}
+                className="px-6 h-11"
+              >
                 Cancel
               </Button>
               <Button 
                 onClick={handleSaveRule}
-                size="sm"
-                className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs"
+                className="px-8 h-11 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg"
               >
-                <Save className="h-3 w-3 mr-1" />
+                <Save className="h-5 w-5 mr-2" />
                 {editingRule ? 'Update Rule' : 'Save Rule'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* ============ DELETE CONFIRMATION ============ */}
+        {/* ============================================ */}
+        {/* DELETE CONFIRMATION DIALOG */}
+        {/* ============================================ */}
         <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <div className="mx-auto p-3 bg-red-100 rounded-full mb-2">
-                <Trash2 className="h-6 w-6 text-red-500" />
+              <div className="mx-auto p-4 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+                <Trash2 className="h-8 w-8 text-red-500" />
               </div>
-              <DialogTitle className="text-center text-base">Delete Rule?</DialogTitle>
-              <DialogDescription className="text-center text-xs">
+              <DialogTitle className="text-center text-xl">Delete Rule?</DialogTitle>
+              <DialogDescription className="text-center text-base">
                 Yeh action undo nahi ho sakta. Rule permanently delete ho jayega.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="gap-2 sm:justify-center">
-              <Button variant="outline" onClick={() => setDeleteConfirm(null)} size="sm" className="text-xs">
+            <DialogFooter className="gap-3 sm:justify-center mt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => setDeleteConfirm(null)}
+                className="px-8 h-11"
+              >
                 Cancel
               </Button>
               <Button 
                 variant="destructive"
                 onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
-                size="sm"
-                className="bg-gradient-to-r from-red-500 to-rose-500 text-xs"
+                className="px-8 h-11 bg-gradient-to-r from-red-500 to-rose-500"
               >
                 Delete
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
       </div>
     </div>
   );
