@@ -65,10 +65,10 @@ export default function SalaryBreakupPage() {
   const watchedValues = form.watch();
   const totalPercentage = React.useMemo(() => {
     return (
-      (watchedValues.basic_percentage || 0) +
-      (watchedValues.hra_percentage || 0) +
-      (watchedValues.ca_percentage || 0) +
-      (watchedValues.medical_percentage || 0)
+      parseFloat(String(watchedValues.basic_percentage || 0)) +
+      parseFloat(String(watchedValues.hra_percentage || 0)) +
+      parseFloat(String(watchedValues.ca_percentage || 0)) +
+      parseFloat(String(watchedValues.medical_percentage || 0))
     );
   }, [watchedValues]);
 
