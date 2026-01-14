@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useSyncContext } from '@/lib/sync-provider';
+import { parseISO, isValid, isAfter, isBefore, startOfMonth, endOfMonth } from 'date-fns';
 import { 
   Plus, 
   Edit2, 
@@ -34,7 +35,9 @@ import {
   PieChart,
   Search,
   UserCheck,
-  UserX
+  UserX,
+  ArrowUpCircle,
+  Calendar
 } from 'lucide-react';
 import type { SalaryBreakupRule } from '@/lib/hr-types';
 
@@ -46,7 +49,7 @@ const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
 const EMPLOYEE_STORAGE_KEY = 'novita_employee_master_data_v1';
 
 // ============================================
-// EMPLOYEE INTERFACE
+// EMPLOYEE INTERFACE (WITH REVISION FIELDS)
 // ============================================
 interface Employee {
   id?: string;
@@ -56,9 +59,25 @@ interface Employee {
   grossSalary?: number;
   monthlySalary?: number;
   salary?: number;
+  revisedGrossMonthlySalary?: number;
+  revisedGrossSalary?: number;
+  salaryEffectiveDate?: string;
+  effectiveDate?: string;
   department?: string;
   designation?: string;
   status?: string;
+}
+
+// ============================================
+// SALARY INFO INTERFACE
+// ============================================
+interface SalaryInfo {
+  currentGross: number;
+  oldGross: number;
+  newGross: number;
+  hasRevision: boolean;
+  isRevisionEffective: boolean;
+  effectiveDate: string | null;
 }
 
 // ============================================
@@ -157,7 +176,9 @@ export default function SalaryBreakupPage() {
               ...emp,
               code: emp.code || emp.id || '',
               name: emp.name || 'Unknown',
-              grossMonthlySalary: emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0
+              grossMonthlySalary: emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0,
+              revisedGrossMonthlySalary: emp.revisedGrossMonthlySalary || emp.revisedGrossSalary || 0,
+              salaryEffectiveDate: emp.salaryEffectiveDate || emp.effectiveDate || ''
             }))
             .filter(emp => emp.status !== 'Inactive' && emp.status !== 'Resigned');
             
@@ -182,10 +203,70 @@ export default function SalaryBreakupPage() {
   };
 
   // ============================================
-  // GET EMPLOYEE GROSS SALARY
+  // GET EMPLOYEE SALARY INFO (HANDLES REVISION)
   // ============================================
-  const getEmployeeGross = (emp: Employee): number => {
-    return emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0;
+  const getEmployeeSalaryInfo = (emp: Employee): SalaryInfo => {
+    const baseGross = emp.grossMonthlySalary || emp.grossSalary || emp.monthlySalary || emp.salary || 0;
+    const revisedGross = emp.revisedGrossMonthlySalary || emp.revisedGrossSalary || 0;
+    const effectiveDateStr = emp.salaryEffectiveDate || emp.effectiveDate || '';
+    
+    // No revision case
+    if (!revisedGross || revisedGross <= 0 || !effectiveDateStr) {
+      return {
+        currentGross: baseGross,
+        oldGross: baseGross,
+        newGross: 0,
+        hasRevision: false,
+        isRevisionEffective: false,
+        effectiveDate: null
+      };
+    }
+
+    try {
+      const effectiveDate = parseISO(effectiveDateStr);
+      const today = new Date();
+      
+      if (!isValid(effectiveDate)) {
+        return {
+          currentGross: baseGross,
+          oldGross: baseGross,
+          newGross: revisedGross,
+          hasRevision: true,
+          isRevisionEffective: false,
+          effectiveDate: effectiveDateStr
+        };
+      }
+
+      // Check if revision is effective (effective date has passed or is today)
+      const isEffective = !isAfter(effectiveDate, today);
+      
+      return {
+        currentGross: isEffective ? revisedGross : baseGross,
+        oldGross: baseGross,
+        newGross: revisedGross,
+        hasRevision: true,
+        isRevisionEffective: isEffective,
+        effectiveDate: effectiveDateStr
+      };
+      
+    } catch (e) {
+      return {
+        currentGross: baseGross,
+        oldGross: baseGross,
+        newGross: revisedGross,
+        hasRevision: true,
+        isRevisionEffective: false,
+        effectiveDate: effectiveDateStr
+      };
+    }
+  };
+
+  // ============================================
+  // GET CURRENT EFFECTIVE GROSS (FOR RULE MATCHING)
+  // ============================================
+  const getCurrentEffectiveGross = (emp: Employee): number => {
+    const salaryInfo = getEmployeeSalaryInfo(emp);
+    return salaryInfo.currentGross;
   };
 
   // ============================================
@@ -369,7 +450,9 @@ export default function SalaryBreakupPage() {
       }
     }
     
-    const autoRule = findApplicableRule(getEmployeeGross(emp));
+    // Use CURRENT EFFECTIVE gross for auto rule matching
+    const currentGross = getCurrentEffectiveGross(emp);
+    const autoRule = findApplicableRule(currentGross);
     return { rule: autoRule, isForced: false };
   };
 
@@ -401,6 +484,20 @@ export default function SalaryBreakupPage() {
   };
 
   // ============================================
+  // FORMAT DATE
+  // ============================================
+  const formatDate = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      const date = parseISO(dateStr);
+      if (!isValid(date)) return dateStr;
+      return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // ============================================
   // FILTERED EMPLOYEES
   // ============================================
   const filteredEmployees = employees.filter(emp => {
@@ -417,6 +514,7 @@ export default function SalaryBreakupPage() {
   // ============================================
   const activeRulesCount = rules.filter(r => r.isActive).length;
   const mappedEmployeesCount = Object.keys(employeeMappings).length;
+  const promotedEmployeesCount = employees.filter(emp => getEmployeeSalaryInfo(emp).hasRevision).length;
   const testRule = findApplicableRule(testGross);
   const testBreakup = calculateBreakup(testGross, testRule);
 
@@ -478,7 +576,7 @@ export default function SalaryBreakupPage() {
         {/* ============================================ */}
         {/* STATS CARDS */}
         {/* ============================================ */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {/* Total Rules Card */}
           <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:shadow-xl transition-all duration-300">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
@@ -517,11 +615,27 @@ export default function SalaryBreakupPage() {
             <CardContent className="p-5 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-cyan-100 text-sm font-medium">Total Employees</p>
+                  <p className="text-cyan-100 text-sm font-medium">Employees</p>
                   <p className="text-4xl font-bold mt-1">{employees.length}</p>
                 </div>
                 <div className="p-3 bg-white/20 rounded-xl">
                   <Users className="h-7 w-7" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Promoted Employees Card */}
+          <Card className="relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-pink-500 to-rose-600 text-white hover:shadow-xl transition-all duration-300">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10" />
+            <CardContent className="p-5 relative">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-pink-100 text-sm font-medium">Promoted</p>
+                  <p className="text-4xl font-bold mt-1">{promotedEmployeesCount}</p>
+                </div>
+                <div className="p-3 bg-white/20 rounded-xl">
+                  <ArrowUpCircle className="h-7 w-7" />
                 </div>
               </div>
             </CardContent>
@@ -719,15 +833,16 @@ export default function SalaryBreakupPage() {
             </TabsContent>
 
             {/* ============================================ */}
-            {/* MAPPING TAB CONTENT */}
+            {/* MAPPING TAB CONTENT (FIXED) */}
             {/* ============================================ */}
             <TabsContent value="mapping" className="p-6 space-y-5">
               {/* Info Alert */}
               <Alert className="py-4 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-800">
                 <AlertCircle className="h-5 w-5 text-amber-600" />
                 <AlertDescription className="text-base text-amber-800 dark:text-amber-200 ml-2">
-                  <strong>Auto</strong> = Gross range se automatic rule lagega | 
-                  <strong> Force</strong> = Range ignore karke specific rule lagega
+                  <strong>Auto</strong> = Current Gross se automatic rule lagega | 
+                  <strong> Force</strong> = Range ignore karke specific rule lagega |
+                  <span className="text-pink-600 font-semibold ml-2">🎉 = Promoted (Revised Salary)</span>
                 </AlertDescription>
               </Alert>
 
@@ -768,9 +883,14 @@ export default function SalaryBreakupPage() {
                   {/* Employee Count */}
                   <div className="flex items-center justify-between text-base text-gray-600">
                     <span>Showing <strong>{filteredEmployees.length}</strong> of <strong>{employees.length}</strong> employees</span>
-                    <span className="text-orange-600 font-semibold">
-                      {mappedEmployeesCount} force mapped
-                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-pink-600 font-semibold">
+                        🎉 {promotedEmployeesCount} promoted
+                      </span>
+                      <span className="text-orange-600 font-semibold">
+                        {mappedEmployeesCount} force mapped
+                      </span>
+                    </div>
                   </div>
 
                   {/* Mapping Table */}
@@ -780,7 +900,8 @@ export default function SalaryBreakupPage() {
                         <TableRow className="bg-gradient-to-r from-orange-100 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/20">
                           <TableHead className="text-sm font-bold py-4 px-4">Code</TableHead>
                           <TableHead className="text-sm font-bold py-4">Employee Name</TableHead>
-                          <TableHead className="text-sm font-bold py-4 text-right">Gross Salary</TableHead>
+                          <TableHead className="text-sm font-bold py-4 text-right">Current Gross</TableHead>
+                          <TableHead className="text-sm font-bold py-4 text-center">Salary Info</TableHead>
                           <TableHead className="text-sm font-bold py-4 text-center">Auto Rule</TableHead>
                           <TableHead className="text-sm font-bold py-4">Select Rule</TableHead>
                           <TableHead className="text-sm font-bold py-4 text-center">Status</TableHead>
@@ -788,8 +909,8 @@ export default function SalaryBreakupPage() {
                       </TableHeader>
                       <TableBody>
                         {filteredEmployees.map((emp, index) => {
-                          const grossSalary = getEmployeeGross(emp);
-                          const autoRule = findApplicableRule(grossSalary);
+                          const salaryInfo = getEmployeeSalaryInfo(emp);
+                          const autoRule = findApplicableRule(salaryInfo.currentGross);
                           const mappedRuleId = employeeMappings[emp.code];
                           const { rule: appliedRule, isForced } = getAppliedRule(emp);
                           
@@ -798,9 +919,10 @@ export default function SalaryBreakupPage() {
                               key={emp.code}
                               className={`
                                 transition-all duration-200 hover:bg-orange-50 dark:hover:bg-orange-900/10
-                                ${isForced ? 'bg-orange-50/50 dark:bg-orange-900/10' : ''}
-                                ${index % 2 === 0 && !isForced ? 'bg-white dark:bg-gray-800' : ''}
-                                ${index % 2 !== 0 && !isForced ? 'bg-gray-50/50 dark:bg-gray-800/50' : ''}
+                                ${salaryInfo.hasRevision ? 'bg-pink-50/50 dark:bg-pink-900/10' : ''}
+                                ${isForced && !salaryInfo.hasRevision ? 'bg-orange-50/50 dark:bg-orange-900/10' : ''}
+                                ${index % 2 === 0 && !isForced && !salaryInfo.hasRevision ? 'bg-white dark:bg-gray-800' : ''}
+                                ${index % 2 !== 0 && !isForced && !salaryInfo.hasRevision ? 'bg-gray-50/50 dark:bg-gray-800/50' : ''}
                               `}
                             >
                               <TableCell className="py-4 px-4">
@@ -810,16 +932,54 @@ export default function SalaryBreakupPage() {
                               </TableCell>
                               <TableCell className="py-4">
                                 <div>
-                                  <p className="text-base font-medium text-gray-800 dark:text-white">{emp.name}</p>
+                                  <p className="text-base font-medium text-gray-800 dark:text-white flex items-center gap-2">
+                                    {emp.name}
+                                    {salaryInfo.hasRevision && (
+                                      <span className="text-lg" title="Promoted/Revised Salary">🎉</span>
+                                    )}
+                                  </p>
                                   {emp.department && (
                                     <p className="text-sm text-gray-500">{emp.department}</p>
                                   )}
                                 </div>
                               </TableCell>
                               <TableCell className="text-right py-4">
-                                <span className="text-base font-semibold text-emerald-600 dark:text-emerald-400">
-                                  ₹{grossSalary.toLocaleString()}
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                                    ₹{salaryInfo.currentGross.toLocaleString()}
+                                  </span>
+                                  {salaryInfo.hasRevision && salaryInfo.isRevisionEffective && (
+                                    <span className="text-xs text-gray-400 line-through">
+                                      ₹{salaryInfo.oldGross.toLocaleString()}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center py-4">
+                                {salaryInfo.hasRevision ? (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Badge className={`
+                                      text-xs px-2 py-0.5
+                                      ${salaryInfo.isRevisionEffective 
+                                        ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                                        : 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                      } text-white border-0
+                                    `}>
+                                      {salaryInfo.isRevisionEffective ? '✓ Effective' : '⏳ Pending'}
+                                    </Badge>
+                                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                                      <Calendar className="h-3 w-3" />
+                                      {formatDate(salaryInfo.effectiveDate)}
+                                    </div>
+                                    <div className="text-xs">
+                                      <span className="text-gray-400">₹{salaryInfo.oldGross.toLocaleString()}</span>
+                                      <span className="text-emerald-500 mx-1">→</span>
+                                      <span className="text-emerald-600 font-semibold">₹{salaryInfo.newGross.toLocaleString()}</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-gray-400">No Revision</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-center py-4">
                                 {autoRule ? (
