@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarChart3, UserCog, TrendingDownIcon } from 'lucide-react';
+import { LayoutDashboard, CalendarCheck, Briefcase, Users, Sheet, FileText, BarChart3, UserCog, TrendingDownIcon, Settings } from 'lucide-react';
 
 export const APP_NAME = 'Catura_Payroll';
 export const COMPANY_NAME = 'Catura Healthcare Pvt. Ltd.';
@@ -31,6 +31,11 @@ export const NAV_ITEMS: NavItem[] = [
     title: 'Leave Management',
     href: '/leave',
     icon: Briefcase,
+  },
+  {
+    title: 'Salary Breakup',
+    href: '/salary-breakup',
+    icon: Settings,
   },
   {
     title: 'Salary Sheet',

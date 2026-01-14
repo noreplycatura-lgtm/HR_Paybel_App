@@ -17,12 +17,23 @@ export interface CompanyConfig {
   company_name: string;
 }
 
+export interface SalaryBreakupConfig {
+  basic_percentage: number;
+  hra_percentage: number;
+  ca_percentage: number;
+  medical_percentage: number;
+}
+
+
 /**
  * 1. Google Sheet se saara data load karne ke liye
  */
 export async function loadFromGoogleSheet(): Promise<AppData> {
   try {
-    const response = await fetch(WEBAPP_URL);
+    const response = await fetch(`${WEBAPP_URL}?action=load`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
     const data = await response.json();
     return data || {};
   } catch (error) {
@@ -38,8 +49,12 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ action: 'save', data: data }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     });
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
     const result = await response.json();
     return result.success === true;
   } catch (error) {
@@ -54,9 +69,22 @@ export async function saveToGoogleSheet(data: AppData): Promise<boolean> {
 export async function getCompanyConfig(): Promise<CompanyConfig> {
   try {
     const response = await fetch(`${WEBAPP_URL}?action=getConfig`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
     const data = await response.json();
+    
+    // Check if the logo URL is from the old domain and ignore it if so
+    const logoUrl = data.company_logo || '';
+    if (logoUrl.includes('novitahealthcare.in')) {
+      return {
+        company_logo: '',
+        company_name: data.company_name || 'Catura Payroll'
+      };
+    }
+
     return {
-      company_logo: data.company_logo || '',
+      company_logo: logoUrl,
       company_name: data.company_name || 'Catura Payroll'
     };
   } catch (error) {
@@ -70,38 +98,22 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
  */
 export async function createDriveFolder(folderName: string): Promise<boolean> {
   try {
-    console.log('Creating folder:', folderName);
-    
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
       body: JSON.stringify({
         action: 'createFolder',
         folderName: folderName
       }),
-      redirect: 'follow'
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     });
 
-    // Get response text first
-    const responseText = await response.text();
-    console.log('Folder creation response:', responseText);
-    
-    // Try to parse as JSON
-    try {
-      const result = JSON.parse(responseText);
-      if (result.success) {
-        console.log('Folder created/found:', result.folderName || folderName);
-        return true;
-      } else {
-        console.error('Folder creation failed:', result.error);
-        return false;
-      }
-    } catch (parseError) {
-      console.error('Response parse error:', parseError, 'Response was:', responseText);
-      return false;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+    
+    const result = await response.json();
+    return result.success === true;
+
   } catch (error) {
     console.error('Drive folder creation error:', error);
     return false;
@@ -119,34 +131,61 @@ export async function uploadPDFToDrive(
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
       body: JSON.stringify({
         action: 'uploadPDF',
         folderName: folderName,
         fileName: fileName,
         pdfBase64: pdfBase64
       }),
-      redirect: 'follow'
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     });
-
-    const responseText = await response.text();
     
-    try {
-      const result = JSON.parse(responseText);
-      if (result.success) {
-        return true;
-      } else {
-        console.error('PDF upload failed:', result.error);
-        return false;
-      }
-    } catch (parseError) {
-      console.error('Upload response parse error:', parseError);
-      return false;
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const result = await response.json();
+    return result.success === true;
+
   } catch (error) {
     console.error('PDF upload error:', error);
+    return false;
+  }
+}
+
+/**
+ * 6. Salary Breakup Config fetch karne ke liye
+ */
+export async function getSalaryBreakupConfig(): Promise<SalaryBreakupConfig | null> {
+  try {
+    const response = await fetch(`${WEBAPP_URL}?action=getBreakupConfig`);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    if(data && typeof data.basic_percentage === 'number') {
+      return data;
+    }
+    return null;
+  } catch (error) {
+    console.error('Salary Breakup Config fetch error:', error);
+    return null;
+  }
+}
+
+/**
+ * 7. Salary Breakup Config save karne ke liye
+ */
+export async function saveSalaryBreakupConfig(config: SalaryBreakupConfig): Promise<boolean> {
+  try {
+    const response = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'saveBreakupConfig', data: config }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json();
+    return result.success === true;
+  } catch (error) {
+    console.error('Salary Breakup Config save error:', error);
     return false;
   }
 }
