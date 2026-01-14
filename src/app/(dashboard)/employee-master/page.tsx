@@ -193,37 +193,41 @@ export default function EmployeeMasterPage() {
 
   React.useEffect(() => {
     setIsLoadingData(true);
-    async function loadInitialData() {
+
+    async function loadData() {
+      // Load synchronous data first
       if (typeof window !== 'undefined') {
         try {
           const storedEmployeesStr = localStorage.getItem(LOCAL_STORAGE_EMPLOYEE_MASTER_KEY);
           if (storedEmployeesStr) {
-            try {
-              const parsed = JSON.parse(storedEmployeesStr);
-              setEmployees(Array.isArray(parsed) ? parsed : []);
-            } catch (e) {
-              console.error("Error parsing employees from localStorage:", e);
-              toast({ title: "Storage Error", description: "Could not parse employee data.", variant: "destructive" });
-              setEmployees([]);
-            }
+            const parsed = JSON.parse(storedEmployeesStr);
+            setEmployees(Array.isArray(parsed) ? parsed : []);
           } else {
             setEmployees([]);
           }
-          
-          const rules = await getSalaryBreakupRules();
-          if (rules) {
-            setSalaryBreakupRules(rules);
-          }
-
         } catch (error) {
-          console.error("Error loading data from localStorage:", error);
-          toast({ title: "Storage Error", description: "Could not load initial data.", variant: "destructive" });
+          console.error("Error loading employees from localStorage:", error);
+          toast({ title: "Storage Error", description: "Could not load employee data.", variant: "destructive" });
           setEmployees([]);
         }
       }
-      setIsLoadingData(false);
+
+      // Then, load asynchronous data
+      try {
+        const rules = await getSalaryBreakupRules();
+        if (rules) {
+          setSalaryBreakupRules(rules);
+        }
+      } catch (error) {
+        console.error("Error fetching salary breakup rules:", error);
+        toast({ title: "API Error", description: "Could not fetch salary breakup rules.", variant: "destructive" });
+      } finally {
+        // Set loading to false only after all async operations are done
+        setIsLoadingData(false);
+      }
     }
-    loadInitialData();
+    
+    loadData();
   }, [toast]);
 
   const saveEmployeesToLocalStorage = (updatedEmployees: EmployeeDetail[]) => {
