@@ -17,7 +17,10 @@ export interface CompanyConfig {
   company_name: string;
 }
 
-export interface SalaryBreakupConfig {
+export interface SalaryBreakupRule {
+  id: string;
+  from_gross: number;
+  to_gross: number;
   basic_percentage: number;
   hra_percentage: number;
   ca_percentage: number;
@@ -154,38 +157,38 @@ export async function uploadPDFToDrive(
 }
 
 /**
- * 6. Salary Breakup Config fetch karne ke liye
+ * 6. Salary Breakup Rules fetch karne ke liye
  */
-export async function getSalaryBreakupConfig(): Promise<SalaryBreakupConfig | null> {
+export async function getSalaryBreakupRules(): Promise<SalaryBreakupRule[] | null> {
   try {
-    const response = await fetch(`${WEBAPP_URL}?action=getBreakupConfig`);
+    const response = await fetch(`${WEBAPP_URL}?action=getBreakupRules`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
-    if(data && typeof data.basic_percentage === 'number') {
+    if(Array.isArray(data)) {
       return data;
     }
     return null;
   } catch (error) {
-    console.error('Salary Breakup Config fetch error:', error);
+    console.error('Salary Breakup Rules fetch error:', error);
     return null;
   }
 }
 
 /**
- * 7. Salary Breakup Config save karne ke liye
+ * 7. Salary Breakup Rules save karne ke liye
  */
-export async function saveSalaryBreakupConfig(config: SalaryBreakupConfig): Promise<boolean> {
+export async function saveSalaryBreakupRules(rules: SalaryBreakupRule[]): Promise<boolean> {
   try {
     const response = await fetch(WEBAPP_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'saveBreakupConfig', data: config }),
+      body: JSON.stringify({ action: 'saveBreakupRules', data: rules }),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     return result.success === true;
   } catch (error) {
-    console.error('Salary Breakup Config save error:', error);
+    console.error('Salary Breakup Rules save error:', error);
     return false;
   }
 }
