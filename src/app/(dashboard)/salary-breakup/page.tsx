@@ -44,9 +44,9 @@ import type { SalaryBreakupRule } from '@/lib/hr-types';
 // ============================================
 // LOCALSTORAGE KEYS
 // ============================================
-const RULES_STORAGE_KEY = 'novita_salary_breakup_rules_v1';
-const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
-const EMPLOYEE_STORAGE_KEY = 'novita_employee_master_data_v1';
+const RULES_STORAGE_KEY = 'catura_salary_breakup_rules_v1';
+const MAPPING_STORAGE_KEY = 'catura_employee_rule_mapping_v1';
+const EMPLOYEE_STORAGE_KEY = 'catura_employee_master_data_v1';
 
 // ============================================
 // EMPLOYEE INTERFACE (WITH REVISION FIELDS)

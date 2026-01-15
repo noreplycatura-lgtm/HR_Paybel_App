@@ -81,7 +81,7 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
     
     // Check if the logo URL is from the old domain and ignore it if so
     const logoUrl = data.company_logo || '';
-    if (logoUrl.includes('novitahealthcare.in')) {
+    if (logoUrl.includes('caturahealthcare.in')) {
       return {
         company_logo: '',
         company_name: data.company_name || 'Catura Payroll'

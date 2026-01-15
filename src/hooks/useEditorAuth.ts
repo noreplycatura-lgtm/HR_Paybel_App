@@ -6,7 +6,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const EDITOR_STORAGE_KEY = 'novita_editor_auth_status_v1'; 
+const EDITOR_STORAGE_KEY = 'catura_editor_auth_status_v1'; 
 
 export function useEditorAuth() {
   const [isEditor, setIsEditor] = useState(false);

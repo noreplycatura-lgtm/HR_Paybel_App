@@ -14,16 +14,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import Link from "next/link";
 
 // LocalStorage Keys
-const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "novita_employee_master_data_v1";
-const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "novita_attendance_raw_data_v4_";
-const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "novita_attendance_filename_v4_";
-const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "novita_last_upload_context_v4";
-const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "novita_leave_applications_v1";
-const LOCAL_STORAGE_OPENING_BALANCES_KEY = "novita_opening_leave_balances_v1";
-const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "novita_salary_sheet_edits_v1_";
-const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "novita_performance_deductions_v1";
-const LOCAL_STORAGE_SIMULATED_USERS_KEY = "novita_simulated_users_v1";
-const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "novita_recent_activities_v1";
+const LOCAL_STORAGE_EMPLOYEE_MASTER_KEY = "catura_employee_master_data_v1";
+const LOCAL_STORAGE_ATTENDANCE_RAW_DATA_PREFIX = "catura_attendance_raw_data_v4_";
+const LOCAL_STORAGE_ATTENDANCE_FILENAME_PREFIX = "catura_attendance_filename_v4_";
+const LOCAL_STORAGE_LAST_UPLOAD_CONTEXT_KEY = "catura_last_upload_context_v4";
+const LOCAL_STORAGE_LEAVE_APPLICATIONS_KEY = "catura_leave_applications_v1";
+const LOCAL_STORAGE_OPENING_BALANCES_KEY = "catura_opening_leave_balances_v1";
+const LOCAL_STORAGE_SALARY_SHEET_EDITS_PREFIX = "catura_salary_sheet_edits_v1_";
+const LOCAL_STORAGE_PERFORMANCE_DEDUCTIONS_KEY = "catura_performance_deductions_v1";
+const LOCAL_STORAGE_SIMULATED_USERS_KEY = "catura_simulated_users_v1";
+const LOCAL_STORAGE_RECENT_ACTIVITIES_KEY = "catura_recent_activities_v1";
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 

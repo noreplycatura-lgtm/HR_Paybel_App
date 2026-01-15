@@ -4,29 +4,29 @@ const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxw-u0CqbhNDyhUlQUN1
 
 // 1. Static Keys (Jo change nahi hoti)
 const STATIC_KEYS = [
-  'novita_employee_master_data_v1',
-  'novita_opening_leave_balances_v1',
-  'novita_leave_applications_v1',
-  'novita_performance_deductions_v1',
-  'novita_simulated_users_v1',
-  'novita_recent_activities_v1',
-  'novita_logged_in_status_v1',
-  'novita_current_logged_in_user_display_name_v1',
-  'novita_statutory_eligibility_v1',
-  'novita_pf_rules_v1',
-  'novita_ptax_rules_v1',
-  'novita_tds_rules_v1',
-  'novita_loans_v1',
-  'novita_salary_breakup_rules_v1',       // ✅ NEW ADDED
-  'novita_employee_rule_mapping_v1'        // ✅ NEW ADDED
+  'catura_employee_master_data_v1',
+  'catura_opening_leave_balances_v1',
+  'catura_leave_applications_v1',
+  'catura_performance_deductions_v1',
+  'catura_simulated_users_v1',
+  'catura_recent_activities_v1',
+  'catura_logged_in_status_v1',
+  'catura_current_logged_in_user_display_name_v1',
+  'catura_statutory_eligibility_v1',
+  'catura_pf_rules_v1',
+  'catura_ptax_rules_v1',
+  'catura_tds_rules_v1',
+  'catura_loans_v1',
+  'catura_salary_breakup_rules_v1',       // ✅ NEW ADDED
+  'catura_employee_rule_mapping_v1'        // ✅ NEW ADDED
 ];
 
 // 2. Dynamic Keys Prefixes (Jo har mahine change hoti hain)
 const DYNAMIC_PREFIXES = [
-  'novita_attendance_raw_data_v4_',
-  'novita_attendance_filename_v4_',
-  'novita_salary_sheet_edits_v1_',
-  'novita_last_upload_context_v4'
+  'catura_attendance_raw_data_v4_',
+  'catura_attendance_filename_v4_',
+  'catura_salary_sheet_edits_v1_',
+  'catura_last_upload_context_v4'
 ];
 
 // Saara data ek object me collect karo
