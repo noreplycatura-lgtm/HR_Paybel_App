@@ -321,23 +321,47 @@ export default function SalaryBreakupPage() {
   };
 
   // ============================================
-  // VALIDATE FORM
-  // ============================================
-  const validateForm = (): string | null => {
-    if (!formData.ruleName.trim()) return "Rule name required hai";
-    if (formData.grossFrom < 0 || formData.grossTo < 0) return "Gross range negative nahi ho sakti";
-    if (formData.grossFrom >= formData.grossTo) return "Gross From, Gross To se kam hona chahiye";
-    if (formData.basicValue <= 0) return "Basic value 0 se zyada honi chahiye";
-    if (formData.basicType === 'percentage' && formData.basicValue > 100) return "Basic percentage 100% se zyada nahi ho sakti";
+// VALIDATE FORM (WITH PERCENTAGE VALIDATION)
+// ============================================
+const validateForm = (): string | null => {
+  if (!formData.ruleName.trim()) return "Rule name required hai";
+  if (formData.grossFrom < 0 || formData.grossTo < 0) return "Gross range negative nahi ho sakti";
+  if (formData.grossFrom >= formData.grossTo) return "Gross From, Gross To se kam hona chahiye";
+  if (formData.basicValue <= 0) return "Basic value 0 se zyada honi chahiye";
+  
+  const hraPercent = formData.hraPercentage || 0;
+  const caPercent = formData.caPercentage || 0;
+  const medicalPercent = formData.medicalPercentage || 0;
+  
+  // CASE 1: Basic is FIXED amount
+  if (formData.basicType === 'fixed') {
+    // HRA% + CA% + Medical% should be <= 100%
+    const totalOtherPercent = hraPercent + caPercent + medicalPercent;
+    if (totalOtherPercent > 100) {
+      return `HRA(${hraPercent}%) + CA(${caPercent}%) + Medical(${medicalPercent}%) = ${totalOtherPercent}% (100% se zyada nahi ho sakta!)`;
+    }
+  }
+  
+  // CASE 2: Basic is PERCENTAGE
+  if (formData.basicType === 'percentage') {
+    if (formData.basicValue > 100) return "Basic percentage 100% se zyada nahi ho sakti";
     
-    const overlapping = rules.find(r => {
-      if (editingRule && r.id === editingRule.id) return false;
-      return (formData.grossFrom <= r.grossTo && formData.grossTo >= r.grossFrom);
-    });
-    
-    if (overlapping) return `Range overlap: "${overlapping.ruleName}"`;
-    return null;
-  };
+    // Basic% + HRA% + CA% + Medical% should be <= 100%
+    const totalPercent = formData.basicValue + hraPercent + caPercent + medicalPercent;
+    if (totalPercent > 100) {
+      return `Basic(${formData.basicValue}%) + HRA(${hraPercent}%) + CA(${caPercent}%) + Medical(${medicalPercent}%) = ${totalPercent}% (100% se zyada nahi ho sakta!)`;
+    }
+  }
+  
+  // Check for overlapping ranges
+  const overlapping = rules.find(r => {
+    if (editingRule && r.id === editingRule.id) return false;
+    return (formData.grossFrom <= r.grossTo && formData.grossTo >= r.grossFrom);
+  });
+  
+  if (overlapping) return `Range overlap: "${overlapping.ruleName}"`;
+  return null;
+};
 
   // ============================================
   // HANDLE SAVE RULE
@@ -456,70 +480,68 @@ export default function SalaryBreakupPage() {
     return { rule: autoRule, isForced: false };
   };
 
-  // ============================================
-// CALCULATE BREAKUP (FIXED - No Negative Other)
+// ============================================
+// CALCULATE BREAKUP (CORRECT LOGIC)
 // ============================================
 const calculateBreakup = (grossSalary: number, rule: SalaryBreakupRule | null) => {
   if (!rule || grossSalary <= 0) {
     return { basic: 0, hra: 0, ca: 0, medical: 0, otherAllowance: 0, total: 0 };
   }
 
-  // Step 1: Calculate Basic
+  const hraPercent = rule.hraPercentage || 0;
+  const caPercent = rule.caPercentage || 0;
+  const medicalPercent = rule.medicalPercentage || 0;
+
   let basic = 0;
+  let hra = 0;
+  let ca = 0;
+  let medical = 0;
+  let otherAllowance = 0;
+
+  // ============================================
+  // CASE 1: Basic is FIXED Amount
+  // ============================================
   if (rule.basicType === 'fixed') {
     basic = Math.min(rule.basicValue, grossSalary);
-  } else {
+    const remaining = Math.max(0, grossSalary - basic);
+    
+    // Apply percentages on REMAINING, not on Gross
+    hra = remaining * (hraPercent / 100);
+    ca = remaining * (caPercent / 100);
+    medical = remaining * (medicalPercent / 100);
+    otherAllowance = Math.max(0, remaining - hra - ca - medical);
+  }
+  // ============================================
+  // CASE 2: Basic is PERCENTAGE
+  // ============================================
+  else {
+    // All percentages apply on Gross
     basic = grossSalary * (rule.basicValue / 100);
+    hra = grossSalary * (hraPercent / 100);
+    ca = grossSalary * (caPercent / 100);
+    medical = grossSalary * (medicalPercent / 100);
+    otherAllowance = Math.max(0, grossSalary - basic - hra - ca - medical);
   }
 
-  // Step 2: Calculate Remaining after Basic
-  const remaining = Math.max(0, grossSalary - basic);
+  // Round all values
+  basic = Math.round(basic);
+  hra = Math.round(hra);
+  ca = Math.round(ca);
+  medical = Math.round(medical);
+  otherAllowance = Math.round(otherAllowance);
 
-  // If no remaining amount, all other components are 0
-  if (remaining <= 0) {
-    return {
-      basic: Math.round(basic),
-      hra: 0,
-      ca: 0,
-      medical: 0,
-      otherAllowance: 0,
-      total: grossSalary
-    };
+  // Final adjustment for rounding differences
+  const sum = basic + hra + ca + medical + otherAllowance;
+  if (sum !== grossSalary) {
+    otherAllowance += (grossSalary - sum);
   }
 
-  // Step 3: Get percentages and validate total doesn't exceed 100%
-  let hraPercent = rule.hraPercentage || 0;
-  let caPercent = rule.caPercentage || 0;
-  let medicalPercent = rule.medicalPercentage || 0;
-  
-  const totalPercent = hraPercent + caPercent + medicalPercent;
-  
-  // If total percentage > 100%, scale down proportionally
-  if (totalPercent > 100) {
-    const scaleFactor = 100 / totalPercent;
-    hraPercent = hraPercent * scaleFactor;
-    caPercent = caPercent * scaleFactor;
-    medicalPercent = medicalPercent * scaleFactor;
-  }
-
-  // Step 4: Calculate components from REMAINING (not from Gross!)
-  const hra = remaining * (hraPercent / 100);
-  const ca = remaining * (caPercent / 100);
-  const medical = remaining * (medicalPercent / 100);
-  
-  // Step 5: Other is whatever is left (always >= 0)
-  const otherAllowance = Math.max(0, remaining - hra - ca - medical);
-
-  // Step 6: Final validation - ensure total equals gross
-  const calculatedTotal = basic + hra + ca + medical + otherAllowance;
-  const adjustment = grossSalary - calculatedTotal;
-  
   return {
-    basic: Math.round(basic),
-    hra: Math.round(hra),
-    ca: Math.round(ca),
-    medical: Math.round(medical),
-    otherAllowance: Math.round(otherAllowance + adjustment), // Adjust for rounding
+    basic,
+    hra,
+    ca,
+    medical,
+    otherAllowance,
     total: grossSalary
   };
 };

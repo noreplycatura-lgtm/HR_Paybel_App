@@ -5,8 +5,8 @@ import { parseISO, isValid, startOfMonth, endOfMonth, getDaysInMonth, getDate, i
 import type { SalaryBreakupRule } from './hr-types';
 
 // Storage Keys
-const RULES_STORAGE_KEY = 'novita_salary_breakup_rules_v1';
-const MAPPING_STORAGE_KEY = 'novita_employee_rule_mapping_v1';
+const RULES_STORAGE_KEY = 'catura_salary_breakup_rules_v1';
+const MAPPING_STORAGE_KEY = 'catura_employee_rule_mapping_v1';
 
 export interface MonthlySalaryComponents {
   basic: number;
@@ -69,10 +69,7 @@ function findRuleForEmployee(
 }
 
 // ============================================
-// HELPER: Calculate Components for Gross
-// ============================================
-// ============================================
-// HELPER: Calculate Components for Gross (FIXED - No Negative Other)
+// HELPER: Calculate Components for Gross (CORRECT LOGIC)
 // ============================================
 function getComponentsForGross(
   grossSalary: number, 
@@ -88,17 +85,26 @@ function getComponentsForGross(
   // ============================================
   if (!rule) {
     const fixedBasicAmount = 15010;
-    let basic: number, hra: number, ca: number, medical: number, otherAllowance: number;
+    let basic: number;
+    let hra: number;
+    let ca: number;
+    let medical: number;
+    let otherAllowance: number;
     
     if (grossSalary <= 15010) {
       // If gross <= 15010, entire amount is basic
       basic = grossSalary;
-      hra = ca = medical = otherAllowance = 0;
+      hra = 0;
+      ca = 0;
+      medical = 0;
+      otherAllowance = 0;
     } else if (grossSalary > 15010 && grossSalary <= 18000) {
       // Special case for 15010-18000 range
       basic = grossSalary * 0.80;
       hra = grossSalary - basic;
-      ca = medical = otherAllowance = 0;
+      ca = 0;
+      medical = 0;
+      otherAllowance = 0;
     } else {
       // Standard calculation for > 18000
       basic = fixedBasicAmount;
@@ -111,105 +117,68 @@ function getComponentsForGross(
       otherAllowance = Math.max(0, remaining - hra - ca - medical);
     }
     
-    // Final adjustment for rounding
-    const components = { basic, hra, ca, medical, otherAllowance };
-    const calculatedSum = Object.values(components).reduce((sum, val) => sum + val, 0);
-    const diff = grossSalary - calculatedSum;
-    if (Math.abs(diff) > 0.01) {
-      components.otherAllowance = Math.max(0, components.otherAllowance + diff);
-    }
-    
-    return components;
+    return { basic, hra, ca, medical, otherAllowance };
   }
-
-  // ============================================
-  // CALCULATE BASED ON RULE (FIXED LOGIC)
-  // ============================================
-  
-  // Step 1: Calculate Basic
-  let basic = 0;
-  if (rule.basicType === 'fixed') {
-    basic = Math.min(rule.basicValue, grossSalary);
-  } else {
-    basic = grossSalary * (rule.basicValue / 100);
-  }
-
-  // Step 2: Calculate Remaining after Basic
-  const remaining = Math.max(0, grossSalary - basic);
-
-  // If no remaining, all other components are 0
-  if (remaining <= 0) {
-    return { 
-      basic, 
-      hra: 0, 
-      ca: 0, 
-      medical: 0, 
-      otherAllowance: 0 
-    };
-  }
-
-  // Step 3: Get percentages and validate total doesn't exceed 100%
-  let hraPercent = rule.hraPercentage || 0;
-  let caPercent = rule.caPercentage || 0;
-  let medicalPercent = rule.medicalPercentage || 0;
-  
-  const totalPercent = hraPercent + caPercent + medicalPercent;
-  
-  // If total percentage > 100%, scale down proportionally
-  if (totalPercent > 100) {
-    const scaleFactor = 100 / totalPercent;
-    hraPercent = hraPercent * scaleFactor;
-    caPercent = caPercent * scaleFactor;
-    medicalPercent = medicalPercent * scaleFactor;
-  }
-
-  // Step 4: Calculate components from REMAINING (not from Gross!)
-  const hra = remaining * (hraPercent / 100);
-  const ca = remaining * (caPercent / 100);
-  const medical = remaining * (medicalPercent / 100);
-  
-  // Step 5: Other is whatever is left (ALWAYS >= 0)
-  let otherAllowance = Math.max(0, remaining - hra - ca - medical);
-
-  // Step 6: Final validation - ensure total equals gross
-  const components = { basic, hra, ca, medical, otherAllowance };
-  const calculatedSum = Object.values(components).reduce((sum, val) => sum + val, 0);
-  const diff = grossSalary - calculatedSum;
-  
-  if (Math.abs(diff) > 0.01) {
-    // Adjust otherAllowance to make sum equal to gross
-    components.otherAllowance = Math.max(0, components.otherAllowance + diff);
-  }
-
-  return components;
-}
 
   // ============================================
   // CALCULATE BASED ON RULE
   // ============================================
+  const hraPercent = rule.hraPercentage || 0;
+  const caPercent = rule.caPercentage || 0;
+  const medicalPercent = rule.medicalPercentage || 0;
+
   let basic = 0;
+  let hra = 0;
+  let ca = 0;
+  let medical = 0;
+  let otherAllowance = 0;
+
+  // ============================================
+  // CASE 1: Basic is FIXED Amount
+  // ============================================
   if (rule.basicType === 'fixed') {
+    // Basic is fixed value (but not more than gross)
     basic = Math.min(rule.basicValue, grossSalary);
-  } else {
+    
+    // Remaining amount after basic
+    const remaining = Math.max(0, grossSalary - basic);
+    
+    // Apply percentages on REMAINING (not on Gross!)
+    hra = remaining * (hraPercent / 100);
+    ca = remaining * (caPercent / 100);
+    medical = remaining * (medicalPercent / 100);
+    
+    // Other is whatever is left
+    otherAllowance = Math.max(0, remaining - hra - ca - medical);
+  }
+  // ============================================
+  // CASE 2: Basic is PERCENTAGE of Gross
+  // ============================================
+  else {
+    // All components are percentage of Gross
     basic = grossSalary * (rule.basicValue / 100);
+    hra = grossSalary * (hraPercent / 100);
+    ca = grossSalary * (caPercent / 100);
+    medical = grossSalary * (medicalPercent / 100);
+    
+    // Other is whatever is left
+    otherAllowance = Math.max(0, grossSalary - basic - hra - ca - medical);
   }
 
-  const hra = grossSalary * (rule.hraPercentage / 100);
-  const ca = grossSalary * (rule.caPercentage / 100);
-  const medical = grossSalary * (rule.medicalPercentage / 100);
-  
-  const remainingForOther = grossSalary - basic - hra - ca - medical;
-  const otherAllowance = Math.max(0, remainingForOther);
+  // Round all values
+  basic = Math.round(basic);
+  hra = Math.round(hra);
+  ca = Math.round(ca);
+  medical = Math.round(medical);
+  otherAllowance = Math.round(otherAllowance);
 
-  const components = { basic, hra, ca, medical, otherAllowance };
-  
-  // Ensure total matches gross
-  const calculatedSum = Object.values(components).reduce((sum, val) => sum + val, 0);
-  if (Math.abs(calculatedSum - grossSalary) > 0.01) {
-    components.otherAllowance += (grossSalary - calculatedSum);
+  // Final adjustment for rounding differences
+  const sum = basic + hra + ca + medical + otherAllowance;
+  if (sum !== grossSalary) {
+    otherAllowance += (grossSalary - sum);
   }
 
-  return components;
+  return { basic, hra, ca, medical, otherAllowance };
 }
 
 // ============================================
@@ -218,7 +187,7 @@ function getComponentsForGross(
 export function calculateMonthlySalaryComponents(
   employee: EmployeeDetail,
   periodYear: number,
-  periodMonthIndex: number // 0-11
+  periodMonthIndex: number
 ): MonthlySalaryComponents {
   
   // Load rules and mappings from LocalStorage
